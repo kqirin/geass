@@ -1,0 +1,5 @@
+.env
+.env.production
+server.log
+node_modules
+
