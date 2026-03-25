@@ -2,6 +2,27 @@ const { Pool } = require('pg');
 const { config } = require('./config');
 const perfMonitor = require('./utils/perfMonitor');
 
+function extractPgErrorDetails(err) {
+  return {
+    message: err?.message || null,
+    code: err?.code || null,
+    name: err?.name || null,
+    stack: err?.stack || null,
+    detail: err?.detail || null,
+    hint: err?.hint || null,
+    severity: err?.severity || null,
+  };
+}
+
+function logDbError(context, err, extra = {}) {
+  const payload = {
+    context,
+    ...extractPgErrorDetails(err),
+    ...extra,
+  };
+  console.error(`[DB_DIAG] ${JSON.stringify(payload)}`);
+}
+
 function toPgConnectionConfig() {
   if (config.db.url) {
     return {
@@ -24,12 +45,27 @@ function toPgConnectionConfig() {
   };
 }
 
-const pool = new Pool(toPgConnectionConfig());
+const connectionConfig = toPgConnectionConfig();
+const poolConfigMeta = {
+  mode: config.db.url ? 'database_url' : 'discrete_fields',
+  host: config.db.url ? null : config.db.host || null,
+  port: config.db.url ? null : Number(config.db.port || 0) || null,
+  database: config.db.url ? null : config.db.database || null,
+  sslEnabled: Boolean(config.db.ssl),
+  hasDatabaseUrl: Boolean(config.db.url),
+};
+console.log(`[DB_POOL_INIT] ${JSON.stringify(poolConfigMeta)}`);
+
+let pool;
+try {
+  pool = new Pool(connectionConfig);
+} catch (err) {
+  logDbError('pool_create_failed', err, { poolConfigMeta });
+  throw err;
+}
 
 pool.on('error', (err) => {
-  const code = String(err?.code || 'UNKNOWN');
-  const msg = String(err?.message || 'db_pool_error').slice(0, 180);
-  console.error(`[DB_POOL_ERROR] code=${code} msg=${msg}`);
+  logDbError('pool_error_event', err, { poolConfigMeta });
 });
 
 function maybeConvertNumeric(value) {
@@ -139,8 +175,16 @@ function cachedConvertPlaceholders(sql) {
 
 async function executeOn(client, sql, params = []) {
   const text = cachedConvertPlaceholders(sql);
-  const result = await client.query({ text, values: params });
-  return [normalizeResult(result), result];
+  try {
+    const result = await client.query({ text, values: params });
+    return [normalizeResult(result), result];
+  } catch (err) {
+    logDbError('query_failed', err, {
+      sqlPreview: String(text || '').slice(0, 240),
+      paramCount: Array.isArray(params) ? params.length : 0,
+    });
+    throw err;
+  }
 }
 
 async function execute(sql, params = []) {
@@ -161,7 +205,13 @@ async function query(sql, params = []) {
 }
 
 async function getConnection() {
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (err) {
+    logDbError('pool_connect_failed', err, { poolConfigMeta });
+    throw err;
+  }
   return {
     query(sql, params = []) {
       return executeOn(client, sql, params);
@@ -186,4 +236,5 @@ module.exports = {
   end,
   isPostgres: true,
   convertQuestionPlaceholders,
+  extractPgErrorDetails,
 };
