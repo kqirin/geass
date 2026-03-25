@@ -10,12 +10,16 @@ const ACTION_TYPES = [
   'REMOVE_OTHER_REACTIONS_IN_GROUP',
 ];
 
+const INTERNAL_COMMAND_OPTIONS = [
+  { value: 'partner-bilgi', label: 'partner-bilgi' },
+];
+
 const ACTION_LABELS = {
   ROLE_ADD: 'Rol Ver',
   ROLE_REMOVE: 'Rol Al',
-  DM_SEND: 'DM Gonder',
+  DM_SEND: 'DM Gönder',
   REPLY: 'Kanala Yanit',
-  CHANNEL_LINK: 'Kanal Linki Gonder',
+  CHANNEL_LINK: 'Kanal Linki Gönder',
   RUN_INTERNAL_COMMAND: 'Ic Komut Calistir',
   REMOVE_OTHER_REACTIONS_IN_GROUP: 'Ayni Grupta Diger Tepkileri Kaldir',
 };
@@ -34,7 +38,7 @@ function emojiLabel(rule) {
 function newActionTemplate(type) {
   if (type === 'ROLE_ADD' || type === 'ROLE_REMOVE') return { type, payload: { roleId: '' } };
   if (type === 'CHANNEL_LINK') return { type, payload: { channelId: '', delivery: 'dm' } };
-  if (type === 'RUN_INTERNAL_COMMAND') return { type, payload: { command: 'partner-bilgi' } };
+  if (type === 'RUN_INTERNAL_COMMAND') return { type, payload: { command: INTERNAL_COMMAND_OPTIONS[0].value } };
   if (type === 'DM_SEND' || type === 'REPLY') return { type, payload: { text: '' } };
   return { type, payload: {} };
 }
@@ -369,11 +373,19 @@ export default function ReactionActions({
                 )}
 
                 {action.type === 'RUN_INTERNAL_COMMAND' && (
-                  <input
+                  <select
                     className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-gray-100"
-                    value={action.payload?.command || ''}
-                    onChange={(e) => updateAction(index, { ...action, payload: { ...action.payload, command: e.target.value } })}
-                  />
+                    value={action.payload?.command || INTERNAL_COMMAND_OPTIONS[0].value}
+                    onChange={(e) =>
+                      updateAction(index, { ...action, payload: { ...action.payload, command: e.target.value } })
+                    }
+                  >
+                    {INTERNAL_COMMAND_OPTIONS.map((option) => (
+                      <option key={`${index}-icmd-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 )}
 
                 <div className="mt-2">
@@ -386,9 +398,9 @@ export default function ReactionActions({
       </div>
 
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-        <h3 className="text-sm font-black tracking-widest uppercase text-emerald-200 mb-3">Saglik</h3>
+        <h3 className="text-sm font-black tracking-widest uppercase text-emerald-200 mb-3">Sağlık</h3>
         <div className={`rounded-lg p-2 text-xs border ${reactionHealth?.ok ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-red-400/40 bg-red-500/10 text-red-200'}`}>
-          {reactionHealth?.ok ? 'Sistem saglikli' : `Sorun: ${(reactionHealth?.issues || []).join(', ') || 'kural kaynakli'}`}
+          {reactionHealth?.ok ? 'Sistem sağlıklı' : `Sorun: ${(reactionHealth?.issues || []).join(', ') || '...'}`}
         </div>
         {(reactionHealth?.ruleIssues || []).slice(0, 6).map((x) => (
           <div key={`issue-${x.ruleId}`} className="mt-2 text-xs text-rose-200">Kural #{x.ruleId}: {x.issues.join(', ')}</div>

@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-02-27T12:40:49.943Z",
+  "rowCounts": {
+    "settings": 2,
+    "mod_logs": 133,
+    "timed_penalties": 3,
+    "timed_penalty_role_snapshots": 0,
+    "reaction_rules": 1,
+    "reaction_rule_logs": 39,
+    "message_templates": 11,
+    "private_voice_rooms": 3
+  }
+}

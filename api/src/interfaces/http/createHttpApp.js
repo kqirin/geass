@@ -18,17 +18,16 @@ const { registerGuildRoutes } = require('./routes/guildRoutes');
 const { registerSettingsRoutes } = require('./routes/settingsRoutes');
 const { registerCommandRoutes } = require('./routes/commandRoutes');
 const { registerEmbedRoutes } = require('./routes/embedRoutes');
-const { registerVcRoutes } = require('./routes/vcRoutes');
-const { registerWeeklyStaffRoutes } = require('./routes/weeklyStaffRoutes');
 const { registerReactionRuleRoutes } = require('./routes/reactionRuleRoutes');
-const { registerMessageTemplateRoutes } = require('./routes/messageTemplateRoutes');
+const { registerBotPresenceRoutes } = require('./routes/botPresenceRoutes');
 
 function createHttpApp({
   client,
-  weeklyStaffScheduler = null,
+  moderationBot: _moderationBot = null,
   reactionActionService = null,
   tagRoleFeature = null,
   privateRoomService = null,
+  botPresenceManager = null,
   logSystem = () => {},
   logError = () => {},
   corsOrigin = config.oauth.corsOrigin,
@@ -114,10 +113,10 @@ function createHttpApp({
     client,
     METRICS_TOKEN,
     getFeatureHealth: () => ({
-      weeklyStaffSchedulerReady: Boolean(weeklyStaffScheduler),
       reactionActionServiceReady: Boolean(reactionActionService),
       tagRoleFeatureReady: Boolean(tagRoleFeature),
       privateRoomServiceReady: Boolean(privateRoomService),
+      botPresenceManagerReady: Boolean(botPresenceManager),
     }),
   });
   registerAuthRoutes(app, {
@@ -133,28 +132,15 @@ function createHttpApp({
     client,
   });
   registerGuildRoutes(app, { client, requireAuth, routeError });
-  registerSettingsRoutes(app, {
-    client,
+  registerSettingsRoutes(app, { requireAuth });
+  registerCommandRoutes(app, { requireAuth, routeError, logError });
+  registerEmbedRoutes(app, { client, requireAuth, routeError, logSystem });
+  registerReactionRuleRoutes(app, { client, requireAuth, routeError, reactionActionService, logError });
+  registerBotPresenceRoutes(app, {
     requireAuth,
     routeError,
-    logSystem,
-    logError,
-    tagRoleFeature,
-    settingsColumnsTtlMs: config.cache.settingsColumnsTtlMs,
+    botPresenceManager,
   });
-  registerCommandRoutes(app, { requireAuth, routeError });
-  registerMessageTemplateRoutes(app, { requireAuth, routeError });
-  registerEmbedRoutes(app, { client, requireAuth, routeError });
-  registerVcRoutes(app, {
-    client,
-    requireAuth,
-    routeError,
-    logError,
-    singleGuildId: config.oauth.singleGuildId,
-    privateRoomService,
-  });
-  registerWeeklyStaffRoutes(app, { requireAuth, routeError, scheduler: weeklyStaffScheduler });
-  registerReactionRuleRoutes(app, { client, requireAuth, routeError, reactionActionService });
 
   return app;
 }

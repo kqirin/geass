@@ -1,3 +1,27 @@
+const TAG_ROLE_SYNC_EXEMPT_USER_IDS = Object.freeze([
+  '787960730975993896',
+  '763898226562564116',
+  '1477005738361618565',
+]);
+
+const TAG_ROLE_SYNC_EXEMPT_USER_ID_SET = new Set(TAG_ROLE_SYNC_EXEMPT_USER_IDS);
+
+function normalizeUserId(value) {
+  return String(value || '').trim();
+}
+
+function getMemberUserId(member) {
+  return normalizeUserId(member?.id || member?.user?.id);
+}
+
+function isTagRoleSyncExemptUser(memberOrUserId) {
+  const userId =
+    typeof memberOrUserId === 'string' || typeof memberOrUserId === 'number'
+      ? normalizeUserId(memberOrUserId)
+      : getMemberUserId(memberOrUserId);
+  return TAG_ROLE_SYNC_EXEMPT_USER_ID_SET.has(userId);
+}
+
 function createTagRoleFeature({
   client,
   getTagRoleConfig,
@@ -33,12 +57,15 @@ function createTagRoleFeature({
     return promise;
   }
 
-  async function resolvePrimaryGuild(member) {
+  async function resolvePrimaryGuild(member, { allowUserRefresh = true } = {}) {
     let user = member.user;
     let primaryGuild = user?.primaryGuild || null;
 
     // `primaryGuild` payload may be missing/stale on member update payloads.
-    if (!primaryGuild || primaryGuild.identityGuildId == null || primaryGuild.identityEnabled == null) {
+    if (
+      allowUserRefresh &&
+      (!primaryGuild || primaryGuild.identityGuildId == null || primaryGuild.identityEnabled == null)
+    ) {
       user = await user.fetch(true).catch(() => user);
       primaryGuild = user?.primaryGuild || null;
     }
@@ -58,7 +85,11 @@ function createTagRoleFeature({
     logSystem(message, 'WARN');
   }
 
-  async function syncTagRole(member, reason = 'event') {
+  async function syncTagRole(member, reason = 'event', options = {}) {
+    const memberId = getMemberUserId(member);
+    if (isTagRoleSyncExemptUser(memberId)) {
+      return { ok: true, action: 'exempt_skipped', exempt: true, userId: memberId };
+    }
     if (!member?.guild || member.user?.bot) return { ok: false, code: 'skip_member_invalid' };
     if (!shouldHandleGuild(member.guild.id)) return { ok: false, code: 'skip_target_guild_filter' };
 
@@ -88,7 +119,9 @@ function createTagRoleFeature({
         }
         if (!member.manageable) return { ok: false, code: 'skip_member_not_manageable' };
 
-        const primaryGuild = await resolvePrimaryGuild(member);
+        const primaryGuild = await resolvePrimaryGuild(member, {
+          allowUserRefresh: options.allowUserRefresh !== false,
+        });
         const shouldHaveRole = primaryGuild?.identityEnabled === true && String(primaryGuild.identityGuildId || '') === String(guild.id);
         const hasRole = member.roles.cache.has(roleId);
 
@@ -122,13 +155,25 @@ function createTagRoleFeature({
       return { ok: false, code: 'disabled_or_incomplete' };
     }
 
-    await guild.members.fetch().catch(() => null);
+    const cachedMembersOnly = reason === 'startup' || reason === 'settings_save';
+    const members = [...guild.members.cache.values()];
     let added = 0;
     let removed = 0;
     let failed = 0;
+    let exemptSkipped = 0;
     const failCodes = {};
-    for (const member of guild.members.cache.values()) {
-      const result = await syncTagRole(member, reason);
+    for (const member of members) {
+      if (isTagRoleSyncExemptUser(member)) {
+        exemptSkipped += 1;
+        continue;
+      }
+      const result = await syncTagRole(member, reason, {
+        allowUserRefresh: !cachedMembersOnly || member.roles.cache.has(cfg.roleId),
+      });
+      if (result.action === 'exempt_skipped') {
+        exemptSkipped += 1;
+        continue;
+      }
       if (!result.ok) {
         failed += 1;
         const code = String(result.code || 'unknown');
@@ -139,9 +184,14 @@ function createTagRoleFeature({
       if (result.action === 'removed') removed += 1;
     }
 
+    const processed = members.length - exemptSkipped;
     const failSummary = failed > 0 ? ` failCodes=${JSON.stringify(failCodes)}` : '';
-    logSystem(`TagRole sync guild=${guild.id} added=${added} removed=${removed} failed=${failed}${failSummary}`, 'INFO');
-    return { ok: true, added, removed, failed };
+    const partial = cachedMembersOnly && guild.memberCount > members.length;
+    logSystem(
+      `TagRole sync guild=${guild.id} scanned=${members.length} exemptSkipped=${exemptSkipped} processed=${processed} added=${added} removed=${removed} failed=${failed} partial=${partial}${failSummary}`,
+      'INFO'
+    );
+    return { ok: true, added, removed, failed, scanned: members.length, processed, exemptSkipped, partial };
   }
 
   async function syncAllGuilds(reason = 'startup') {

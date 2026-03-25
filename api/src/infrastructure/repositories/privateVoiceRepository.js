@@ -1,12 +1,13 @@
 const db = require('../../database');
+const { getPrivateVoiceConfig } = require('../../config/static');
 
 function parseWhitelist(rawValue) {
   if (!rawValue) return [];
-  if (Array.isArray(rawValue)) return rawValue.map((x) => String(x || '').trim()).filter(Boolean);
+  if (Array.isArray(rawValue)) return normalizeWhitelist(rawValue);
   try {
     const parsed = JSON.parse(rawValue);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((x) => String(x || '').trim()).filter(Boolean);
+    return normalizeWhitelist(parsed);
   } catch {
     return [];
   }
@@ -21,8 +22,109 @@ function normalizeWhitelist(ids) {
   return [...out];
 }
 
+function normalizeLockStateValue(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'allow' || raw === 'deny' || raw === 'inherit') return raw;
+  return 'inherit';
+}
+
+function normalizeLockSnapshot(rawValue) {
+  if (!rawValue) return null;
+  let parsed = rawValue;
+
+  if (typeof rawValue === 'string') {
+    try {
+      parsed = JSON.parse(rawValue);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const memberStates = {};
+  const rawMemberStates =
+    parsed.memberConnectStatesBeforeLock && typeof parsed.memberConnectStatesBeforeLock === 'object'
+      ? parsed.memberConnectStatesBeforeLock
+      : {};
+  for (const [memberId, state] of Object.entries(rawMemberStates)) {
+    const cleanId = String(memberId || '').trim();
+    if (!cleanId) continue;
+    memberStates[cleanId] = normalizeLockStateValue(state);
+  }
+
+  const roleStates = {};
+  const rawRoleStates =
+    parsed.roleConnectStatesBeforeLock && typeof parsed.roleConnectStatesBeforeLock === 'object'
+      ? parsed.roleConnectStatesBeforeLock
+      : {};
+  for (const [roleId, state] of Object.entries(rawRoleStates)) {
+    const cleanId = String(roleId || '').trim();
+    if (!cleanId) continue;
+    roleStates[cleanId] = normalizeLockStateValue(state);
+  }
+
+  const snapshot = {
+    everyoneRoleId: String(parsed.everyoneRoleId || '').trim() || null,
+    everyoneConnectStateBeforeLock: normalizeLockStateValue(parsed.everyoneConnectStateBeforeLock),
+    memberConnectStatesBeforeLock: memberStates,
+    roleConnectStatesBeforeLock: roleStates,
+    managedAllowMemberIds: normalizeWhitelist(parsed.managedAllowMemberIds),
+    managedDenyMemberIds: normalizeWhitelist(parsed.managedDenyMemberIds),
+    managedAllowRoleIds: normalizeWhitelist(parsed.managedAllowRoleIds),
+    managedDenyRoleIds: normalizeWhitelist(parsed.managedDenyRoleIds),
+    fallbackMode: Boolean(parsed.fallbackMode),
+  };
+
+  if (!snapshot.everyoneRoleId) return null;
+  return snapshot;
+}
+
+function normalizeVisibilityStateValue(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'allow' || raw === 'deny' || raw === 'inherit') return raw;
+  return 'inherit';
+}
+
+function normalizeVisibilitySnapshot(rawValue) {
+  if (!rawValue) return null;
+  let parsed = rawValue;
+
+  if (typeof rawValue === 'string') {
+    try {
+      parsed = JSON.parse(rawValue);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const roleStates = {};
+  const rawRoleStates =
+    parsed.roleViewStatesBeforeHide && typeof parsed.roleViewStatesBeforeHide === 'object'
+      ? parsed.roleViewStatesBeforeHide
+      : {};
+  for (const [roleId, state] of Object.entries(rawRoleStates)) {
+    const cleanId = String(roleId || '').trim();
+    if (!cleanId) continue;
+    roleStates[cleanId] = normalizeVisibilityStateValue(state);
+  }
+
+  const snapshot = {
+    everyoneRoleId: String(parsed.everyoneRoleId || '').trim() || null,
+    everyoneViewStateBeforeHide: normalizeVisibilityStateValue(parsed.everyoneViewStateBeforeHide),
+    roleViewStatesBeforeHide: roleStates,
+    managedDenyRoleIds: normalizeWhitelist(parsed.managedDenyRoleIds),
+  };
+
+  if (!snapshot.everyoneRoleId) return null;
+  return snapshot;
+}
+
 function mapRoom(row) {
   if (!row) return null;
+  const permitMemberIds = parseWhitelist(row.whitelist_member_ids_json);
   return {
     id: Number(row.id),
     guildId: row.guild_id,
@@ -30,46 +132,19 @@ function mapRoom(row) {
     voiceChannelId: row.voice_channel_id,
     panelMessageId: row.panel_message_id || null,
     locked: Boolean(row.locked),
-    whitelistMemberIds: parseWhitelist(row.whitelist_member_ids_json),
+    lockSnapshot: normalizeLockSnapshot(row.lock_snapshot_json),
+    visibilitySnapshot: normalizeVisibilitySnapshot(row.visibility_snapshot_json),
+    whitelistMemberIds: permitMemberIds,
+    permitMemberIds,
+    permitRoleIds: parseWhitelist(row.permit_role_ids_json),
+    rejectMemberIds: parseWhitelist(row.reject_member_ids_json),
+    rejectRoleIds: parseWhitelist(row.reject_role_ids_json),
     lastActiveAt: Number(row.last_active_at || 0),
   };
 }
 
 async function getGuildConfig(guildId) {
-  const [rows] = await db.execute(
-    `SELECT private_vc_enabled, private_vc_hub_channel, private_vc_required_role, private_vc_category
-     FROM settings
-     WHERE guild_id = ?
-     LIMIT 1`,
-    [guildId]
-  );
-  const row = rows?.[0];
-  return {
-    enabled: Boolean(row?.private_vc_enabled),
-    hubChannelId: row?.private_vc_hub_channel || null,
-    requiredRoleId: row?.private_vc_required_role || null,
-    categoryId: row?.private_vc_category || null,
-  };
-}
-
-async function upsertGuildConfig(guildId, config) {
-  await db.execute(
-    `INSERT INTO settings
-      (guild_id, private_vc_enabled, private_vc_hub_channel, private_vc_required_role, private_vc_category)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-      private_vc_enabled = VALUES(private_vc_enabled),
-      private_vc_hub_channel = VALUES(private_vc_hub_channel),
-      private_vc_required_role = VALUES(private_vc_required_role),
-      private_vc_category = VALUES(private_vc_category)`,
-    [
-      guildId,
-      config.enabled ? 1 : 0,
-      config.hubChannelId || null,
-      config.requiredRoleId || null,
-      config.categoryId || null,
-    ]
-  );
+  return getPrivateVoiceConfig(guildId);
 }
 
 async function listAllRooms() {
@@ -99,26 +174,44 @@ async function createRoom({
   voiceChannelId,
   panelMessageId = null,
   locked = false,
+  lockSnapshot = null,
+  visibilitySnapshot = null,
   whitelistMemberIds = [],
+  permitMemberIds = undefined,
+  permitRoleIds = [],
+  rejectMemberIds = [],
+  rejectRoleIds = [],
   lastActiveAt = Date.now(),
 }) {
-  const normalizedWhitelist = normalizeWhitelist(whitelistMemberIds);
+  const normalizedWhitelist = normalizeWhitelist(
+    permitMemberIds !== undefined ? permitMemberIds : whitelistMemberIds
+  );
+  const normalizedPermitRoles = normalizeWhitelist(permitRoleIds);
+  const normalizedRejectMembers = normalizeWhitelist(rejectMemberIds);
+  const normalizedRejectRoles = normalizeWhitelist(rejectRoleIds);
+  const normalizedLockSnapshot = normalizeLockSnapshot(lockSnapshot);
+  const normalizedVisibilitySnapshot = normalizeVisibilitySnapshot(visibilitySnapshot);
   const [result] = await db.execute(
     `INSERT INTO private_voice_rooms
-      (guild_id, owner_id, voice_channel_id, panel_message_id, locked, whitelist_member_ids_json, last_active_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (guild_id, owner_id, voice_channel_id, panel_message_id, locked, lock_snapshot_json, visibility_snapshot_json, whitelist_member_ids_json, permit_role_ids_json, reject_member_ids_json, reject_role_ids_json, last_active_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     RETURNING *`,
     [
       guildId,
       ownerId,
       voiceChannelId,
       panelMessageId || null,
-      locked ? 1 : 0,
+      Boolean(locked),
+      normalizedLockSnapshot ? JSON.stringify(normalizedLockSnapshot) : null,
+      normalizedVisibilitySnapshot ? JSON.stringify(normalizedVisibilitySnapshot) : null,
       JSON.stringify(normalizedWhitelist),
+      JSON.stringify(normalizedPermitRoles),
+      JSON.stringify(normalizedRejectMembers),
+      JSON.stringify(normalizedRejectRoles),
       Number(lastActiveAt),
     ]
   );
-  const [rows] = await db.execute('SELECT * FROM private_voice_rooms WHERE id = ? LIMIT 1', [result.insertId]);
-  return mapRoom(rows?.[0]);
+  return mapRoom(result.rows?.[0]);
 }
 
 async function updateRoom(roomId, patch) {
@@ -129,13 +222,45 @@ async function updateRoom(roomId, patch) {
     updates.push('panel_message_id = ?');
     values.push(patch.panelMessageId || null);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'ownerId')) {
+    updates.push('owner_id = ?');
+    values.push(String(patch.ownerId || '').trim() || null);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'locked')) {
     updates.push('locked = ?');
-    values.push(patch.locked ? 1 : 0);
+    values.push(Boolean(patch.locked));
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'whitelistMemberIds')) {
+  if (Object.prototype.hasOwnProperty.call(patch, 'lockSnapshot')) {
+    updates.push('lock_snapshot_json = ?');
+    const normalizedLockSnapshot = normalizeLockSnapshot(patch.lockSnapshot);
+    values.push(normalizedLockSnapshot ? JSON.stringify(normalizedLockSnapshot) : null);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'visibilitySnapshot')) {
+    updates.push('visibility_snapshot_json = ?');
+    const normalizedVisibilitySnapshot = normalizeVisibilitySnapshot(patch.visibilitySnapshot);
+    values.push(normalizedVisibilitySnapshot ? JSON.stringify(normalizedVisibilitySnapshot) : null);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'whitelistMemberIds') ||
+    Object.prototype.hasOwnProperty.call(patch, 'permitMemberIds')
+  ) {
     updates.push('whitelist_member_ids_json = ?');
-    values.push(JSON.stringify(normalizeWhitelist(patch.whitelistMemberIds)));
+    const nextPermitMembers = Object.prototype.hasOwnProperty.call(patch, 'permitMemberIds')
+      ? patch.permitMemberIds
+      : patch.whitelistMemberIds;
+    values.push(JSON.stringify(normalizeWhitelist(nextPermitMembers)));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'permitRoleIds')) {
+    updates.push('permit_role_ids_json = ?');
+    values.push(JSON.stringify(normalizeWhitelist(patch.permitRoleIds)));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'rejectMemberIds')) {
+    updates.push('reject_member_ids_json = ?');
+    values.push(JSON.stringify(normalizeWhitelist(patch.rejectMemberIds)));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'rejectRoleIds')) {
+    updates.push('reject_role_ids_json = ?');
+    values.push(JSON.stringify(normalizeWhitelist(patch.rejectRoleIds)));
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'lastActiveAt')) {
     updates.push('last_active_at = ?');
@@ -144,6 +269,7 @@ async function updateRoom(roomId, patch) {
 
   if (updates.length === 0) return null;
 
+  updates.push('updated_at = CURRENT_TIMESTAMP');
   values.push(Number(roomId));
   await db.execute(`UPDATE private_voice_rooms SET ${updates.join(', ')} WHERE id = ?`, values);
   const [rows] = await db.execute('SELECT * FROM private_voice_rooms WHERE id = ? LIMIT 1', [Number(roomId)]);
@@ -179,7 +305,6 @@ async function insertRoomLog({
 
 module.exports = {
   getGuildConfig,
-  upsertGuildConfig,
   listAllRooms,
   getRoomByOwner,
   getRoomByChannel,
@@ -188,4 +313,6 @@ module.exports = {
   deleteRoomById,
   insertRoomLog,
   normalizeWhitelist,
+  normalizeLockSnapshot,
+  normalizeVisibilitySnapshot,
 };

@@ -1,12 +1,22 @@
 const reactionRuleRepository = require('../../infrastructure/repositories/reactionRuleRepository');
-const { normalizeUnicodeEmojiName, normalizeEmojiKey: buildEmojiKey } = require('./emoji');
+const {
+  normalizeUnicodeEmojiName,
+  normalizeEmojiKey: buildEmojiKey,
+  isReactionMatch,
+} = require('./emoji');
+const {
+  resolveBotMember,
+  getMissingDiscordPermissions,
+  isRoleBelowMemberTop,
+} = require('../security/roleSafety');
 
 const INTERNAL_COMMANDS = {
   'partner-bilgi': async ({ member }) => {
-    const text = 'Partner basvuru bilgisi: Profilini duzgun doldur, aktifligini koru ve kurallari kabul et.';
+    const text = 'Partner başvuru bilgisi: Profilini düzgün doldur, aktifliğini koru ve kuralları kabul et.';
     await member.send({ content: text }).catch(() => {});
   },
 };
+const RULE_CACHE_MISS_TTL_MS = 30 * 1000;
 
 function extractReactionEmoji(reaction) {
   if (!reaction?.emoji) return null;
@@ -41,10 +51,32 @@ function toRuleEmojiIdentifier(rule) {
   return name || null;
 }
 
+function channelHasPermissions(channel, member, permissions = []) {
+  const required = (Array.isArray(permissions) ? permissions : [])
+    .map((perm) => String(perm || '').trim())
+    .filter(Boolean);
+  if (!required.length) return true;
+
+  const channelPermissions = channel?.permissionsFor?.(member) || member?.permissions || null;
+  if (!channelPermissions?.has) return false;
+  return required.every((perm) => channelPermissions.has(perm));
+}
+
+function collectRuleChannelPermissions(rule) {
+  const permissions = new Set(['ViewChannel', 'ReadMessageHistory']);
+  for (const action of Array.isArray(rule?.actions) ? rule.actions : []) {
+    if (action?.type === 'REPLY') permissions.add('SendMessages');
+    if (action?.type === 'CHANNEL_LINK' && action?.payload?.delivery === 'reply') permissions.add('SendMessages');
+    if (action?.type === 'REMOVE_OTHER_REACTIONS_IN_GROUP') permissions.add('ManageMessages');
+  }
+  return [...permissions];
+}
+
 function createReactionActionService({ client, logError = () => {}, logSystem = () => {} } = {}) {
   if (!client) throw new Error('createReactionActionService: client gerekli');
 
   const ruleCache = new Map();
+  const ruleMissCache = new Map();
   const cooldownMap = new Map();
   let pruneTick = 0;
 
@@ -53,6 +85,13 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     if (pruneTick % 100 !== 0) return;
     for (const [key, expiry] of cooldownMap.entries()) {
       if (expiry <= nowMs) cooldownMap.delete(key);
+    }
+  }
+
+  function pruneMissCache(nowMs) {
+    if (pruneTick % 100 !== 0) return;
+    for (const [key, expiry] of ruleMissCache.entries()) {
+      if (expiry <= nowMs) ruleMissCache.delete(key);
     }
   }
 
@@ -66,6 +105,7 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
 
       const message = await channel.messages.fetch(rule.messageId).catch(() => null);
       if (!message) return false;
+      if (message.reactions?.cache?.find?.((reaction) => isReactionMatch(rule, reaction))) return true;
 
       const emojiIdentifier = toRuleEmojiIdentifier(rule);
       if (!emojiIdentifier) return false;
@@ -83,25 +123,28 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     }
   }
 
-  async function refreshGuildRules(guildId) {
+  async function refreshGuildRules(guildId, { seedReactions = false } = {}) {
     const all = await reactionRuleRepository.listEnabledRulesByGuild(guildId);
     for (const key of [...ruleCache.keys()]) {
       if (key.startsWith(`${guildId}:`)) ruleCache.delete(key);
+    }
+    for (const key of [...ruleMissCache.keys()]) {
+      if (key.startsWith(`${guildId}:`)) ruleMissCache.delete(key);
     }
     for (const rule of all) {
       const key = buildRuleCacheKey(rule);
       const list = ruleCache.get(key) || [];
       list.push(rule);
       ruleCache.set(key, list);
-      await ensureRuleReaction(rule);
+      if (seedReactions) await ensureRuleReaction(rule);
     }
     return all;
   }
 
-  async function refreshAllRules() {
+  async function refreshAllRules({ seedReactions = false } = {}) {
     let refreshedGuildCount = 0;
     for (const guild of client.guilds.cache.values()) {
-      await refreshGuildRules(guild.id);
+      await refreshGuildRules(guild.id, { seedReactions });
       refreshedGuildCount += 1;
     }
     logSystem(`Reaction rules cache yenilendi: guild=${refreshedGuildCount}`, 'INFO');
@@ -111,8 +154,17 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     const key = `${guildId}:${messageId}:${buildEmojiKey(emojiMeta)}`;
     const cached = ruleCache.get(key);
     if (cached) return cached;
-    await refreshGuildRules(guildId);
-    return ruleCache.get(key) || [];
+    const nowMs = Date.now();
+    pruneTick += 1;
+    const missExpiry = Number(ruleMissCache.get(key) || 0);
+    if (missExpiry > nowMs) return [];
+    await refreshGuildRules(guildId, { seedReactions: false });
+    const refreshed = ruleCache.get(key) || [];
+    if (!refreshed.length) {
+      ruleMissCache.set(key, nowMs + RULE_CACHE_MISS_TTL_MS);
+      pruneMissCache(nowMs);
+    }
+    return refreshed;
   }
 
   async function ensureGuildMember(guild, user) {
@@ -147,6 +199,23 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     return false;
   }
 
+  function getGroupSiblingRules(rule) {
+    if (!rule?.guildId || !rule?.messageId || !rule?.groupKey) return [];
+
+    const out = [];
+    for (const list of ruleCache.values()) {
+      for (const candidate of list || []) {
+        if (!candidate?.enabled) continue;
+        if (candidate.guildId !== rule.guildId) continue;
+        if (candidate.messageId !== rule.messageId) continue;
+        if (candidate.groupKey !== rule.groupKey) continue;
+        if (Number(candidate.id) === Number(rule.id)) continue;
+        out.push(candidate);
+      }
+    }
+    return out;
+  }
+
   async function executeAction({ action, eventType, guild, member, channel, reaction, rule }) {
     const payload = action?.payload || {};
     if (!action?.type) return { ok: false, code: 'action_type_missing' };
@@ -161,11 +230,12 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
       const roleId = String(payload.roleId || '');
       if (!roleId) return { ok: false, code: 'role_id_missing' };
       const role = guild.roles.cache.get(roleId) || (await guild.roles.fetch(roleId).catch(() => null));
-      const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
-      if (!me?.permissions?.has('ManageRoles')) return { ok: false, code: 'bot_missing_manage_roles' };
+      const me = await resolveBotMember(guild);
+      const missingPermissions = getMissingDiscordPermissions(me, ['ManageRoles']);
+      if (missingPermissions.length > 0) return { ok: false, code: 'bot_missing_manage_roles' };
       if (!role) return { ok: false, code: 'role_not_found' };
       if (isDangerousRole(role, guild)) return { ok: false, code: 'role_blocked_for_safety' };
-      if (me.roles.highest.position <= role.position) return { ok: false, code: 'role_hierarchy_too_low' };
+      if (!isRoleBelowMemberTop(me, role)) return { ok: false, code: 'role_hierarchy_too_low' };
       if (!member?.manageable) return { ok: false, code: 'member_not_manageable' };
       if (action.type === 'ROLE_ADD') await member.roles.add(roleId);
       else await member.roles.remove(roleId);
@@ -210,19 +280,27 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     if (action.type === 'REMOVE_OTHER_REACTIONS_IN_GROUP') {
       const groupKey = rule.groupKey;
       if (!groupKey) return { ok: false, code: 'group_key_missing' };
-      const allRules = await reactionRuleRepository.listEnabledRulesByGuild(guild.id);
-      const groupRules = allRules.filter((r) => r.messageId === rule.messageId && r.groupKey && r.groupKey === groupKey && r.id !== rule.id);
+      const groupRules = getGroupSiblingRules(rule);
+      const message = reaction?.message || null;
+      if (!message?.reactions?.cache?.find) return { ok: false, code: 'message_reactions_unavailable' };
+      if (typeof message.reactions.fetch === 'function') {
+        await message.reactions.fetch().catch(() => null);
+      }
+
       for (const r of groupRules) {
-        const msgChannel = guild.channels.cache.get(r.channelId) || (await guild.channels.fetch(r.channelId).catch(() => null));
-        if (!msgChannel?.isTextBased()) continue;
-        const msg = await msgChannel.messages.fetch(r.messageId).catch(() => null);
-        if (!msg) continue;
         const emoji = r.emojiType === 'custom' ? r.emojiId : r.emojiName;
-        const targetReaction = msg.reactions?.cache?.find?.((x) =>
+        const targetReaction = message.reactions.cache.find((x) =>
           r.emojiType === 'custom' ? x.emoji.id === emoji : x.emoji.name === emoji
         );
         if (!targetReaction) continue;
-        await targetReaction.users.remove(member.id).catch(() => {});
+        try {
+          await targetReaction.users.remove(member.id);
+        } catch (err) {
+          return {
+            ok: false,
+            code: String(err?.code || err?.message || 'group_reaction_remove_failed'),
+          };
+        }
       }
       return { ok: true };
     }
@@ -234,24 +312,50 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     const nowMs = Date.now();
     const resolvedGuild = guild || reaction?.message?.guild || null;
     const resolvedChannel = channel || reaction?.message?.channel || null;
-    if (!resolvedGuild || !resolvedChannel) return { ok: false, code: 'message_context_missing' };
+    if (!resolvedGuild || !resolvedChannel) {
+      return { ok: false, code: 'message_context_missing', status: 'ERROR' };
+    }
 
     const member = await ensureGuildMember(resolvedGuild, user);
 
-    if (!member || member.user.bot) return { ok: false, code: 'member_invalid' };
-    if (!rule.enabled) return { ok: false, code: 'rule_disabled' };
-    if (rule.triggerMode === 'ADD' && eventType !== 'ADD') return { ok: false, code: 'trigger_mismatch' };
-    if (rule.triggerMode === 'REMOVE' && eventType !== 'REMOVE') return { ok: false, code: 'trigger_mismatch' };
+    if (!member || member.user.bot) return { ok: false, code: 'member_invalid', status: 'SKIPPED' };
+    if (!rule.enabled) return { ok: false, code: 'rule_disabled', status: 'SKIPPED' };
+    if (rule.triggerMode === 'ADD' && eventType !== 'ADD') return { ok: false, code: 'trigger_mismatch', status: 'SKIPPED' };
+    if (rule.triggerMode === 'REMOVE' && eventType !== 'REMOVE') return { ok: false, code: 'trigger_mismatch', status: 'SKIPPED' };
 
     const constraintCheck = checkRoleConstraints(member, rule);
-    if (!constraintCheck.ok) return { ok: false, code: constraintCheck.code };
+    if (!constraintCheck.ok) return { ok: false, code: constraintCheck.code, status: 'SKIPPED' };
 
     const cooldownCheck = applyCooldown(rule, member.id, nowMs);
-    if (!cooldownCheck.ok) return { ok: false, code: cooldownCheck.code };
+    if (!cooldownCheck.ok) return { ok: false, code: cooldownCheck.code, status: 'SKIPPED' };
 
+    let onlyOnceExecution = null;
     if (rule.onlyOnce) {
-      const hasRun = await reactionRuleRepository.hasSuccessfulExecution(rule.id, member.id);
-      if (hasRun) return { ok: false, code: 'only_once_already_executed' };
+      try {
+        onlyOnceExecution = await reactionRuleRepository.tryBeginOnlyOnceExecution({
+          guildId: resolvedGuild.id,
+          ruleId: rule.id,
+          userId: member.id,
+          eventType,
+        });
+      } catch (err) {
+        return {
+          ok: false,
+          code: 'only_once_guard_unavailable',
+          status: 'ERROR',
+          errorMessage: err?.message || 'only_once_guard_unavailable',
+        };
+      }
+
+      if (!onlyOnceExecution?.acquired) {
+        return {
+          ok: false,
+          code: onlyOnceExecution?.state === 'SUCCESS'
+            ? 'only_once_already_executed'
+            : 'only_once_execution_in_progress',
+          status: 'SKIPPED',
+        };
+      }
     }
 
     const actions = Array.isArray(rule.actions) ? rule.actions : [];
@@ -267,42 +371,56 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
           rule,
         });
         if (!result.ok) {
-          await reactionRuleRepository.logRuleEvent({
-            guildId: resolvedGuild.id,
-            ruleId: rule.id,
-            userId: member.id,
-            eventType,
+          return {
+            ok: false,
+            code: result.code || 'action_failed',
             status: 'ERROR',
             actionType: action?.type || null,
-            errorCode: result.code || 'action_failed',
-            errorMessage: result.code || 'action_failed',
-          });
-          return { ok: false, code: result.code || 'action_failed' };
+            onlyOnceExecution,
+          };
         }
       } catch (err) {
-        await reactionRuleRepository.logRuleEvent({
-          guildId: resolvedGuild.id,
-          ruleId: rule.id,
-          userId: member.id,
-          eventType,
+        return {
+          ok: false,
+          code: 'action_exception',
           status: 'ERROR',
           actionType: action?.type || null,
-          errorCode: 'action_exception',
           errorMessage: err?.message || 'action_exception',
+          onlyOnceExecution,
+        };
+      }
+    }
+    return { ok: true, status: 'SUCCESS', onlyOnceExecution };
+  }
+
+  async function persistRuleResult({ guildId, rule, userId, eventType, result }) {
+    const onlyOnceExecution = result?.onlyOnceExecution || null;
+    if (onlyOnceExecution?.acquired) {
+      if (result.ok) {
+        await reactionRuleRepository.markOnlyOnceExecutionSuccess({
+          ruleId: rule.id,
+          userId,
+          eventType,
         });
-        return { ok: false, code: 'action_exception' };
+      } else {
+        await reactionRuleRepository.releaseOnlyOnceExecution({
+          ruleId: rule.id,
+          userId,
+          eventType,
+        });
       }
     }
 
     await reactionRuleRepository.logRuleEvent({
-      guildId: resolvedGuild.id,
+      guildId,
       ruleId: rule.id,
-      userId: member.id,
+      userId,
       eventType,
-      status: 'SUCCESS',
-      actionType: null,
+      status: result.ok ? 'SUCCESS' : (result.status || 'SKIPPED'),
+      actionType: result.actionType || null,
+      errorCode: result.ok ? null : (result.code || 'skipped'),
+      errorMessage: result.ok ? null : (result.errorMessage || result.code || 'skipped'),
     });
-    return { ok: true };
   }
 
   async function handleReactionEvent(eventType, reaction, user) {
@@ -328,16 +446,22 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
 
       for (const rule of rules) {
         const result = await processRule({ rule, eventType, reaction, user, guild, channel });
-        if (!result.ok) {
-          await reactionRuleRepository.logRuleEvent({
+        try {
+          await persistRuleResult({
+            guildId,
+            rule,
+            userId: user.id,
+            eventType,
+            result,
+          });
+        } catch (err) {
+          logError('reaction_rule_result_persist_failed', err, {
             guildId,
             ruleId: rule.id,
             userId: user.id,
             eventType,
-            status: 'SKIPPED',
-            actionType: null,
-            errorCode: result.code || 'skipped',
-            errorMessage: result.code || 'skipped',
+            status: result.ok ? 'SUCCESS' : (result.status || 'SKIPPED'),
+            onlyOnceState: result?.onlyOnceExecution?.acquired ? 'reserved' : 'not_reserved',
           });
         }
       }
@@ -355,9 +479,7 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
     if (!guild) return { ok: false, issues: ['guild_not_found'], ruleIssues: [] };
     const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
     const issues = [];
-    if (!me?.permissions?.has('ManageRoles')) issues.push('bot_missing_manage_roles');
-    if (!me?.permissions?.has('ReadMessageHistory')) issues.push('bot_missing_read_message_history');
-    if (!me?.permissions?.has('ManageMessages')) issues.push('bot_missing_manage_messages');
+    if (!me) issues.push('bot_member_not_found');
 
     const rules = await reactionRuleRepository.listRulesByGuild(guildId);
     const ruleIssues = [];
@@ -365,14 +487,33 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
       const itemIssues = [];
       const channel = guild.channels.cache.get(rule.channelId) || (await guild.channels.fetch(rule.channelId).catch(() => null));
       if (!channel) itemIssues.push('channel_missing');
-      const message = channel?.isTextBased() ? await channel.messages.fetch(rule.messageId).catch(() => null) : null;
+      if (channel && !channel.isTextBased?.()) itemIssues.push('channel_not_text_based');
+
+      const requiredChannelPermissions = collectRuleChannelPermissions(rule);
+      if (channel && me && !channelHasPermissions(channel, me, requiredChannelPermissions)) {
+        itemIssues.push('channel_permissions_missing');
+      }
+
+      const message = channel?.isTextBased?.() ? await channel.messages.fetch(rule.messageId).catch(() => null) : null;
       if (!message) itemIssues.push('message_missing');
       if (rule.emojiType === 'custom') {
         const emoji = guild.emojis.cache.get(rule.emojiId) || (await guild.emojis.fetch(rule.emojiId).catch(() => null));
         if (!emoji) itemIssues.push('emoji_missing');
       }
+      for (const action of Array.isArray(rule.actions) ? rule.actions : []) {
+        if (action?.type === 'ROLE_ADD' || action?.type === 'ROLE_REMOVE') {
+          const roleId = String(action?.payload?.roleId || '').trim();
+          const role = roleId ? guild.roles.cache.get(roleId) || (await guild.roles.fetch(roleId).catch(() => null)) : null;
+          if (!me?.permissions?.has?.('ManageRoles')) itemIssues.push('bot_missing_manage_roles');
+          if (!role) itemIssues.push('action_role_missing');
+          else if (!isRoleBelowMemberTop(me, role)) itemIssues.push('action_role_hierarchy_too_low');
+        }
+        if (action?.type === 'REMOVE_OTHER_REACTIONS_IN_GROUP' && !me?.permissions?.has?.('ManageMessages')) {
+          itemIssues.push('bot_missing_manage_messages');
+        }
+      }
       if (itemIssues.length > 0) {
-        ruleIssues.push({ ruleId: rule.id, issues: itemIssues });
+        ruleIssues.push({ ruleId: rule.id, issues: [...new Set(itemIssues)] });
       }
     }
     return { ok: issues.length === 0 && ruleIssues.length === 0, issues, ruleIssues };
@@ -381,6 +522,9 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
   function invalidateGuildCache(guildId) {
     for (const key of [...ruleCache.keys()]) {
       if (key.startsWith(`${guildId}:`)) ruleCache.delete(key);
+    }
+    for (const key of [...ruleMissCache.keys()]) {
+      if (key.startsWith(`${guildId}:`)) ruleMissCache.delete(key);
     }
   }
 

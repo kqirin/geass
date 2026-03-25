@@ -1,43 +1,71 @@
 const penaltyScheduler = require('../penaltyScheduler');
+const { executeModerationAction } = require('../services/actionExecution');
+const { notifyModerationActionIfSuccessful } = require('../services/moderationDmService');
 
 async function run(ctx) {
-  const { message, target, cleanArgs, targetMention, sendTemplate, verifyPermission, cache } = ctx;
+  const { message, target, cleanArgs, targetMention, sendTemplate, verifyPermission } = ctx;
 
   if (!target?.id) {
     return sendTemplate('invalidUsage', {}, { iconUser: message.client.user });
   }
-  if (!target.roles) {
-    return sendTemplate('userNotFound', { target: targetMention }, { iconUser: message.author });
-  }
 
-  const check = await verifyPermission('vcmute', target);
+  const check = await verifyPermission('vcmute', target, {
+    execution: {
+      requireTargetMember: true,
+      requireTargetInVoice: true,
+      targetNotInVoiceTemplate: 'notInVoice',
+      requiredBotPermissions: ['MuteMembers'],
+      requireTargetManageable: true,
+    },
+  });
   if (!check.success) return;
 
-  if (!target.voice || !target.voice.channel) {
-    return sendTemplate('notInVoice', { target: targetMention }, { iconUser: target.user });
-  }
+  const authoritativeTarget = check.context?.targetMember || target;
 
-  if (!target.voice.serverMute) {
-    return sendTemplate('notApplied', { target: targetMention }, { iconUser: target.user });
+  if (!authoritativeTarget.voice.serverMute) {
+    return sendTemplate('notApplied', { target: targetMention }, { iconUser: authoritativeTarget.user });
   }
 
   const reason = cleanArgs.join(' ') || 'manuel';
 
-  try {
-    await target.voice.setMute(false, reason);
-    await penaltyScheduler.cancelPenalty(message.guild.id, target.id, 'vcmute');
-    cache.incrementLimit(check.key);
-
-    await sendTemplate('success', {
+  const executionResult = await executeModerationAction({
+    message,
+    sendTemplate,
+    logContext: 'vcunmute_command',
+    mutationKey: `moderation:${message.guild.id}:${authoritativeTarget.id}`,
+    beforePrimaryAction: async () => check.consumeLimit(),
+    primaryAction: async () => {
+      await authoritativeTarget.voice.setMute(false, reason);
+    },
+    sideEffects: [
+      {
+        label: 'ceza iptali',
+        run: async () => {
+          await penaltyScheduler.cancelPenalty(message.guild.id, authoritativeTarget.id, 'vcmute');
+        },
+      },
+    ],
+    successContext: {
       target: targetMention,
       reason,
-    }, {
-      iconUser: target.user,
-    });
-  } catch {
-    return sendTemplate('systemError', { target: targetMention }, { iconUser: target.user });
-  }
+    },
+    successOptions: {
+      iconUser: authoritativeTarget.user,
+    },
+    operationNotAllowedContext: { target: targetMention },
+    operationNotAllowedOptions: { iconUser: message.client.user },
+    systemErrorContext: { target: targetMention },
+    systemErrorOptions: { iconUser: authoritativeTarget.user },
+    warningPrefix: `${targetMention} sesli kanal susturması kaldırıldı ancak bazı takip işlemleri tamamlanamadı`,
+  });
+
+  await notifyModerationActionIfSuccessful(executionResult, {
+    message,
+    actionType: 'vcunmute',
+    targetUserOrMember: authoritativeTarget,
+  });
 }
 
 module.exports = { run };
+
 

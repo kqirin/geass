@@ -30,7 +30,7 @@ const Login = () => {
 
       <div className="relative z-10 min-h-screen flex items-center justify-center px-6">
         <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
-          <div className="text-4xl font-black italic uppercase tracking-widest">AURI</div>
+          <div className="text-4xl font-black italic uppercase tracking-widest">GEASS</div>
           <div className="text-gray-400 mt-3">Discord ile giris yap ve paneli yonet.</div>
 
           <button

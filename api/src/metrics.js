@@ -6,6 +6,20 @@ const counters = {
 
 const routeCounters = new Map();
 const routeLatencyTotals = new Map();
+const MAX_ROUTE_KEYS = 500;
+
+function pruneRouteMaps() {
+  for (const map of [routeCounters, routeLatencyTotals]) {
+    if (map.size <= MAX_ROUTE_KEYS) continue;
+    const overflow = map.size - MAX_ROUTE_KEYS;
+    const iter = map.keys();
+    for (let i = 0; i < overflow; i++) {
+      const { value, done } = iter.next();
+      if (done) break;
+      map.delete(value);
+    }
+  }
+}
 
 function incRouteCounter(method, path, statusCode) {
   const key = `${method} ${path} ${statusCode}`;
@@ -27,6 +41,7 @@ function attachHttpMetrics() {
       if (res.statusCode >= 400) counters.httpRequestErrors += 1;
       incRouteCounter(req.method, req.path, res.statusCode);
       addRouteLatency(req.method, req.path, latency);
+      pruneRouteMaps();
     });
 
     next();
@@ -42,6 +57,7 @@ function escapeLabel(value) {
 }
 
 function renderPrometheus() {
+  pruneRouteMaps();
   const lines = [];
   lines.push('# HELP http_requests_total Total HTTP requests');
   lines.push('# TYPE http_requests_total counter');
@@ -79,4 +95,3 @@ module.exports = {
   recordRateLimitHit,
   renderPrometheus,
 };
-

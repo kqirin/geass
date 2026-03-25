@@ -1,0 +1,31 @@
+[dotenv@17.3.1] injecting env (15) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+✔ private room integration: create/persist/lock/whitelist/non-owner guard (10.4277ms)
+✖ private room integration: bootstrap recover, lock enforcement, stale cleanup (2.6036ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 633.8143
+
+✖ failing tests:
+
+test at test\privateRoom.integration.test.js:372:1
+✖ private room integration: bootstrap recover, lock enforcement, stale cleanup (2.6036ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\privateRoom.integration.test.js:435:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

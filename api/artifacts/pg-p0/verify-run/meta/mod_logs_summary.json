@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-03-08T13:21:11.758Z",
+  "totalCount": 245,
+  "minMax": {
+    "min_id": 1,
+    "max_id": 245,
+    "first_at": "2026-02-20T18:43:08.000Z",
+    "last_at": "2026-03-08T10:14:44.075Z"
+  },
+  "byAction": [
+    {
+      "action_type": "warn",
+      "c": "139"
+    },
+    {
+      "action_type": "mute",
+      "c": "64"
+    },
+    {
+      "action_type": "jail",
+      "c": "14"
+    },
+    {
+      "action_type": "ban",
+      "c": "9"
+    },
+    {
+      "action_type": "kick",
+      "c": "7"
+    },
+    {
+      "action_type": "vcmute",
+      "c": "7"
+    },
+    {
+      "action_type": "unban",
+      "c": "5"
+    }
+  ]
+}

@@ -1,6 +1,10 @@
 import { Send } from 'lucide-react';
+import { normalizeOptionalHttpUrl } from './urlValidation';
 
 export default function EmbedPreview({ embedData }) {
+  const titleUrlCheck = normalizeOptionalHttpUrl(embedData.titleUrl);
+  const hasTitleLink = titleUrlCheck.ok && titleUrlCheck.value.length > 0;
+
   return (
     <div className="bg-[#16162a] p-6 rounded-[2rem] border border-white/5 shadow-2xl flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-4 mb-6">
@@ -17,7 +21,7 @@ export default function EmbedPreview({ embedData }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-sm">Auri</span>
+              <span className="text-white font-bold text-sm">Geass</span>
               <span className="bg-[#5865f2] text-[10px] text-white px-1.5 rounded-[4px] py-0.5 font-medium">BOT</span>
               <span className="text-gray-400 text-xs ml-1">Bugun saat 14:30</span>
             </div>
@@ -31,7 +35,19 @@ export default function EmbedPreview({ embedData }) {
               style={{ borderLeft: `4px solid ${embedData.color}` }}
             >
               <div className="p-4 space-y-2 grid">
-                {embedData.title && <h4 className="text-white font-bold text-base break-words">{embedData.title}</h4>}
+                {embedData.title &&
+                  (hasTitleLink ? (
+                    <a
+                      href={titleUrlCheck.value}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-[#00A8FC] font-bold text-base break-words hover:underline"
+                    >
+                      {embedData.title}
+                    </a>
+                  ) : (
+                    <h4 className="text-white font-bold text-base break-words">{embedData.title}</h4>
+                  ))}
                 {embedData.description && (
                   <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed break-words">{embedData.description}</p>
                 )}

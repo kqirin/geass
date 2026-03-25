@@ -1,0 +1,2 @@
+@echo off
+docker exec -e PGHOST=%PGHOST% -e PGPORT=%PGPORT% -e PGUSER=%PGUSER% -e PGPASSWORD=%PGPASSWORD% -e PGDATABASE=%PGDATABASE% -i geass psql %*

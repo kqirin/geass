@@ -1,6 +1,9 @@
-import { FileText, Hash, Image as ImageIcon, MessageSquare, Palette, Send, Type } from 'lucide-react';
+import { FileText, Hash, Image as ImageIcon, Link2, MessageSquare, Palette, Send, Type } from 'lucide-react';
+import { normalizeOptionalHttpUrl } from './urlValidation';
 
 export default function EmbedForm({ embedData, setEmbedData, channels, onSend }) {
+  const titleUrlCheck = normalizeOptionalHttpUrl(embedData.titleUrl);
+
   return (
     <div className="bg-[#16162a] p-6 rounded-[2rem] border border-white/5 shadow-2xl overflow-y-auto custom-scrollbar">
       <div className="flex items-center gap-4 mb-6 sticky top-0 bg-[#16162a] z-10 py-2 border-b border-white/5">
@@ -53,6 +56,20 @@ export default function EmbedForm({ embedData, setEmbedData, channels, onSend })
             onChange={(e) => setEmbedData({ ...embedData, title: e.target.value })}
             className="w-full bg-[#0c0c16] border border-white/5 rounded-2xl p-4 text-sm font-bold outline-none focus:border-purple-500/40 text-white transition-all"
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-gray-500 uppercase ml-2 tracking-widest flex items-center gap-2">
+            <Link2 size={12} /> Başlık Linki (URL) (Opsiyonel)
+          </label>
+          <input
+            type="text"
+            placeholder="https://..."
+            value={embedData.titleUrl || ''}
+            onChange={(e) => setEmbedData({ ...embedData, titleUrl: e.target.value })}
+            className="w-full bg-[#0c0c16] border border-white/5 rounded-2xl p-4 text-xs font-bold outline-none focus:border-blue-500/40 text-white transition-all"
+          />
+          {!titleUrlCheck.ok && <p className="text-[11px] font-semibold text-red-400">{titleUrlCheck.error}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

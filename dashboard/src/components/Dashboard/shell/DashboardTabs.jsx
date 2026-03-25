@@ -1,18 +1,9 @@
-import { MessageSquare, Mic, Send, Shield, Trophy, Smile } from 'lucide-react';
-
-const TABS = [
-  { id: 'moderation', label: 'YETKILER', Icon: Shield },
-  { id: 'messages', label: 'MESAJLAR', Icon: MessageSquare },
-  { id: 'embed', label: 'EMBED', Icon: Send },
-  { id: 'vc', label: 'VC', Icon: Mic },
-  { id: 'weeklyStaff', label: 'HAFTALIK', Icon: Trophy },
-  { id: 'reactionActions', label: 'TEPKI', Icon: Smile },
-];
+import { DASHBOARD_TABS } from './dashboardTabConfig.js';
 
 export default function DashboardTabs({ activeTab, onTabChange }) {
   return (
-    <div className="flex gap-4 mt-8">
-      {TABS.map((tab) => {
+    <div className="mt-8 flex flex-wrap gap-4">
+      {DASHBOARD_TABS.map((tab) => {
         const Icon = tab.Icon;
         return (
           <button

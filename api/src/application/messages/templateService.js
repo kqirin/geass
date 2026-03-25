@@ -1,20 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
-const {
-  TEMPLATE_SCOPE_GLOBAL,
-  TEMPLATE_SCOPE_COMMAND,
-  TEMPLATE_MODES,
-  getCommandTemplateKeys,
-  getTemplateKeyMetaForGlobal,
-  getSystemDefaultTemplate,
-} = require('./catalog');
+const { TEMPLATE_MODES, getSystemDefaultTemplate } = require('./catalog');
+const { repairMojibakeText } = require('./encoding');
 
 const MAX_TEMPLATE_CONTENT_LEN = 2000;
 const MAX_TEMPLATE_TITLE_LEN = 256;
 const FALLBACK_COLOR = '#BD37FB';
-
-function isObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
+const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 
 function normalizeColor(input, fallback = FALLBACK_COLOR) {
   const raw = String(input || '').trim();
@@ -25,27 +16,20 @@ function normalizeColor(input, fallback = FALLBACK_COLOR) {
 
 function normalizeTemplateRecord(rawTemplate, fallbackTemplate) {
   const fallback = fallbackTemplate || getSystemDefaultTemplate('warn', 'systemError');
-
-  if (typeof rawTemplate === 'string') {
-    return {
-      mode: 'embed',
-      content: rawTemplate.slice(0, MAX_TEMPLATE_CONTENT_LEN),
-      embedTitle: fallback.embedTitle || '',
-      color: normalizeColor(fallback.color, FALLBACK_COLOR),
-      withIcon: Boolean(fallback.withIcon),
-    };
-  }
-
-  const input = isObject(rawTemplate) ? rawTemplate : {};
+  const input = rawTemplate && typeof rawTemplate === 'object' ? rawTemplate : {};
   const mode = TEMPLATE_MODES.has(input.mode) ? input.mode : fallback.mode;
   const contentRaw = typeof input.content === 'string' ? input.content : fallback.content;
   const embedTitleRaw =
-    typeof input.embedTitle === 'string' ? input.embedTitle : Object.prototype.hasOwnProperty.call(fallback, 'embedTitle') ? fallback.embedTitle : '';
+    typeof input.embedTitle === 'string'
+      ? input.embedTitle
+      : Object.prototype.hasOwnProperty.call(fallback, 'embedTitle')
+        ? fallback.embedTitle
+        : '';
 
   return {
     mode: mode || 'embed',
-    content: String(contentRaw || '').slice(0, MAX_TEMPLATE_CONTENT_LEN),
-    embedTitle: String(embedTitleRaw || '').slice(0, MAX_TEMPLATE_TITLE_LEN),
+    content: repairMojibakeText(String(contentRaw || '')).slice(0, MAX_TEMPLATE_CONTENT_LEN),
+    embedTitle: repairMojibakeText(String(embedTitleRaw || '')).slice(0, MAX_TEMPLATE_TITLE_LEN),
     color: normalizeColor(input.color, normalizeColor(fallback.color, FALLBACK_COLOR)),
     withIcon: Object.prototype.hasOwnProperty.call(input, 'withIcon')
       ? Boolean(input.withIcon)
@@ -54,118 +38,23 @@ function normalizeTemplateRecord(rawTemplate, fallbackTemplate) {
 }
 
 function renderTemplateText(text, context = {}) {
-  const source = String(text || '');
-  return source.replace(/\{([a-zA-Z0-9_]+)\}/g, (full, key) => {
+  const source = repairMojibakeText(String(text || ''));
+  const rendered = source.replace(/\{([a-zA-Z0-9_]+)\}/g, (full, key) => {
     if (!Object.prototype.hasOwnProperty.call(context, key)) return full;
     const value = context[key];
     if (value === null || value === undefined) return '';
     return String(value);
   });
+
+  return rendered
+    .replace(/(^|\s)\(\s*\)(?=\s|$)/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ \n/g, '\n');
 }
 
-function resolveTemplate({ cache, guildId, commandName, templateKey }) {
+function resolveTemplate({ commandName, templateKey }) {
   const fallback = getSystemDefaultTemplate(commandName, templateKey);
-  const commandTemplates = cache.getMessageTemplates(guildId, TEMPLATE_SCOPE_COMMAND, commandName) || {};
-  const globalTemplates = cache.getMessageTemplates(guildId, TEMPLATE_SCOPE_GLOBAL, '') || {};
-
-  if (Object.prototype.hasOwnProperty.call(commandTemplates, templateKey)) {
-    return normalizeTemplateRecord(commandTemplates[templateKey], fallback);
-  }
-
-  if (Object.prototype.hasOwnProperty.call(globalTemplates, templateKey)) {
-    return normalizeTemplateRecord(globalTemplates[templateKey], fallback);
-  }
-
   return normalizeTemplateRecord(fallback, fallback);
-}
-
-function resolveTemplatesForScope({ cache, guildId, scope, commandName = '' }) {
-  const normalizedCommand = String(commandName || '').trim().toLowerCase();
-  const templateKeys =
-    scope === TEMPLATE_SCOPE_COMMAND
-      ? getCommandTemplateKeys(normalizedCommand)
-      : getTemplateKeyMetaForGlobal().map((item) => item.key);
-
-  const scopedTemplates = cache.getMessageTemplates(guildId, scope, normalizedCommand) || {};
-  const globalTemplates = cache.getMessageTemplates(guildId, TEMPLATE_SCOPE_GLOBAL, '') || {};
-
-  const storedTemplates = {};
-  const resolvedTemplates = {};
-
-  for (const key of templateKeys) {
-    const fallback = getSystemDefaultTemplate(normalizedCommand, key);
-
-    if (Object.prototype.hasOwnProperty.call(scopedTemplates, key)) {
-      storedTemplates[key] = normalizeTemplateRecord(scopedTemplates[key], fallback);
-      resolvedTemplates[key] = normalizeTemplateRecord(scopedTemplates[key], fallback);
-      continue;
-    }
-
-    if (scope === TEMPLATE_SCOPE_COMMAND && Object.prototype.hasOwnProperty.call(globalTemplates, key)) {
-      resolvedTemplates[key] = normalizeTemplateRecord(globalTemplates[key], fallback);
-      continue;
-    }
-
-    resolvedTemplates[key] = normalizeTemplateRecord(fallback, fallback);
-  }
-
-  return { templateKeys, storedTemplates, resolvedTemplates };
-}
-
-function sanitizeTemplatesPayload({ templates, scope, commandName = '' }) {
-  if (!isObject(templates)) {
-    return { ok: false, error: 'templates bir obje olmali' };
-  }
-
-  const normalizedCommand = String(commandName || '').trim().toLowerCase();
-  const allowedKeys =
-    scope === TEMPLATE_SCOPE_COMMAND
-      ? getCommandTemplateKeys(normalizedCommand)
-      : getTemplateKeyMetaForGlobal().map((item) => item.key);
-  const allowedSet = new Set(allowedKeys);
-
-  const out = {};
-  for (const [key, rawTemplate] of Object.entries(templates)) {
-    if (!allowedSet.has(key)) {
-      return { ok: false, error: `Gecersiz template anahtari: ${key}` };
-    }
-    if (!isObject(rawTemplate)) {
-      return { ok: false, error: `Template alani obje olmali: ${key}` };
-    }
-    if (Object.prototype.hasOwnProperty.call(rawTemplate, 'mode') && !TEMPLATE_MODES.has(rawTemplate.mode)) {
-      return { ok: false, error: `${key}.mode sadece normal veya embed olabilir` };
-    }
-    if (Object.prototype.hasOwnProperty.call(rawTemplate, 'color')) {
-      const colorRaw = String(rawTemplate.color || '').trim();
-      const color = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`;
-      if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
-        return { ok: false, error: `${key}.color gecersiz hex formatinda` };
-      }
-    }
-    if (Object.prototype.hasOwnProperty.call(rawTemplate, 'content') && typeof rawTemplate.content !== 'string') {
-      return { ok: false, error: `${key}.content metin olmali` };
-    }
-    if (Object.prototype.hasOwnProperty.call(rawTemplate, 'embedTitle') && typeof rawTemplate.embedTitle !== 'string') {
-      return { ok: false, error: `${key}.embedTitle metin olmali` };
-    }
-    if (Object.prototype.hasOwnProperty.call(rawTemplate, 'withIcon') && typeof rawTemplate.withIcon !== 'boolean') {
-      return { ok: false, error: `${key}.withIcon true/false olmali` };
-    }
-
-    const fallback = getSystemDefaultTemplate(normalizedCommand, key);
-    const normalized = normalizeTemplateRecord(rawTemplate, fallback);
-
-    if (normalized.content.length > MAX_TEMPLATE_CONTENT_LEN) {
-      return { ok: false, error: `${key}.content en fazla ${MAX_TEMPLATE_CONTENT_LEN} karakter olabilir` };
-    }
-    if (normalized.embedTitle.length > MAX_TEMPLATE_TITLE_LEN) {
-      return { ok: false, error: `${key}.embedTitle en fazla ${MAX_TEMPLATE_TITLE_LEN} karakter olabilir` };
-    }
-
-    out[key] = normalized;
-  }
-
-  return { ok: true, templates: out, allowedKeys };
 }
 
 function toColorInt(hexColor) {
@@ -175,8 +64,8 @@ function toColorInt(hexColor) {
 
 function getCommandUserIconUrl(message) {
   return (
-    message.member?.displayAvatarURL?.({ dynamic: true }) ||
-    message.author?.displayAvatarURL?.({ dynamic: true }) ||
+    message.member?.displayAvatarURL?.({ dynamic: true, size: 256 }) ||
+    message.author?.displayAvatarURL?.({ dynamic: true, size: 256 }) ||
     null
   );
 }
@@ -186,32 +75,146 @@ function getCommandUserName(message) {
     message.member?.displayName ||
     message.author?.globalName ||
     message.author?.username ||
-    'Moderator'
+    'Yetkili'
   );
 }
 
-function createTemplateSender({ cache }) {
-  async function sendTemplate({ message, guildId, commandName, templateKey, context = {}, iconUser = null }) {
-    const template = resolveTemplate({ cache, guildId, commandName, templateKey });
+function hasTargetReference(targetUserOrId) {
+  if (targetUserOrId === null || targetUserOrId === undefined) return false;
+  if (typeof targetUserOrId === 'string') return targetUserOrId.trim().length > 0;
+  if (typeof targetUserOrId === 'number') return Number.isFinite(targetUserOrId);
+  return true;
+}
+
+function unwrapUserLike(entity) {
+  if (!entity || typeof entity !== 'object') return entity;
+  if (entity.user && typeof entity.user.displayAvatarURL === 'function') return entity.user;
+  return entity;
+}
+
+function getAvatarUrlFromUserLike(entity) {
+  const userLike = unwrapUserLike(entity);
+  if (!userLike || typeof userLike.displayAvatarURL !== 'function') return null;
+  return userLike.displayAvatarURL({ dynamic: true, size: 256 });
+}
+
+function getUserIdFromUserLike(entity) {
+  if (entity === null || entity === undefined) return null;
+
+  if (typeof entity === 'string' || typeof entity === 'number') {
+    const rawId = String(entity).trim();
+    return rawId || null;
+  }
+
+  if (typeof entity !== 'object') return null;
+
+  if (entity.user?.id) {
+    const userId = String(entity.user.id).trim();
+    return userId || null;
+  }
+
+  if (entity.id) {
+    const userId = String(entity.id).trim();
+    return userId || null;
+  }
+
+  return null;
+}
+
+async function resolveTargetAvatarUrl(message, targetUserOrId) {
+  const directAvatar = getAvatarUrlFromUserLike(targetUserOrId);
+  if (directAvatar) return directAvatar;
+
+  const userId = getUserIdFromUserLike(targetUserOrId);
+  if (!DISCORD_SNOWFLAKE_REGEX.test(String(userId || '').trim())) return null;
+  if (typeof message?.client?.users?.fetch !== 'function') return null;
+
+  const fetchedUser = await message.client.users.fetch(userId).catch(() => null);
+  return getAvatarUrlFromUserLike(fetchedUser);
+}
+
+async function setTargetAvatar(embed, message, targetUserOrId, fallbackIconUser, authorText) {
+  if (hasTargetReference(targetUserOrId)) {
+    const targetIconURL = await resolveTargetAvatarUrl(message, targetUserOrId);
+    if (targetIconURL) {
+      embed.setAuthor({ name: authorText, iconURL: targetIconURL });
+      return;
+    }
+
+    // Target avatar could not be resolved; avoid showing executor avatar.
+    embed.setAuthor({ name: authorText });
+    return;
+  }
+
+  const fallbackIconURL = getAvatarUrlFromUserLike(fallbackIconUser) || getCommandUserIconUrl(message);
+  if (fallbackIconURL) {
+    embed.setAuthor({ name: authorText, iconURL: fallbackIconURL });
+    return;
+  }
+
+  embed.setAuthor({ name: authorText });
+}
+
+async function sendPayload(message, payload, { asReply = true, deleteAfterMs = 0, allowReplyFallback = false } = {}) {
+  const sendAsReply = asReply === true && typeof message.reply === 'function';
+  const sender = sendAsReply ? message.reply.bind(message) : message.channel?.send?.bind(message.channel);
+  if (typeof sender !== 'function') throw new Error('template_send_unavailable');
+
+  let sentMessage = null;
+  try {
+    sentMessage = await sender(payload);
+  } catch (err) {
+    if (sendAsReply && allowReplyFallback && typeof message.channel?.send === 'function') {
+      sentMessage = await message.channel.send(payload);
+    } else {
+      throw err;
+    }
+  }
+
+  const ttl = Number(deleteAfterMs || 0);
+  if (Number.isFinite(ttl) && ttl > 0 && typeof sentMessage?.delete === 'function') {
+    setTimeout(() => {
+      sentMessage.delete().catch(() => {});
+    }, ttl).unref?.();
+  }
+
+  return sentMessage;
+}
+
+function createTemplateSender() {
+  async function sendTemplate({
+    message,
+    commandName,
+    templateKey,
+    context = {},
+    iconUser = null,
+    targetUserOrId = null,
+    asReply = true,
+    deleteAfterMs = 0,
+    allowReplyFallback = false,
+  }) {
+    const template = resolveTemplate({ commandName, templateKey });
     const renderedContent = renderTemplateText(template.content, context).trim();
     const renderedTitle = renderTemplateText(template.embedTitle, context).trim();
     const fallbackContent = renderTemplateText(getSystemDefaultTemplate(commandName, templateKey).content, context).trim();
 
     if (template.mode === 'normal') {
       const content = renderedContent || fallbackContent;
-      return message.reply({
-        content: content || ' ',
-        allowedMentions: { parse: [] },
-      });
+      return sendPayload(
+        message,
+        {
+          content: content || ' ',
+          allowedMentions: { parse: [] },
+        },
+        { asReply, deleteAfterMs, allowReplyFallback }
+      );
     }
 
     const embed = new EmbedBuilder().setColor(toColorInt(template.color));
     const bodyText = renderedContent || fallbackContent || '\u200B';
     if (template.withIcon) {
-      const iconURL = getCommandUserIconUrl(message) || getCommandUserIconUrl({ author: iconUser?.user || iconUser });
       const authorText = bodyText.slice(0, MAX_TEMPLATE_TITLE_LEN) || getCommandUserName(message);
-      if (iconURL) embed.setAuthor({ name: authorText, iconURL });
-      else embed.setAuthor({ name: authorText });
+      await setTargetAvatar(embed, message, targetUserOrId, iconUser, authorText);
 
       const remainder = bodyText.length > MAX_TEMPLATE_TITLE_LEN ? bodyText.slice(MAX_TEMPLATE_TITLE_LEN).trim() : '';
       const lines = [];
@@ -223,10 +226,14 @@ function createTemplateSender({ cache }) {
       embed.setDescription(bodyText);
     }
 
-    return message.reply({
-      embeds: [embed],
-      allowedMentions: { parse: [] },
-    });
+    return sendPayload(
+      message,
+      {
+        embeds: [embed],
+        allowedMentions: { parse: [] },
+      },
+      { asReply, deleteAfterMs, allowReplyFallback }
+    );
   }
 
   return {
@@ -235,12 +242,5 @@ function createTemplateSender({ cache }) {
 }
 
 module.exports = {
-  MAX_TEMPLATE_CONTENT_LEN,
-  MAX_TEMPLATE_TITLE_LEN,
-  normalizeTemplateRecord,
-  renderTemplateText,
-  resolveTemplate,
-  resolveTemplatesForScope,
-  sanitizeTemplatesPayload,
   createTemplateSender,
 };

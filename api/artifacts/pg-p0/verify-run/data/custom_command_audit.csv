@@ -1,0 +1,2 @@
+id,guild_id,command_name,action_type,actor_user_id,note,created_at
+1,1447015808344784956,hello,UPSERT,900100000000000001,req=cd7e058a-8df3-4ca6-9329-95edf49d888a,"""2026-03-06T15:11:11.582Z"""

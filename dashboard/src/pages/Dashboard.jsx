@@ -1,10 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 
 import Moderation from '../components/Dashboard/Moderation';
-import Messages from '../components/Dashboard/Messages';
 import EmbedSender from '../components/Dashboard/EmbedSender';
-import VC from '../components/Dashboard/VC';
-import WeeklyStaff from '../components/Dashboard/WeeklyStaff';
 import ReactionActions from '../components/Dashboard/ReactionActions';
 
 import DashboardHeader from '../components/Dashboard/shell/DashboardHeader';
@@ -16,22 +13,22 @@ import { useDashboardData } from '../hooks/useDashboardData';
 export default function Dashboard() {
   const navigate = useNavigate();
   const {
-    showToast,
     activeTab,
     setActiveTab,
     toast,
     guilds,
     guildId,
     setGuildId,
+    activeGuildName,
+    singleGuildMode,
     systemHealth,
     roles,
     channels,
     modSettings,
-    setModSettings,
-    weeklySettings,
-    setWeeklySettings,
-    weeklyLeaderboard,
-    weeklyHistory,
+    settingsMeta,
+    botPresenceSettings,
+    botPresenceMeta,
+    botPresenceLoadState,
     reactionRules,
     reactionHealth,
     emojis,
@@ -40,11 +37,6 @@ export default function Dashboard() {
     embedData,
     setEmbedData,
     canSelectGuild,
-    saveSettings,
-    saveWeeklySettings,
-    runWeeklySelection,
-    toggleWeeklyEnabled,
-    loadWeeklyStaffData,
     loadReactionData,
     saveReactionRule,
     deleteReactionRule,
@@ -62,6 +54,8 @@ export default function Dashboard() {
         <DashboardHeader
           guilds={guilds}
           guildId={guildId}
+          activeGuildName={activeGuildName}
+          singleGuildMode={singleGuildMode}
           canSelectGuild={canSelectGuild}
           onGuildChange={setGuildId}
           onLogout={logout}
@@ -72,19 +66,15 @@ export default function Dashboard() {
         <DashboardTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         <div className="mt-10">
-          {activeTab === 'moderation' && (
+          {activeTab === 'policy' && (
             <Moderation
               roles={roles}
               modSettings={modSettings}
-              setModSettings={setModSettings}
-              handleSave={saveSettings}
-              guildId={guildId}
-              showToast={showToast}
+              settingsMeta={settingsMeta}
+              botPresenceSettings={botPresenceSettings}
+              botPresenceMeta={botPresenceMeta}
+              botPresenceLoadState={botPresenceLoadState}
             />
-          )}
-
-          {activeTab === 'messages' && (
-            <Messages guildId={guildId} showToast={showToast} />
           )}
 
           {activeTab === 'embed' && (
@@ -95,27 +85,8 @@ export default function Dashboard() {
               handleSendEmbed={sendEmbed}
             />
           )}
-
-          {activeTab === 'vc' && <VC guildId={guildId} roles={roles} />}
-
-          {activeTab === 'weeklyStaff' && (
-            <WeeklyStaff
-              roles={roles}
-              channels={channels}
-              weeklySettings={weeklySettings}
-              setWeeklySettings={setWeeklySettings}
-              leaderboard={weeklyLeaderboard}
-              history={weeklyHistory}
-              onSave={saveWeeklySettings}
-              onRefresh={() => loadWeeklyStaffData(guildId)}
-              onManualRun={runWeeklySelection}
-              onToggleEnabled={toggleWeeklyEnabled}
-            />
-          )}
-
           {activeTab === 'reactionActions' && (
             <ReactionActions
-              guildId={guildId}
               roles={roles}
               channels={channels}
               emojis={emojis}

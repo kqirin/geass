@@ -9,7 +9,10 @@ async function upsertGuildCommand(guildId, commandName, commandResponse) {
   await db.execute(
     `INSERT INTO custom_commands (guild_id, command_name, command_response)
      VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE command_response = VALUES(command_response)`,
+     ON CONFLICT (guild_id, command_name)
+     DO UPDATE SET
+      command_response = EXCLUDED.command_response,
+      updated_at = CURRENT_TIMESTAMP`,
     [guildId, commandName, commandResponse]
   );
 }

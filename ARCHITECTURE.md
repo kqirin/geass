@@ -1,4 +1,4 @@
-# AURI Architecture
+# GEASS Architecture
 
 ## Backend (`api/src`)
 - `interfaces/http`: Express composition, middlewares, route modules.

@@ -1,43 +1,62 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { apiClient, extractApiError, extractRequestId } from '../lib/apiClient';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiClient, extractApiError, extractRequestId } from '../lib/apiClient.js';
+import { createLatestRequestGate } from '../lib/latestRequestGate.js';
+import { normalizeOptionalHttpUrl } from '../components/Dashboard/embed/urlValidation.js';
+import { extractModerationSettingsPayload } from './moderationSettingsState.js';
 
-export function useDashboardData({ navigate }) {
-  const [activeTab, setActiveTab] = useState('moderation');
-  const [toast, setToast] = useState(null);
-  const toastTimerRef = useRef(null);
+export const STATIC_SETTINGS_DEFAULT_META = {
+  readOnly: true,
+  source: 'config',
+};
 
-  const [guilds, setGuilds] = useState([]);
-  const [guildId, setGuildId] = useState('');
-  const [systemHealth, setSystemHealth] = useState({
-    ok: true,
-    checks: { db: true, discord: true },
-    features: {},
-  });
-  const [roles, setRoles] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [modSettings, setModSettings] = useState({ custom_messages: {} });
-  const [weeklySettings, setWeeklySettings] = useState({
-    enabled: false,
-    awardRoleId: null,
-    announcementChannelId: null,
-    announcementMessage: '',
-    timezone: 'Europe/Istanbul',
-    weekStartDow: 1,
-    minimumPoints: 20,
-    tieBreakMode: 'moderation_first',
-    eligibleRoles: [],
-    excludedRoles: [],
-    weights: { command: 1, warn: 1, mute: 2, vcmute: 2, jail: 3, kick: 3, ban: 5 },
-    spamGuard: { commandCooldownSec: 6, duplicatePenaltyPoints: 1 },
-  });
-  const [weeklyLeaderboard, setWeeklyLeaderboard] = useState([]);
-  const [weeklyHistory, setWeeklyHistory] = useState([]);
-  const [reactionRules, setReactionRules] = useState([]);
-  const [reactionHealth, setReactionHealth] = useState({ ok: true, issues: [], ruleIssues: [] });
-  const [emojis, setEmojis] = useState([]);
-  const [reactionForm, setReactionForm] = useState({
+export const BOT_PRESENCE_DEFAULT_SETTINGS = {
+  enabled: true,
+  type: 'CUSTOM',
+  text: 'All Hail Lelouch!',
+};
+
+export const BOT_PRESENCE_DEFAULT_META = {
+  maxTextLength: 128,
+  allowedTypes: ['CUSTOM', 'PLAYING', 'LISTENING', 'WATCHING', 'COMPETING'],
+  scope: 'global',
+  readOnly: true,
+  source: 'config',
+};
+
+export const BOT_PRESENCE_LOAD_STATES = {
+  IDLE: 'idle',
+  LOADING: 'loading',
+  READY: 'ready',
+  ERROR: 'error',
+};
+
+export function isBotPresenceReady(loadState) {
+  return String(loadState?.status || '') === BOT_PRESENCE_LOAD_STATES.READY;
+}
+
+export function resolveInitialGuildId(singleGuildId = '', guilds = []) {
+  const configuredSingleGuildId = String(singleGuildId || '').trim();
+  const list = Array.isArray(guilds) ? guilds : [];
+
+  if (configuredSingleGuildId) {
+    if (list.length === 0) return configuredSingleGuildId;
+    const hasConfiguredGuild = list.some(
+      (guild) => String(guild?.id || '').trim() === configuredSingleGuildId
+    );
+    return hasConfiguredGuild ? configuredSingleGuildId : String(list[0]?.id || '').trim();
+  }
+
+  return String(list[0]?.id || '').trim();
+}
+
+export function shouldShowGuildSelector(singleGuildId = '', guilds = []) {
+  return !String(singleGuildId || '').trim() && Array.isArray(guilds) && guilds.length > 1;
+}
+
+export function createInitialReactionForm(guildId = '') {
+  return {
     id: null,
-    guildId: '',
+    guildId: String(guildId || '').trim(),
     channelId: '',
     messageId: '',
     emojiType: 'unicode',
@@ -51,18 +70,52 @@ export function useDashboardData({ navigate }) {
     allowedRoles: [],
     excludedRoles: [],
     actions: [{ type: 'ROLE_ADD', payload: { roleId: '' } }],
+  };
+}
+
+export function useDashboardData({ navigate }) {
+  const [activeTab, setActiveTab] = useState('reactionActions');
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
+  const activeGuildRef = useRef('');
+  const guildDataGateRef = useRef(createLatestRequestGate());
+  const botPresenceGateRef = useRef(createLatestRequestGate());
+  const reactionDataGateRef = useRef(createLatestRequestGate());
+
+  const [guilds, setGuilds] = useState([]);
+  const [guildId, setGuildId] = useState('');
+  const [systemHealth, setSystemHealth] = useState({
+    ok: true,
+    checks: { db: true, discord: true },
+    features: {},
   });
+  const [roles, setRoles] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [modSettings, setModSettings] = useState({});
+  const [settingsMeta, setSettingsMeta] = useState({ ...STATIC_SETTINGS_DEFAULT_META });
+  const [botPresenceSettings, setBotPresenceSettings] = useState({ ...BOT_PRESENCE_DEFAULT_SETTINGS });
+  const [botPresenceMeta, setBotPresenceMeta] = useState({ ...BOT_PRESENCE_DEFAULT_META });
+  const [botPresenceLoadState, setBotPresenceLoadState] = useState({
+    status: BOT_PRESENCE_LOAD_STATES.IDLE,
+    error: null,
+  });
+  const [reactionRules, setReactionRules] = useState([]);
+  const [reactionHealth, setReactionHealth] = useState({ ok: true, issues: [], ruleIssues: [] });
+  const [emojis, setEmojis] = useState([]);
+  const [reactionForm, setReactionForm] = useState(() => createInitialReactionForm());
 
   const [embedData, setEmbedData] = useState({
     channelId: '',
     content: '',
     title: '',
+    titleUrl: '',
     description: '',
     color: '#5865F2',
     image: '',
   });
 
-  const singleGuildId = import.meta.env.VITE_SINGLE_GUILD_ID || import.meta.env.VITE_GUILD_ID || '';
+  const metaEnv = typeof import.meta !== 'undefined' && import.meta?.env ? import.meta.env : {};
+  const singleGuildId = metaEnv.VITE_SINGLE_GUILD_ID || metaEnv.VITE_GUILD_ID || '';
 
   const showToast = useCallback((text, type = 'ok', duration = 2200) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -70,8 +123,42 @@ export function useDashboardData({ navigate }) {
     toastTimerRef.current = setTimeout(() => setToast(null), duration);
   }, []);
 
+  const loadBotPresence = useCallback(async (targetGuildId) => {
+    const resolvedGuildId = String(targetGuildId || '').trim();
+    if (!resolvedGuildId) return;
+    const request = botPresenceGateRef.current.begin(resolvedGuildId);
+    setBotPresenceLoadState({
+      status: BOT_PRESENCE_LOAD_STATES.LOADING,
+      error: null,
+    });
+    try {
+      const res = await apiClient.get('/api/bot-presence', {
+        params: { guildId: resolvedGuildId },
+      });
+      if (!request.isCurrent() || activeGuildRef.current !== resolvedGuildId) return;
+      const nextSettings = res.data?.settings || BOT_PRESENCE_DEFAULT_SETTINGS;
+      const nextMeta = res.data?.meta || BOT_PRESENCE_DEFAULT_META;
+      setBotPresenceSettings({ ...BOT_PRESENCE_DEFAULT_SETTINGS, ...nextSettings });
+      setBotPresenceMeta({ ...BOT_PRESENCE_DEFAULT_META, ...nextMeta });
+      setBotPresenceLoadState({
+        status: BOT_PRESENCE_LOAD_STATES.READY,
+        error: null,
+      });
+    } catch (e) {
+      if (!request.isCurrent() || activeGuildRef.current !== resolvedGuildId) return;
+      const msg = extractApiError(e, 'Bot durumu yuklenemedi');
+      const reqId = extractRequestId(e);
+      const detailed = reqId ? `${msg} (#${reqId})` : msg;
+      setBotPresenceLoadState({
+        status: BOT_PRESENCE_LOAD_STATES.ERROR,
+        error: detailed,
+      });
+      showToast(detailed, 'err', 4200);
+    }
+  }, [showToast]);
+
   useEffect(() => {
-    document.title = 'AURI';
+    document.title = 'GEASS';
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
@@ -84,17 +171,33 @@ export function useDashboardData({ navigate }) {
         const list = res.data?.guilds || [];
         setGuilds(list);
 
-        if (singleGuildId) setGuildId(singleGuildId);
-        else setGuildId(list?.[0]?.id || '');
+        const initialGuildId = resolveInitialGuildId(singleGuildId, list);
+        activeGuildRef.current = initialGuildId;
+        guildDataGateRef.current.switchKey(initialGuildId);
+        botPresenceGateRef.current.switchKey(initialGuildId);
+        reactionDataGateRef.current.switchKey(initialGuildId);
+        setGuildId(initialGuildId);
+        await loadBotPresence(initialGuildId);
       } catch {
         navigate('/');
       }
     };
 
     loadSession();
-  }, [navigate, singleGuildId]);
+  }, [navigate, singleGuildId, loadBotPresence]);
 
-  const canSelectGuild = useMemo(() => !singleGuildId && guilds.length > 1, [singleGuildId, guilds.length]);
+  const canSelectGuild = useMemo(
+    () => shouldShowGuildSelector(singleGuildId, guilds),
+    [singleGuildId, guilds]
+  );
+  const singleGuildMode = useMemo(
+    () => Boolean(String(singleGuildId || '').trim()) || guilds.length <= 1,
+    [singleGuildId, guilds.length]
+  );
+  const activeGuildName = useMemo(
+    () => guilds.find((guild) => String(guild?.id || '') === String(guildId || ''))?.name || guilds[0]?.name || 'Sunucu',
+    [guilds, guildId]
+  );
 
   const loadSystemHealth = useCallback(async () => {
     try {
@@ -108,38 +211,38 @@ export function useDashboardData({ navigate }) {
   const loadGuildData = useCallback(
     async (id) => {
       if (!id) return;
+      const request = guildDataGateRef.current.begin(id);
       try {
         const [rolesRes, channelsRes, settingsRes] = await Promise.all([
           apiClient.get(`/api/guilds/${id}/roles`),
           apiClient.get(`/api/guilds/${id}/channels`),
           apiClient.get(`/api/settings/${id}`),
         ]);
+        if (!request.isCurrent() || activeGuildRef.current !== id) return;
 
         setRoles(rolesRes.data || []);
         setChannels(channelsRes.data || []);
-        setEmojis((await apiClient.get(`/api/guilds/${id}/emojis`)).data || []);
+        const emojiRes = await apiClient.get(`/api/guilds/${id}/emojis`);
+        if (!request.isCurrent() || activeGuildRef.current !== id) return;
+        setEmojis(emojiRes.data || []);
 
-        const s = settingsRes.data || { custom_messages: {} };
-        setModSettings({ ...s, custom_messages: s.custom_messages || {} });
-
-        const [weeklyCfgRes, weeklyLbRes, weeklyHistoryRes] = await Promise.all([
-          apiClient.get(`/api/weekly-staff/${id}/config`),
-          apiClient.get(`/api/weekly-staff/${id}/leaderboard`),
-          apiClient.get(`/api/weekly-staff/${id}/history`),
-        ]);
-        setWeeklySettings(weeklyCfgRes.data || {});
-        setWeeklyLeaderboard(weeklyLbRes.data?.list || []);
-        setWeeklyHistory(weeklyHistoryRes.data || []);
+        setModSettings(extractModerationSettingsPayload(settingsRes.data));
+        setSettingsMeta({
+          ...STATIC_SETTINGS_DEFAULT_META,
+          ...(settingsRes.data?.meta || {}),
+        });
         const [ruleRes, healthRes] = await Promise.all([
           apiClient.get('/api/reaction-rules', { params: { guildId: id } }),
           apiClient.get('/api/reaction-rules/health', { params: { guildId: id } }),
         ]);
+        if (!request.isCurrent() || activeGuildRef.current !== id) return;
         setReactionRules(ruleRes.data || []);
         setReactionHealth(healthRes.data || { ok: true, issues: [], ruleIssues: [] });
         setReactionForm((prev) => ({ ...prev, guildId: id }));
         await loadSystemHealth();
       } catch (e) {
-        const msg = extractApiError(e, 'Guncellenemedi');
+        const msg = extractApiError(e, 'Güncellenemedi');
+        if (!request.isCurrent() || activeGuildRef.current !== id) return;
         const reqId = extractRequestId(e);
         showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 3600);
       }
@@ -149,8 +252,13 @@ export function useDashboardData({ navigate }) {
 
   useEffect(() => {
     if (!guildId) return;
+    activeGuildRef.current = guildId;
+    guildDataGateRef.current.switchKey(guildId);
+    botPresenceGateRef.current.switchKey(guildId);
+    reactionDataGateRef.current.switchKey(guildId);
     loadGuildData(guildId);
-  }, [guildId, loadGuildData]);
+    loadBotPresence(guildId);
+  }, [guildId, loadGuildData, loadBotPresence]);
 
   useEffect(() => {
     let active = true;
@@ -183,35 +291,28 @@ export function useDashboardData({ navigate }) {
     };
   }, [loadSystemHealth]);
 
-  const saveSettings = useCallback(async () => {
-    if (!guildId) return;
-
-    try {
-      await apiClient.post(`/api/settings/${guildId}`, modSettings);
-      showToast('Kaydedildi', 'ok', 1500);
-    } catch (e) {
-      const msg = extractApiError(e, 'Kaydedilemedi');
-      const reqId = extractRequestId(e);
-      showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-    }
-  }, [guildId, modSettings, showToast]);
-
   const sendEmbed = useCallback(async () => {
     if (!guildId || !embedData.channelId) return;
+    const titleUrlCheck = normalizeOptionalHttpUrl(embedData.titleUrl);
+    if (!titleUrlCheck.ok) {
+      showToast(titleUrlCheck.error, 'err', 3200);
+      return;
+    }
 
     try {
       await apiClient.post('/api/embed/send', {
         guildId,
         channelId: embedData.channelId,
         title: embedData.title,
+        embedTitleUrl: titleUrlCheck.value,
         description: embedData.description,
         color: embedData.color,
         imageUrl: embedData.image,
         content: embedData.content,
       });
-      showToast('Gonderildi', 'ok', 1500);
+      showToast('Gönderildi', 'ok', 1500);
     } catch (e) {
-      showToast(extractApiError(e, 'Gonderilemedi'), 'err', 3000);
+      showToast(extractApiError(e, 'Gönderilemedi'), 'err', 3000);
     }
   }, [guildId, embedData, showToast]);
 
@@ -222,101 +323,22 @@ export function useDashboardData({ navigate }) {
     navigate('/');
   }, [navigate]);
 
-  const loadWeeklyStaffData = useCallback(async (id) => {
-    if (!id) return;
-    const [weeklyCfgRes, weeklyLbRes, weeklyHistoryRes] = await Promise.all([
-      apiClient.get(`/api/weekly-staff/${id}/config`),
-      apiClient.get(`/api/weekly-staff/${id}/leaderboard`),
-      apiClient.get(`/api/weekly-staff/${id}/history`),
-    ]);
-    setWeeklySettings(weeklyCfgRes.data || {});
-    setWeeklyLeaderboard(weeklyLbRes.data?.list || []);
-    setWeeklyHistory(weeklyHistoryRes.data || []);
-  }, []);
-
-  const saveWeeklySettings = useCallback(async () => {
-    if (!guildId) return;
-    try {
-      await apiClient.post(`/api/weekly-staff/${guildId}/config`, weeklySettings);
-      await loadWeeklyStaffData(guildId);
-      showToast('Haftalik ayarlar kaydedildi', 'ok', 1800);
-    } catch (e) {
-      const msg = extractApiError(e, 'Haftalik ayarlar kaydedilemedi');
-      const reqId = extractRequestId(e);
-      showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-    }
-  }, [guildId, weeklySettings, loadWeeklyStaffData, showToast]);
-
-  const runWeeklySelection = useCallback(async () => {
-    if (!guildId) return;
-    try {
-      const res = await apiClient.post(`/api/weekly-staff/${guildId}/run`, {});
-      await loadWeeklyStaffData(guildId);
-      const reason = res?.data?.result?.reason;
-      if (reason === 'success') showToast('Kazanan secildi, rol/duyuru islemi denendi', 'ok', 2200);
-      else if (reason === 'success_with_role_errors') {
-        const failures = res?.data?.result?.roleAssign || [];
-        const first = failures.find((x) => !x.ok);
-        const code = first?.reason || 'unknown';
-        showToast(`Kazanan secildi ama rol verilemedi: ${code}`, 'err', 4200);
-      } else if (reason === 'already_selected') showToast('Bu hafta zaten secim yapilmis', 'ok', 2200);
-      else if (reason === 'no_candidates') showToast('Kosulu saglayan aday yok', 'err', 2600);
-      else if (reason === 'disabled') showToast('Sistem kapali, once AC', 'err', 2600);
-      else showToast('Haftalik secim tetiklendi', 'ok', 1800);
-    } catch (e) {
-      const msg = extractApiError(e, 'Haftalik secim basarisiz');
-      const reqId = extractRequestId(e);
-      showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-    }
-  }, [guildId, loadWeeklyStaffData, showToast]);
-
-  const toggleWeeklyEnabled = useCallback(async () => {
-    if (!guildId) return;
-    const next = !Boolean(weeklySettings?.enabled);
-    try {
-      await apiClient.post(`/api/weekly-staff/${guildId}/config`, {
-        ...weeklySettings,
-        enabled: next,
-      });
-      await loadWeeklyStaffData(guildId);
-      showToast(next ? 'Haftalik sistem acildi' : 'Haftalik sistem kapatildi', 'ok', 1800);
-    } catch (e) {
-      const msg = extractApiError(e, 'Durum degistirilemedi');
-      const reqId = extractRequestId(e);
-      showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-    }
-  }, [guildId, weeklySettings, loadWeeklyStaffData, showToast]);
-
   const loadReactionData = useCallback(async (id) => {
     if (!id) return;
+    const request = reactionDataGateRef.current.begin(id);
     const [ruleRes, healthRes, emojiRes] = await Promise.all([
       apiClient.get('/api/reaction-rules', { params: { guildId: id } }),
       apiClient.get('/api/reaction-rules/health', { params: { guildId: id } }),
       apiClient.get(`/api/guilds/${id}/emojis`),
     ]);
+    if (!request.isCurrent() || activeGuildRef.current !== id) return;
     setReactionRules(ruleRes.data || []);
     setReactionHealth(healthRes.data || { ok: true, issues: [], ruleIssues: [] });
     setEmojis(emojiRes.data || []);
   }, []);
 
   const resetReactionForm = useCallback(() => {
-    setReactionForm({
-      id: null,
-      guildId,
-      channelId: '',
-      messageId: '',
-      emojiType: 'unicode',
-      emojiName: '✅',
-      emojiId: '',
-      triggerMode: 'TOGGLE',
-      enabled: true,
-      cooldownSeconds: 5,
-      onlyOnce: false,
-      groupKey: '',
-      allowedRoles: [],
-      excludedRoles: [],
-      actions: [{ type: 'ROLE_ADD', payload: { roleId: '' } }],
-    });
+    setReactionForm(createInitialReactionForm(guildId));
   }, [guildId]);
 
   const editReactionRule = useCallback((rule) => {
@@ -348,19 +370,19 @@ export function useDashboardData({ navigate }) {
     const isSnowflake = (value) => /^\d{5,32}$/.test(String(value || '').trim());
 
     if (!isSnowflake(payload.channelId)) {
-      showToast('Kanal secimi gecersiz', 'err', 3200);
+      showToast('Kanal seçimi geçersiz', 'err', 3200);
       return;
     }
     if (!isSnowflake(payload.messageId)) {
-      showToast('Mesaj ID gecersiz', 'err', 3200);
+      showToast('Mesaj ID geçersiz', 'err', 3200);
       return;
     }
     if (payload.emojiType === 'custom' && !isSnowflake(payload.emojiId)) {
-      showToast('Custom emoji secimi gecersiz', 'err', 3200);
+      showToast('Custom emoji seçimi geçersiz', 'err', 3200);
       return;
     }
     if (payload.emojiType === 'unicode' && !String(payload.emojiName || '').trim()) {
-      showToast('Unicode emoji bos olamaz', 'err', 3200);
+      showToast('Unicode emoji boş olamaz', 'err', 3200);
       return;
     }
     if (!Array.isArray(payload.actions) || payload.actions.length === 0) {
@@ -377,18 +399,25 @@ export function useDashboardData({ navigate }) {
         (action.type === 'ROLE_ADD' || action.type === 'ROLE_REMOVE') &&
         !isSnowflake(action?.payload?.roleId)
       ) {
-        showToast('Rol aksiyonu icin rol secilmeli', 'err', 3200);
+        showToast('Rol aksiyonu için rol seçilmeli', 'err', 3200);
         return;
       }
       if (
         (action.type === 'DM_SEND' || action.type === 'REPLY') &&
         !String(action?.payload?.text || '').trim()
       ) {
-        showToast('Mesaj aksiyonu bos olamaz', 'err', 3200);
+        showToast('Mesaj aksiyonu boş olamaz', 'err', 3200);
         return;
       }
       if (action.type === 'CHANNEL_LINK' && !isSnowflake(action?.payload?.channelId)) {
-        showToast('Kanal link aksiyonu icin kanal secilmeli', 'err', 3200);
+        showToast('Kanal link aksiyonu için kanal seçilmeli', 'err', 3200);
+        return;
+      }
+      if (
+        action.type === 'RUN_INTERNAL_COMMAND' &&
+        String(action?.payload?.command || '').trim().toLowerCase() !== 'partner-bilgi'
+      ) {
+        showToast('Ic komut whitelist disi', 'err', 3200);
         return;
       }
     }
@@ -399,17 +428,18 @@ export function useDashboardData({ navigate }) {
         const res = await apiClient.put(`/api/reaction-rules/${reactionForm.id}`, payload);
         warning = res?.data?.warning || null;
       } else {
-        await apiClient.post('/api/reaction-rules', payload);
+        const res = await apiClient.post('/api/reaction-rules', payload);
+        warning = res?.data?.warning || null;
       }
       await loadReactionData(guildId);
       showToast(
-        warning ? `Kural kaydedildi, not: ${warning}` : 'Tepki kurali kaydedildi',
+        warning ? `Kural kaydedildi, not: ${warning}` : 'Tepki kuralı kaydedildi',
         warning ? 'err' : 'ok',
         warning ? 3600 : 1800
       );
       resetReactionForm();
     } catch (e) {
-      const msg = extractApiError(e, 'Tepki kurali kaydedilemedi');
+      const msg = extractApiError(e, 'Tepki kuralı kaydedilemedi');
       const reqId = extractRequestId(e);
       showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
     }
@@ -447,7 +477,7 @@ export function useDashboardData({ navigate }) {
         });
         await loadReactionData(guildId);
       } catch (e) {
-        const msg = extractApiError(e, 'Durum degistirilemedi');
+        const msg = extractApiError(e, 'Durum değiştirilemedi');
         const reqId = extractRequestId(e);
         showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
       }
@@ -462,13 +492,13 @@ export function useDashboardData({ navigate }) {
         const res = await apiClient.post(`/api/reaction-rules/${ruleId}/test`, {});
         const manageable = res?.data?.requesterCheck?.manageable;
         if (manageable === false) {
-          showToast('Test: Bot bu hesapta rol islemi yapamiyor (rol hiyerarsisi)', 'err', 4200);
+          showToast('Test: Bot bu hesapta rol işlemi yapamıyor (rol hiyerarşisi)', 'err', 4200);
         } else {
-          showToast('Kural testi tamamlandi (dry-run)', 'ok', 1800);
+          showToast('Kural testi tamamlandı (dry-run)', 'ok', 1800);
         }
         await loadReactionData(guildId);
       } catch (e) {
-        const msg = extractApiError(e, 'Test basarisiz');
+        const msg = extractApiError(e, 'Test başarısız');
         const reqId = extractRequestId(e);
         showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
       }
@@ -484,15 +514,16 @@ export function useDashboardData({ navigate }) {
     guilds,
     guildId,
     setGuildId,
+    activeGuildName,
+    singleGuildMode,
     systemHealth,
     roles,
     channels,
     modSettings,
-    setModSettings,
-    weeklySettings,
-    setWeeklySettings,
-    weeklyLeaderboard,
-    weeklyHistory,
+    settingsMeta,
+    botPresenceSettings,
+    botPresenceMeta,
+    botPresenceLoadState,
     reactionRules,
     reactionHealth,
     emojis,
@@ -501,11 +532,6 @@ export function useDashboardData({ navigate }) {
     embedData,
     setEmbedData,
     canSelectGuild,
-    saveSettings,
-    saveWeeklySettings,
-    runWeeklySelection,
-    toggleWeeklyEnabled,
-    loadWeeklyStaffData,
     loadReactionData,
     saveReactionRule,
     deleteReactionRule,

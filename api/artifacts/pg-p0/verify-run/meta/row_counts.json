@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-03-08T13:21:11.763Z",
+  "rowCounts": {
+    "mod_logs": 245,
+    "timed_penalties": 9,
+    "timed_penalty_role_snapshots": 1,
+    "reaction_rules": 1,
+    "reaction_rule_logs": 67,
+    "reaction_rule_only_once_executions": 0,
+    "private_voice_rooms": 3,
+    "text_channel_lock_snapshots": 0,
+    "custom_commands": 1,
+    "custom_command_audit": 1,
+    "private_voice_room_logs": 123
+  }
+}

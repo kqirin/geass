@@ -1,14 +1,10 @@
 const db = require('../database');
 const { config } = require('../config');
-const { getAllMessageTemplates } = require('../infrastructure/repositories/messageTemplateRepository');
+const { buildAuthoritativeSettings } = require('../config/static');
 
-const settingsCache = new Map();
 const customCommandsCache = new Map();
-const messageTemplatesCache = new Map();
-
-const limitCache = new Map();
-const abuseCache = new Map();
-const warnCache = new Map();
+// Ephemeral moderation limiter state is authoritative in RAM for a single-process deployment.
+const moderationRateLimitState = new Map();
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const WARN_COOLDOWN_MS = 8000;
@@ -16,13 +12,49 @@ const CACHE_PRUNE_TICK = config.cache.pruneTick;
 const CACHE_MAX_KEYS = config.cache.maxKeys;
 let cacheOps = 0;
 
+function normalizeCustomCommandName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function hasWhitespace(value) {
+  return /\s/.test(String(value || ''));
+}
+
+function buildCustomCommandLookupCandidates(messageContent, prefix = '.') {
+  const trimmed = normalizeCustomCommandName(messageContent);
+  if (!trimmed) return [];
+
+  const candidates = [];
+  const seen = new Set();
+  const add = (value) => {
+    const normalized = normalizeCustomCommandName(value);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  add(trimmed);
+
+  const normalizedPrefix = normalizeCustomCommandName(prefix);
+  if (
+    normalizedPrefix &&
+    trimmed.startsWith(normalizedPrefix) &&
+    trimmed.length > normalizedPrefix.length
+  ) {
+    const stripped = trimmed.slice(normalizedPrefix.length).trim();
+    if (stripped && !hasWhitespace(stripped)) add(stripped);
+  }
+
+  return candidates;
+}
+
 function parseIdList(str) {
   if (!str) return [];
   return String(str)
     .split(',')
     .map((x) => x.trim())
     .filter(Boolean)
-    .map((x) => x.replace(/[^\d]/g, '')) // <@123> / @123 / 123
+    .map((x) => x.replace(/[^\d]/g, ''))
     .filter(Boolean);
 }
 
@@ -32,53 +64,128 @@ function trimOldestKeys(map, limit, timestampGetter) {
   const victims = [...map.entries()]
     .sort((a, b) => timestampGetter(a[1]) - timestampGetter(b[1]))
     .slice(0, overflow)
-    .map(([k]) => k);
-  for (const k of victims) map.delete(k);
+    .map(([key]) => key);
+  for (const key of victims) map.delete(key);
+}
+
+function createEmptyRateLimitEntry(now = Date.now()) {
+  return {
+    actionStamps: [],
+    abuseStamps: [],
+    lastWarnAt: 0,
+    lastTouchedAt: now,
+  };
+}
+
+function normalizeRateLimitEntry(entry, now = Date.now()) {
+  const normalized = entry && typeof entry === 'object'
+    ? {
+        actionStamps: Array.isArray(entry.actionStamps) ? entry.actionStamps : [],
+        abuseStamps: Array.isArray(entry.abuseStamps) ? entry.abuseStamps : [],
+        lastWarnAt: Number(entry.lastWarnAt || 0),
+        lastTouchedAt: Number(entry.lastTouchedAt || now),
+      }
+    : createEmptyRateLimitEntry(now);
+
+  normalized.actionStamps = normalized.actionStamps.filter((ts) => now - ts < ONE_HOUR_MS);
+  normalized.abuseStamps = normalized.abuseStamps.filter((ts) => now - ts < ONE_HOUR_MS);
+  if (now - normalized.lastWarnAt >= ONE_HOUR_MS) normalized.lastWarnAt = 0;
+  normalized.lastTouchedAt = now;
+
+  return normalized;
+}
+
+function persistRateLimitEntry(key, entry) {
+  if (!key) return entry;
+  const hasState =
+    entry.actionStamps.length > 0 ||
+    entry.abuseStamps.length > 0 ||
+    Number(entry.lastWarnAt || 0) > 0;
+
+  if (!hasState) {
+    moderationRateLimitState.delete(key);
+    return entry;
+  }
+
+  moderationRateLimitState.set(key, entry);
+  return entry;
+}
+
+function getRateLimitEntry(key, now = Date.now()) {
+  const entry = normalizeRateLimitEntry(moderationRateLimitState.get(key), now);
+  return persistRateLimitEntry(key, entry);
+}
+
+function getRateLimitEntryOrderTimestamp(entry) {
+  return Number(entry?.lastTouchedAt || 0);
 }
 
 function maybePruneCaches(now = Date.now()) {
   cacheOps += 1;
   if (cacheOps % CACHE_PRUNE_TICK !== 0) return;
 
-  for (const [key, stamps] of limitCache) {
-    const next = (stamps || []).filter((t) => now - t < ONE_HOUR_MS);
-    if (!next.length) limitCache.delete(key);
-    else limitCache.set(key, next);
+  for (const [key, entry] of moderationRateLimitState.entries()) {
+    persistRateLimitEntry(key, normalizeRateLimitEntry(entry, now));
   }
 
-  for (const [key, stamps] of abuseCache) {
-    const next = (stamps || []).filter((t) => now - t < ONE_HOUR_MS);
-    if (!next.length) abuseCache.delete(key);
-    else abuseCache.set(key, next);
-  }
-
-  for (const [key, ts] of warnCache) {
-    if (now - ts > ONE_HOUR_MS) warnCache.delete(key);
-  }
-
-  trimOldestKeys(limitCache, CACHE_MAX_KEYS, (stamps) => (Array.isArray(stamps) && stamps.length ? stamps[0] : 0));
-  trimOldestKeys(abuseCache, CACHE_MAX_KEYS, (stamps) => (Array.isArray(stamps) && stamps.length ? stamps[0] : 0));
-  trimOldestKeys(warnCache, CACHE_MAX_KEYS, (ts) => Number(ts) || 0);
+  trimOldestKeys(moderationRateLimitState, CACHE_MAX_KEYS, getRateLimitEntryOrderTimestamp);
 }
 
-async function loadAllSettings() {
-  try {
-    settingsCache.clear();
+function buildRateLimitKey(guildId, userId, command) {
+  return `${guildId}_${userId}_${command}`;
+}
 
-    const [rows] = await db.execute('SELECT * FROM settings');
-    rows.forEach((row) => {
-      try {
-        row.custom_messages = JSON.parse(row.custom_messages || '{}');
-      } catch {
-        row.custom_messages = {};
-      }
-      settingsCache.set(row.guild_id, row);
-    });
-
-    console.log(`[CACHE] ${rows.length} settings loaded into RAM`);
-  } catch (error) {
-    console.error('Cache load error (settings):', error);
+function checkLimitInMemory(guildId, userId, command, limitNum, safeIds, now = Date.now()) {
+  if (!Number.isFinite(limitNum) || limitNum <= 0) {
+    return { allowed: true, key: null, bypass: true };
   }
+
+  if (safeIds.includes(String(userId))) {
+    return { allowed: true, key: null, bypass: true };
+  }
+
+  const key = buildRateLimitKey(guildId, userId, command);
+  const entry = getRateLimitEntry(key, now);
+
+  if (entry.actionStamps.length >= limitNum) {
+    entry.abuseStamps.push(now);
+    const shouldWarn = now - Number(entry.lastWarnAt || 0) >= WARN_COOLDOWN_MS;
+    if (shouldWarn) entry.lastWarnAt = now;
+    persistRateLimitEntry(key, entry);
+
+    return {
+      allowed: false,
+      key,
+      count: entry.actionStamps.length,
+      abuseCount: entry.abuseStamps.length,
+      shouldWarn,
+      store: 'memory',
+    };
+  }
+
+  persistRateLimitEntry(key, entry);
+  return { allowed: true, key, count: entry.actionStamps.length, store: 'memory' };
+}
+
+function incrementLimitInMemory(key, now = Date.now()) {
+  if (!key) return;
+  const entry = getRateLimitEntry(key, now);
+  entry.actionStamps.push(now);
+  persistRateLimitEntry(key, entry);
+}
+
+function releaseLimitInMemory(key, now = Date.now()) {
+  if (!key) return { ok: false, reason: 'missing_key' };
+
+  const entry = getRateLimitEntry(key, now);
+  if (!entry.actionStamps.length) {
+    persistRateLimitEntry(key, entry);
+    return { ok: true, released: 0, store: 'memory' };
+  }
+
+  entry.actionStamps.pop();
+  persistRateLimitEntry(key, entry);
+  return { ok: true, released: 1, store: 'memory' };
 }
 
 async function loadAllCustomCommands() {
@@ -93,74 +200,31 @@ async function loadAllCustomCommands() {
         guildMap = new Map();
         customCommandsCache.set(row.guild_id, guildMap);
       }
-      guildMap.set(row.command_name, row.command_response);
+      guildMap.set(normalizeCustomCommandName(row.command_name), row.command_response);
     }
 
     console.log(`[CACHE] ${rows.length} custom commands loaded into RAM`);
   } catch (error) {
+    if (String(error?.code || '') === '42P01') {
+      console.warn('[CACHE] custom_commands tablosu bulunamadi, custom command cache skip edildi');
+      return;
+    }
     console.error('Cache load error (custom_commands):', error);
   }
 }
 
-function ensureMessageTemplateEntry(guildId) {
-  let entry = messageTemplatesCache.get(guildId);
-  if (!entry) {
-    entry = { global: {}, commands: new Map() };
-    messageTemplatesCache.set(guildId, entry);
-  }
-  return entry;
-}
-
-function normalizeTemplateCommandName(commandName) {
-  return String(commandName || '').trim().toLowerCase();
-}
-
-function safeParseTemplatesJson(raw) {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-    } catch {}
-  }
-  return {};
-}
-
-async function loadAllMessageTemplates() {
-  try {
-    messageTemplatesCache.clear();
-    const rows = await getAllMessageTemplates();
-
-    rows.forEach((row) => {
-      const guildId = row.guild_id;
-      const scope = row.scope === 'command' ? 'command' : 'global';
-      const commandName = normalizeTemplateCommandName(row.command_name);
-      const parsed = safeParseTemplatesJson(row.templates_json);
-
-      const entry = ensureMessageTemplateEntry(guildId);
-      if (scope === 'command') entry.commands.set(commandName, parsed);
-      else entry.global = parsed;
-    });
-
-    console.log(`[CACHE] ${rows.length} message template scope loaded into RAM`);
-  } catch (error) {
-    console.error('Cache load error (message_templates):', error);
-  }
-}
-
 function getSettings(guildId) {
-  return settingsCache.get(guildId);
+  return buildAuthoritativeSettings(guildId);
 }
 
-function updateSettings(guildId, newSettings) {
-  const current = settingsCache.get(guildId) || {};
-  settingsCache.set(guildId, { ...current, ...newSettings });
-}
-
-function getCustomCommand(guildId, commandName) {
+function getCustomCommand(guildId, commandName, prefix = '.') {
   const guildMap = customCommandsCache.get(guildId);
   if (!guildMap) return null;
-  return guildMap.get(commandName) || null;
+  for (const candidate of buildCustomCommandLookupCandidates(commandName, prefix)) {
+    const hit = guildMap.get(candidate);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function upsertCustomCommand(guildId, commandName, commandResponse) {
@@ -169,120 +233,75 @@ function upsertCustomCommand(guildId, commandName, commandResponse) {
     guildMap = new Map();
     customCommandsCache.set(guildId, guildMap);
   }
-  guildMap.set(commandName, commandResponse);
+  guildMap.set(normalizeCustomCommandName(commandName), commandResponse);
 }
 
 function removeCustomCommand(guildId, commandName) {
   const guildMap = customCommandsCache.get(guildId);
   if (!guildMap) return;
-  guildMap.delete(commandName);
+  guildMap.delete(normalizeCustomCommandName(commandName));
 }
 
-function getMessageTemplates(guildId, scope, commandName = '') {
-  const entry = messageTemplatesCache.get(guildId);
-  if (!entry) return null;
-
-  if (scope === 'command') {
-    return entry.commands.get(normalizeTemplateCommandName(commandName)) || null;
-  }
-
-  return entry.global || null;
-}
-
-function upsertMessageTemplates(guildId, scope, commandName, templates) {
-  const entry = ensureMessageTemplateEntry(guildId);
-  const safeTemplates = safeParseTemplatesJson(templates);
-
-  if (scope === 'command') {
-    entry.commands.set(normalizeTemplateCommandName(commandName), safeTemplates);
-    return;
-  }
-
-  entry.global = safeTemplates;
-}
-
-function resetMessageTemplates(guildId, scope, commandName = '') {
-  const entry = messageTemplatesCache.get(guildId);
-  if (!entry) return;
-
-  if (scope === 'command') {
-    entry.commands.delete(normalizeTemplateCommandName(commandName));
-    return;
-  }
-
-  entry.global = {};
-}
-
-function checkLimit(guildId, userId, command, limit, safeList) {
+async function checkLimit(guildId, userId, command, limit, safeList) {
   maybePruneCaches();
+  const now = Date.now();
   const limitNum = Number(limit);
   const safeIds = parseIdList(safeList);
-
-  if (!Number.isFinite(limitNum) || limitNum <= 0) {
-    return { allowed: true, key: null, bypass: true };
-  }
-
-  if (safeIds.includes(String(userId))) {
-    return { allowed: true, key: null, bypass: true };
-  }
-
-  const key = `${guildId}_${userId}_${command}`;
-  const now = Date.now();
-
-  let stamps = limitCache.get(key) || [];
-  stamps = stamps.filter((t) => now - t < ONE_HOUR_MS);
-  limitCache.set(key, stamps);
-
-  if (stamps.length >= limitNum) {
-    const abuseKey = `abuse_${key}`;
-    let abuse = abuseCache.get(abuseKey) || [];
-    abuse = abuse.filter((t) => now - t < ONE_HOUR_MS);
-    abuse.push(now);
-    abuseCache.set(abuseKey, abuse);
-
-    const lastWarn = warnCache.get(key) || 0;
-    const shouldWarn = now - lastWarn >= WARN_COOLDOWN_MS;
-    if (shouldWarn) warnCache.set(key, now);
-
-    return {
-      allowed: false,
-      key,
-      count: stamps.length,
-      abuseCount: abuse.length,
-      shouldWarn,
-    };
-  }
-
-  return { allowed: true, key, count: stamps.length };
+  return checkLimitInMemory(guildId, userId, command, limitNum, safeIds, now);
 }
 
-function incrementLimit(key) {
+async function consumeLimit(guildId, userId, command, limit, safeList) {
   maybePruneCaches();
-  if (!key) return;
   const now = Date.now();
-  let stamps = limitCache.get(key) || [];
-  stamps = stamps.filter((t) => now - t < ONE_HOUR_MS);
-  stamps.push(now);
-  limitCache.set(key, stamps);
+  const limitNum = Number(limit);
+  const safeIds = parseIdList(safeList);
+  const preview = checkLimitInMemory(guildId, userId, command, limitNum, safeIds, now);
+  if (!preview.allowed) return preview;
+  if (preview.bypass) return preview;
+
+  incrementLimitInMemory(preview.key, now);
+  return {
+    allowed: true,
+    key: preview.key,
+    count: (preview.count || 0) + 1,
+    store: 'memory',
+  };
+}
+
+async function incrementLimit(key) {
+  maybePruneCaches();
+  if (!key) return { ok: false, reason: 'missing_key' };
+
+  incrementLimitInMemory(key, Date.now());
+  return { ok: true, store: 'memory' };
+}
+
+async function releaseLimit(key) {
+  maybePruneCaches();
+  if (!key) return { ok: false, reason: 'missing_key' };
+  return releaseLimitInMemory(key, Date.now());
+}
+
+function __clearRateLimitStateForTests() {
+  cacheOps = 0;
+  moderationRateLimitState.clear();
 }
 
 module.exports = {
-  loadAllSettings,
   loadAllCustomCommands,
-  loadAllMessageTemplates,
 
   getSettings,
-  updateSettings,
 
   getCustomCommand,
   upsertCustomCommand,
   removeCustomCommand,
-  getMessageTemplates,
-  upsertMessageTemplates,
-  resetMessageTemplates,
 
   checkLimit,
+  consumeLimit,
   incrementLimit,
+  releaseLimit,
   parseIdList,
+  normalizeCustomCommandName,
+  buildCustomCommandLookupCandidates,
+  __clearRateLimitStateForTests,
 };
-

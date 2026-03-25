@@ -8,6 +8,18 @@ const TRANSIENT_ERROR_CODES = new Set([
   'ER_CON_COUNT_ERROR',
   'ER_LOCK_DEADLOCK',
   'ER_LOCK_WAIT_TIMEOUT',
+  '40001', // serialization_failure
+  '40P01', // deadlock_detected
+  '53300', // too_many_connections
+  '55P03', // lock_not_available
+  '57P01', // admin_shutdown
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '08P01',
 ]);
 
 function isTransientError(err) {

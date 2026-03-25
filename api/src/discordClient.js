@@ -1,17 +1,30 @@
 const { Client, GatewayIntentBits, ActivityType, Options, Partials } = require('discord.js');
 const { config } = require('./config');
+const { getStaticBotPresence } = require('./config/static');
+const embedCommand = require('./bot/commands/embed');
+const { logDiag, serializeError } = require('./diagnostics');
+const perfMonitor = require('./utils/perfMonitor');
+const { createStartupVoiceAutoJoiner } = require('./voice/startupVoiceAutoJoiner');
 
 const TARGET_GUILD_ID = config.discord.targetGuildId;
+const STATIC_PRESENCE_TYPE_TO_DISCORD = Object.freeze({
+  CUSTOM: ActivityType.Custom,
+  PLAYING: ActivityType.Playing,
+  LISTENING: ActivityType.Listening,
+  WATCHING: ActivityType.Watching,
+  COMPETING: ActivityType.Competing,
+});
 
 function createDiscordClient({
   cache,
   moderationBot,
-  getWeeklyStaffTracker = null,
   getReactionActionService = null,
   getTagRoleFeature = null,
   getPrivateRoomService = null,
+  getBotPresenceManager = null,
+  startupVoiceAutoJoiner = null,
   logSystem,
-  logError = () => {},
+  logError = () => { },
 }) {
   const client = new Client({
     intents: [
@@ -25,17 +38,17 @@ function createDiscordClient({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember, Partials.User],
     makeCache: Options.cacheWithLimits({
       ...Options.DefaultMakeCacheSettings,
-      MessageManager: 100,
+      MessageManager: 25,
       PresenceManager: 0,
       ReactionManager: 0,
       ReactionUserManager: 0,
-      GuildMemberManager: 1000,
+      GuildMemberManager: 200,
     }),
     sweepers: {
       ...Options.DefaultSweeperSettings,
       messages: {
-        interval: 300,
-        lifetime: 600,
+        interval: 120,
+        lifetime: 120,
       },
       guildMembers: {
         interval: 900,
@@ -44,38 +57,62 @@ function createDiscordClient({
     },
   });
 
+  const traceDiscordEvent = (event, payload = {}, level = 'INFO') => {
+    logDiag(`discord.${event}`, payload, level);
+  };
+  const resolvedStartupVoiceAutoJoiner =
+    startupVoiceAutoJoiner || createStartupVoiceAutoJoiner({ client, logSystem, logError });
+
+  client.on('error', (err) => {
+    traceDiscordEvent(
+      'error',
+      {
+        error: serializeError(err),
+      },
+      'ERROR'
+    );
+  });
+
+  client.on('warn', (messageText) => {
+    traceDiscordEvent(
+      'warn',
+      {
+        message: String(messageText || '').slice(0, 1200),
+      },
+      'WARN'
+    );
+  });
+
   client.on('messageCreate', async (message) => {
+    // B1: early return before any object allocation or tracing
+    if (message.author.bot || !message.guild) return;
+    if (TARGET_GUILD_ID && message.guild.id !== TARGET_GUILD_ID) return;
+
+    perfMonitor.incCounter('messageCreate');
+    traceDiscordEvent('messageCreate', {
+      opId: message.id || null,
+      guildId: message.guild.id,
+      channelId: message.channel?.id || null,
+      authorId: message.author.id,
+    });
+
     try {
-      if (message.author.bot || !message.guild) return;
-      if (TARGET_GUILD_ID && message.guild.id !== TARGET_GUILD_ID) return;
+      if (moderationBot?.handlePrefix) {
+        const builtinHandled = await moderationBot.handlePrefix(client, message);
+        if (builtinHandled) return;
+      }
 
-      const privateRoomService = typeof getPrivateRoomService === 'function' ? getPrivateRoomService() : null;
-      const privateHandled = await privateRoomService?.handleMessageCreate?.(message);
-      if (privateHandled) return;
-
-      const customResponse = cache.getCustomCommand(message.guild.id, message.content);
+      const customResponse = cache.getCustomCommand(
+        message.guild.id,
+        message.content,
+        cache.getSettings?.(message.guild.id)?.prefix || '.'
+      );
       if (customResponse) {
         await message.channel.send({
           content: customResponse,
           allowedMentions: { parse: [] },
         });
-        const weeklyStaffTracker = typeof getWeeklyStaffTracker === 'function' ? getWeeklyStaffTracker() : null;
-        if (weeklyStaffTracker?.trackEvent) {
-          const commandName = `custom:${String(message.content || '').slice(0, 32).toLowerCase()}`;
-          await weeklyStaffTracker.trackEvent({
-            guildId: message.guild.id,
-            userId: message.author.id,
-            eventType: 'command',
-            commandName,
-            occurredAt: Date.now(),
-            metadata: { source: 'custom_command' },
-          });
-        }
         return;
-      }
-
-      if (moderationBot?.handlePrefix) {
-        await moderationBot.handlePrefix(client, message);
       }
     } catch (e) {
       logError('message_create_failed', e, {
@@ -119,9 +156,10 @@ function createDiscordClient({
   });
 
   client.on('guildMemberAdd', async (member) => {
+    if (!member?.guild) return;
+    if (TARGET_GUILD_ID && member.guild.id !== TARGET_GUILD_ID) return;
+
     try {
-      if (!member?.guild) return;
-      if (TARGET_GUILD_ID && member.guild.id !== TARGET_GUILD_ID) return;
       const feature = typeof getTagRoleFeature === 'function' ? getTagRoleFeature() : null;
       await feature?.syncTagRole(member, 'guildMemberAdd');
     } catch (e) {
@@ -132,10 +170,11 @@ function createDiscordClient({
     }
   });
 
-  client.on('guildMemberUpdate', async (_oldMember, newMember) => {
+  client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    if (!newMember?.guild) return;
+    if (TARGET_GUILD_ID && newMember.guild.id !== TARGET_GUILD_ID) return;
+
     try {
-      if (!newMember?.guild) return;
-      if (TARGET_GUILD_ID && newMember.guild.id !== TARGET_GUILD_ID) return;
       const feature = typeof getTagRoleFeature === 'function' ? getTagRoleFeature() : null;
       await feature?.syncTagRole(newMember, 'guildMemberUpdate');
     } catch (e) {
@@ -146,18 +185,31 @@ function createDiscordClient({
     }
   });
 
-  client.on('userUpdate', async (_oldUser, newUser) => {
+  client.on('userUpdate', async (oldUser, newUser) => {
     try {
       if (!newUser?.id) return;
       const feature = typeof getTagRoleFeature === 'function' ? getTagRoleFeature() : null;
       if (!feature?.syncTagRole) return;
 
+      const hintedGuildIds = new Set(
+        [
+          oldUser?.primaryGuild?.identityGuildId,
+          newUser?.primaryGuild?.identityGuildId,
+        ]
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      );
+
       const guilds = TARGET_GUILD_ID
         ? [client.guilds.cache.get(TARGET_GUILD_ID)].filter(Boolean)
-        : [...client.guilds.cache.values()];
+        : [...client.guilds.cache.values()].filter(
+            (guild) => hintedGuildIds.has(guild.id) || guild.members?.cache?.has?.(newUser.id)
+          );
 
       for (const guild of guilds) {
-        const member = guild.members.cache.get(newUser.id) || (await guild.members.fetch(newUser.id).catch(() => null));
+        const cachedMember = guild.members.cache.get(newUser.id) || null;
+        const shouldFetch = !cachedMember && hintedGuildIds.has(guild.id);
+        const member = cachedMember || (shouldFetch ? await guild.members.fetch(newUser.id).catch(() => null) : null);
         if (!member) continue;
         await feature.syncTagRole(member, 'userUpdate');
       }
@@ -169,6 +221,14 @@ function createDiscordClient({
   });
 
   client.on('voiceStateUpdate', async (oldState, newState) => {
+    traceDiscordEvent('voiceStateUpdate', {
+      opId: `${newState?.id || oldState?.id || 'unknown'}:${newState?.sessionId || oldState?.sessionId || 'na'}`,
+      guildId: newState?.guild?.id || oldState?.guild?.id || null,
+      userId: newState?.id || oldState?.id || null,
+      oldChannelId: oldState?.channelId || null,
+      newChannelId: newState?.channelId || null,
+    });
+
     try {
       const guildId = newState?.guild?.id || oldState?.guild?.id;
       if (!guildId) return;
@@ -186,14 +246,30 @@ function createDiscordClient({
   });
 
   client.on('interactionCreate', async (interaction) => {
+    traceDiscordEvent('interactionCreate', {
+      opId: interaction?.id || null,
+      guildId: interaction?.guildId || null,
+      channelId: interaction?.channelId || null,
+      userId: interaction?.user?.id || null,
+      interactionType: interaction?.type || null,
+      customId: interaction?.customId || null,
+    });
+
     try {
       if (!interaction?.inGuild?.() || !interaction.guildId) return;
       if (TARGET_GUILD_ID && interaction.guildId !== TARGET_GUILD_ID) return;
 
+      // Route embed-builder interactions first
+      const cid = interaction.customId || '';
+      if (cid.startsWith('em_btn_') || cid.startsWith('em_mod_')) {
+        await embedCommand.handleInteraction(interaction);
+        return;
+      }
+
       const service = typeof getPrivateRoomService === 'function' ? getPrivateRoomService() : null;
       await service?.handleInteraction(interaction);
     } catch (e) {
-      logError('private_room_interaction_listener_failed', e, {
+      logError('interaction_listener_failed', e, {
         guildId: interaction?.guildId,
         customId: interaction?.customId,
         interactionType: interaction?.type,
@@ -205,20 +281,51 @@ function createDiscordClient({
   const onReady = async (c) => {
     if (readyHandled) return;
     readyHandled = true;
+    const staticBotPresence = getStaticBotPresence();
+    const fallbackPresenceType =
+      STATIC_PRESENCE_TYPE_TO_DISCORD[staticBotPresence.type] || ActivityType.Custom;
+
+    traceDiscordEvent('ready', {
+      userId: c.user?.id || null,
+      userTag: c.user?.tag || null,
+      guildCount: c.guilds?.cache?.size || 0,
+    });
 
     try {
-      if (cache?.loadAllSettings) await cache.loadAllSettings();
       if (cache?.loadAllCustomCommands) await cache.loadAllCustomCommands();
-      if (cache?.loadAllMessageTemplates) await cache.loadAllMessageTemplates();
     } catch (err) {
       logError('cache_bootstrap_failed', err);
     }
 
-    c.user.setActivity('Sou da yo. Kirin wa, Kirin da kara.', { type: ActivityType.Custom });
+    const botPresenceManager =
+      typeof getBotPresenceManager === 'function' ? getBotPresenceManager() : null;
+    if (botPresenceManager?.bootstrapAndApply) {
+      const result = await botPresenceManager.bootstrapAndApply('startup');
+      if (!result?.applyResult?.ok) {
+        logSystem('Bot presence startup apply basarisiz, varsayilan activity kullaniliyor', 'WARN');
+        if (!staticBotPresence.enabled) {
+          c.user.setPresence({ activities: [], status: 'online' });
+        } else {
+          c.user.setActivity(staticBotPresence.text, { type: fallbackPresenceType });
+        }
+      }
+    } else {
+      if (!staticBotPresence.enabled) {
+        c.user.setPresence({ activities: [], status: 'online' });
+      } else {
+        c.user.setActivity(staticBotPresence.text, { type: fallbackPresenceType });
+      }
+    }
+
     logSystem(
       `========================================\n[READY] ${c.user.tag} BOT & PANEL HAZIR!\n========================================`,
       'SUCCESS'
     );
+
+    await resolvedStartupVoiceAutoJoiner?.run?.({
+      trigger: 'discord_ready',
+      userId: c.user?.id || null,
+    });
   };
 
   client.once('clientReady', onReady);
@@ -228,4 +335,3 @@ function createDiscordClient({
 }
 
 module.exports = { createDiscordClient };
-

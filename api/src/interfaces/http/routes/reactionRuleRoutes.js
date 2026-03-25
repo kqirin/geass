@@ -10,6 +10,7 @@ const ACTION_TYPES = new Set([
   'RUN_INTERNAL_COMMAND',
   'REMOVE_OTHER_REACTIONS_IN_GROUP',
 ]);
+const INTERNAL_COMMAND_WHITELIST = new Set(['partner-bilgi']);
 
 function isSnowflake(value) {
   return /^\d{5,32}$/.test(String(value || '').trim());
@@ -26,7 +27,10 @@ function sanitizeActions(rawActions) {
   for (const item of rawActions) {
     const type = String(item?.type || '').trim().toUpperCase();
     if (!ACTION_TYPES.has(type)) continue;
-    const payload = typeof item?.payload === 'object' && item.payload !== null ? item.payload : {};
+    const payload = typeof item?.payload === 'object' && item.payload !== null ? { ...item.payload } : {};
+    if (type === 'RUN_INTERNAL_COMMAND') {
+      payload.command = String(payload.command || '').trim().toLowerCase();
+    }
     out.push({ type, payload });
   }
   return out.slice(0, 20);
@@ -57,12 +61,39 @@ function sanitizeRuleInput(input = {}) {
 }
 
 function validateRuleInput(input) {
-  if (!isSnowflake(input.guildId)) return 'guildId gecersiz';
-  if (!isSnowflake(input.channelId)) return 'channelId gecersiz';
-  if (!isSnowflake(input.messageId)) return 'messageId gecersiz';
-  if (input.emojiType === 'custom' && !isSnowflake(input.emojiId || '')) return 'emojiId gecersiz';
-  if (input.emojiType === 'unicode' && !(input.emojiName || '').length) return 'emojiName gerekli';
-  if (!Array.isArray(input.actions) || input.actions.length === 0) return 'en az bir aksiyon gerekli';
+  if (!isSnowflake(input.guildId)) return 'guildId geçersiz';
+  if (!isSnowflake(input.channelId)) return 'Kanal seçimi geçersiz';
+  if (!isSnowflake(input.messageId)) return 'Mesaj ID geçersiz';
+  if (input.emojiType === 'custom' && !isSnowflake(input.emojiId || '')) return 'Custom emoji seçimi geçersiz';
+  if (input.emojiType === 'unicode' && !(input.emojiName || '').length) return 'Unicode emoji boş olamaz';
+  if (!Array.isArray(input.actions) || input.actions.length === 0) return 'En az bir aksiyon gerekli';
+  if (input.triggerMode === 'TOGGLE') {
+    const nonReversible = input.actions.find((action) =>
+      ['DM_SEND', 'REPLY', 'CHANNEL_LINK', 'RUN_INTERNAL_COMMAND'].includes(action?.type)
+    );
+    if (nonReversible) {
+      return 'TOGGLE modu sadece rol degisikligi ve grup reaksiyon temizligi aksiyonlariyla kullanilabilir';
+    }
+  }
+  const addedRoleIds = new Set();
+  const removedRoleIds = new Set();
+  for (const action of input.actions) {
+    if (action?.type === 'REMOVE_OTHER_REACTIONS_IN_GROUP' && !String(input.groupKey || '').trim()) {
+      return 'Grup temizligi aksiyonu icin groupKey gerekli';
+    }
+    if (action?.type === 'ROLE_ADD') addedRoleIds.add(String(action?.payload?.roleId || '').trim());
+    if (action?.type === 'ROLE_REMOVE') removedRoleIds.add(String(action?.payload?.roleId || '').trim());
+    if (action?.type !== 'RUN_INTERNAL_COMMAND') continue;
+    const command = String(action?.payload?.command || '').trim().toLowerCase();
+    if (!INTERNAL_COMMAND_WHITELIST.has(command)) {
+      return 'İç komut whitelist dışı';
+    }
+  }
+  for (const roleId of addedRoleIds) {
+    if (roleId && removedRoleIds.has(roleId)) {
+      return 'Ayni rol ayni kuralda hem eklenip hem kaldirilamaz';
+    }
+  }
   return null;
 }
 
@@ -74,21 +105,21 @@ function parseDiscordErrorCode(err) {
 
 function mapReactionSetupError(err) {
   const code = parseDiscordErrorCode(err);
-  if (code === 50013) return 'Botun bu kanalda Mesajlari Goruntule, Gecmisi Oku ve Tepki Ekle izni olmali';
-  if (code === 10008) return 'Mesaj bulunamadi';
-  if (code === 10003) return 'Kanal bulunamadi';
-  if (code === 10014) return 'Emoji bulunamadi';
-  if (code === 50001) return 'Botun bu kaynaga erisimi yok';
-  return 'Bot bu mesaja secilen emojiyi ekleyemedi';
+  if (code === 50013) return 'Botun bu kanalda Mesajları Görüntüle, Geçmişi Oku ve Tepki Ekle izni olmalı.';
+  if (code === 10008) return 'Mesaj bulunamadı';
+  if (code === 10003) return 'Kanal bulunamadı';
+  if (code === 10014) return 'Emoji bulunamadı';
+  if (code === 50001) return 'Botun bu kaynağa erişimi yok.';
+  return 'Bot bu mesaja seçilen emojiyi ekleyemedi.';
 }
 
 function mapReactionCleanupWarning(err) {
   const code = parseDiscordErrorCode(err);
-  if (code === 50013) return 'Emoji temizleme kisitli: botta Manage Messages izni yok olabilir';
-  if (code === 10008) return 'Emoji temizleme atlandi: mesaj bulunamadi';
-  if (code === 10003) return 'Emoji temizleme atlandi: kanal bulunamadi';
-  if (code === 50001) return 'Emoji temizleme atlandi: botun erisimi yok';
-  return 'Emoji temizleme tamamlanamadi';
+  if (code === 50013) return 'Emoji temizleme kısıtlı: Botta Manage Messages izni olmayabilir.';
+  if (code === 10008) return 'Emoji temizleme atlandı: Mesaj bulunamadı.';
+  if (code === 10003) return 'Emoji temizleme atlandı: Kanal bulunamadı.';
+  if (code === 50001) return 'Emoji temizleme atlandı: Botun erişimi yok.';
+  return 'Emoji temizleme tamamlanmadı.';
 }
 
 function toEmojiIdentifier(input) {
@@ -109,17 +140,17 @@ function getRuleTargetKey(ruleLike) {
 
 async function ensureRuleReactionOnMessage(client, input) {
   const guild = client.guilds.cache.get(input.guildId) || (await client.guilds.fetch(input.guildId).catch(() => null));
-  if (!guild) return { ok: false, error: 'Sunucu bulunamadi' };
+  if (!guild) return { ok: false, error: 'Sunucu bulunamadı' };
 
   const channel = guild.channels.cache.get(input.channelId) || (await guild.channels.fetch(input.channelId).catch(() => null));
-  if (!channel) return { ok: false, error: 'Kanal bulunamadi' };
-  if (!channel.isTextBased?.()) return { ok: false, error: 'Kanal mesaj desteklemiyor' };
+  if (!channel) return { ok: false, error: 'Kanal bulunamadı' };
+  if (!channel.isTextBased?.()) return { ok: false, error: 'Kanal yok' };
 
   const message = await channel.messages.fetch(input.messageId).catch(() => null);
-  if (!message) return { ok: false, error: 'Mesaj bulunamadi' };
+  if (!message) return { ok: false, error: 'Mesaj bulunamadı' };
 
   const emoji = toEmojiIdentifier(input);
-  if (!emoji) return { ok: false, error: 'Emoji gecersiz' };
+  if (!emoji) return { ok: false, error: 'Emoji geçersiz' };
 
   try {
     await message.react(emoji);
@@ -197,26 +228,44 @@ function attachGuildIdFromQuery(req, _res, next) {
 }
 
 async function hasGuildAdminAccess(client, req, guildId) {
+  if (typeof req?.hasAuthorizedGuildAccess === 'function') {
+    return req.hasAuthorizedGuildAccess(guildId);
+  }
   const sess = req.userSession;
-  if (!sess?.userId || !Array.isArray(sess.guilds)) return false;
-  if (!sess.guilds.some((g) => g.id === guildId)) return false;
-  const guild = client.guilds.cache.get(guildId) || (await client.guilds.fetch(guildId).catch(() => null));
-  if (!guild) return false;
-  const member = await guild.members.fetch(sess.userId).catch(() => null);
-  return member?.permissions?.has?.('Administrator') === true;
+  return Boolean(sess?.guilds?.some((g) => g.id === guildId));
 }
 
-function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reactionActionService }) {
+function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reactionActionService, logError = () => {} }) {
+  function appendWarning(existing, next) {
+    const cleanNext = String(next || '').trim();
+    if (!cleanNext) return existing || null;
+    if (!existing) return cleanNext;
+    if (existing.includes(cleanNext)) return existing;
+    return `${existing} ${cleanNext}`.trim();
+  }
+
+  async function refreshReactionRuleRuntime(guildId, context, meta = {}) {
+    if (!reactionActionService || !guildId) return null;
+    try {
+      reactionActionService.invalidateGuildCache(guildId);
+      await reactionActionService.refreshGuildRules(guildId);
+      return null;
+    } catch (err) {
+      logError(context, err, { guildId, ...meta });
+      return 'Kural degisikligi kaydedildi ancak runtime cache hemen yenilenemedi.';
+    }
+  }
+
   app.get('/api/reaction-rules', attachGuildIdFromQuery, requireAuth, async (req, res) => {
     try {
       const guildId = String(req.query.guildId || req.params.guildId || '');
       if (!isSnowflake(guildId)) {
-        return res.status(400).json({ error: 'guildId gecersiz', requestId: req.requestId });
+        return res.status(400).json({ error: 'guildId geçersiz', requestId: req.requestId });
       }
       const rules = await reactionRuleRepository.listRulesByGuild(guildId);
       return res.json(rules);
     } catch (err) {
-      return routeError(res, req, 'reaction_rules_list_failed', err, 'Kurallar alinamadi');
+      return routeError(res, req, 'reaction_rules_list_failed', err, 'Kurallar alınamadı');
     }
   });
 
@@ -227,7 +276,7 @@ function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reac
       if (validationError) return res.status(400).json({ error: validationError, requestId: req.requestId });
 
       const guild = client.guilds.cache.get(input.guildId);
-      if (!guild) return res.status(404).json({ error: 'Sunucu bulunamadi', requestId: req.requestId });
+      if (!guild) return res.status(404).json({ error: 'Sunucu bulunamadı', requestId: req.requestId });
 
       const reactionSetup = await ensureRuleReactionOnMessage(client, input);
       if (!reactionSetup.ok) {
@@ -235,21 +284,22 @@ function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reac
       }
 
       const created = await reactionRuleRepository.createRule({ ...input, createdBy: req.userSession?.userId || null });
-      reactionActionService?.invalidateGuildCache(input.guildId);
-      await reactionActionService?.refreshGuildRules(input.guildId);
-      return res.json({ success: true, rule: created });
+      const warning = await refreshReactionRuleRuntime(input.guildId, 'reaction_rule_create_refresh_failed', {
+        ruleId: created?.id || null,
+      });
+      return res.json({ success: true, partial: Boolean(warning), rule: created, warning });
     } catch (err) {
-      return routeError(res, req, 'reaction_rule_create_failed', err, 'Kural olusturulamadi');
+      return routeError(res, req, 'reaction_rule_create_failed', err, 'Kural oluşturulamadı');
     }
   });
 
   app.put('/api/reaction-rules/:ruleId', requireAuth, async (req, res) => {
     try {
       if (!/^\d+$/.test(String(req.params.ruleId || ''))) {
-        return res.status(400).json({ error: 'ruleId gecersiz', requestId: req.requestId });
+        return res.status(400).json({ error: 'ruleId geçersiz', requestId: req.requestId });
       }
       const existing = await reactionRuleRepository.getRuleById(req.params.ruleId);
-      if (!existing) return res.status(404).json({ error: 'Kural bulunamadi', requestId: req.requestId });
+      if (!existing) return res.status(404).json({ error: 'Kural bulunamadı', requestId: req.requestId });
       if (!(await hasGuildAdminAccess(client, req, existing.guildId))) {
         return res.status(403).json({ error: 'Forbidden', requestId: req.requestId });
       }
@@ -264,36 +314,44 @@ function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reac
       }
 
       const updated = await reactionRuleRepository.updateRule(req.params.ruleId, input);
-      let cleanupWarning = null;
+      let warning = null;
       if (getRuleTargetKey(existing) !== getRuleTargetKey(input)) {
         const cleanup = await removeRuleReactionFromMessage(client, existing);
-        cleanupWarning = cleanup?.warning || (!cleanup?.ok ? cleanup?.error : null);
+        warning = appendWarning(warning, cleanup?.warning || (!cleanup?.ok ? cleanup?.error : null));
       }
-      reactionActionService?.invalidateGuildCache(existing.guildId);
-      await reactionActionService?.refreshGuildRules(existing.guildId);
-      return res.json({ success: true, rule: updated, warning: cleanupWarning || null });
+      warning = appendWarning(
+        warning,
+        await refreshReactionRuleRuntime(existing.guildId, 'reaction_rule_update_refresh_failed', {
+          ruleId: existing.id,
+        })
+      );
+      return res.json({ success: true, partial: Boolean(warning), rule: updated, warning: warning || null });
     } catch (err) {
-      return routeError(res, req, 'reaction_rule_update_failed', err, 'Kural guncellenemedi');
+      return routeError(res, req, 'reaction_rule_update_failed', err, 'Kural güncellenemedi');
     }
   });
 
   app.delete('/api/reaction-rules/:ruleId', requireAuth, async (req, res) => {
     try {
       if (!/^\d+$/.test(String(req.params.ruleId || ''))) {
-        return res.status(400).json({ error: 'ruleId gecersiz', requestId: req.requestId });
+        return res.status(400).json({ error: 'ruleId geçersiz', requestId: req.requestId });
       }
       const existing = await reactionRuleRepository.getRuleById(req.params.ruleId);
-      if (!existing) return res.status(404).json({ error: 'Kural bulunamadi', requestId: req.requestId });
+      if (!existing) return res.status(404).json({ error: 'Kural bulunamadı', requestId: req.requestId });
       if (!(await hasGuildAdminAccess(client, req, existing.guildId))) {
         return res.status(403).json({ error: 'Forbidden', requestId: req.requestId });
       }
 
       const cleanup = await removeRuleReactionFromMessage(client, existing);
       await reactionRuleRepository.deleteRule(req.params.ruleId, existing.guildId);
-      reactionActionService?.invalidateGuildCache(existing.guildId);
-      await reactionActionService?.refreshGuildRules(existing.guildId);
-      const warning = cleanup?.warning || (!cleanup?.ok ? cleanup?.error : null);
-      return res.json({ success: true, warning: warning || null });
+      let warning = cleanup?.warning || (!cleanup?.ok ? cleanup?.error : null);
+      warning = appendWarning(
+        warning,
+        await refreshReactionRuleRuntime(existing.guildId, 'reaction_rule_delete_refresh_failed', {
+          ruleId: existing.id,
+        })
+      );
+      return res.json({ success: true, partial: Boolean(warning), warning: warning || null });
     } catch (err) {
       return routeError(res, req, 'reaction_rule_delete_failed', err, 'Kural silinemedi');
     }
@@ -302,15 +360,15 @@ function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reac
   app.post('/api/reaction-rules/:ruleId/test', requireAuth, async (req, res) => {
     try {
       if (!/^\d+$/.test(String(req.params.ruleId || ''))) {
-        return res.status(400).json({ error: 'ruleId gecersiz', requestId: req.requestId });
+        return res.status(400).json({ error: 'ruleId geçersiz', requestId: req.requestId });
       }
       const existing = await reactionRuleRepository.getRuleById(req.params.ruleId);
-      if (!existing) return res.status(404).json({ error: 'Kural bulunamadi', requestId: req.requestId });
+      if (!existing) return res.status(404).json({ error: 'Kural bulunamadı', requestId: req.requestId });
       if (!(await hasGuildAdminAccess(client, req, existing.guildId))) {
         return res.status(403).json({ error: 'Forbidden', requestId: req.requestId });
       }
 
-      if (!reactionActionService) return res.status(503).json({ error: 'Reaction service aktif degil', requestId: req.requestId });
+      if (!reactionActionService) return res.status(503).json({ error: 'Kural test edilemedi', requestId: req.requestId });
       const health = await reactionActionService.getHealth(existing.guildId);
       const guild = client.guilds.cache.get(existing.guildId) || (await client.guilds.fetch(existing.guildId).catch(() => null));
       const requester = guild ? await guild.members.fetch(req.userSession?.userId || '').catch(() => null) : null;
@@ -332,15 +390,16 @@ function registerReactionRuleRoutes(app, { client, requireAuth, routeError, reac
     try {
       const guildId = String(req.query.guildId || req.params.guildId || '');
       if (!isSnowflake(guildId)) {
-        return res.status(400).json({ error: 'guildId gecersiz', requestId: req.requestId });
+        return res.status(400).json({ error: 'guildId geçersiz', requestId: req.requestId });
       }
-      if (!reactionActionService) return res.status(503).json({ error: 'Reaction service aktif degil', requestId: req.requestId });
+      if (!reactionActionService) return res.status(503).json({ error: 'Sağlık kontrolü alınamadı', requestId: req.requestId });
       const health = await reactionActionService.getHealth(guildId);
       return res.json(health);
     } catch (err) {
-      return routeError(res, req, 'reaction_rule_health_failed', err, 'Saglik kontrolu alinamadi');
+      return routeError(res, req, 'reaction_rule_health_failed', err, 'Sağlık kontrolü alınamadı');
     }
   });
 }
 
 module.exports = { registerReactionRuleRoutes };
+

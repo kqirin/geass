@@ -1,26 +1,13 @@
 const db = require('../database');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-const actionListeners = new Set();
-
-function registerActionListener(listener) {
-  if (typeof listener !== 'function') return () => {};
-  actionListeners.add(listener);
-  return () => actionListeners.delete(listener);
-}
-
 async function logAction(guildId, userId, moderatorId, action, reason, duration) {
   const safeReason = String(reason || 'Yok').slice(0, 255);
-  const safeDuration = String(duration || 'Suresiz').slice(0, 32);
+  const safeDuration = String(duration || 'Süresiz').slice(0, 32);
   const [result] = await db.execute(
-    'INSERT INTO mod_logs (guild_id, user_id, moderator_id, action_type, reason, duration) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO mod_logs (guild_id, user_id, moderator_id, action_type, reason, duration) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
     [guildId, userId, moderatorId, action, safeReason, safeDuration]
   );
-  for (const listener of actionListeners) {
-    try {
-      listener({ guildId, userId, moderatorId, action, reason: safeReason, duration: safeDuration, caseId: result.insertId });
-    } catch {}
-  }
   return result.insertId;
 }
 
@@ -32,7 +19,7 @@ async function createLogContent(guild, logUserId, actionNames, page = 0) {
   const total = Number(countRow?.total || 0);
 
   if (!total) {
-    return { text: `**${logUserId}** sicili temiz.`, totalPages: 0 };
+    return { text: `**${logUserId}** sicili temiz. ⋆˚࿔`, totalPages: 0 };
   }
 
   const itemsPerPage = 10;
@@ -45,7 +32,7 @@ async function createLogContent(guild, logUserId, actionNames, page = 0) {
     [guild.id, logUserId, itemsPerPage, offset]
   );
 
-  let logText = `\`\`\`ml\nID: ${logUserId} Sicil Kaydi (Sayfa ${safePage + 1}/${totalPages})\n`;
+  let logText = `\`\`\`ml\nID: ${logUserId} Sicil Kaydı (Sayfa ${safePage + 1}/${totalPages})\n`;
 
   for (const log of currentLogs) {
     const actionTr = actionNames[log.action_type] || String(log.action_type).toUpperCase();
@@ -65,7 +52,7 @@ function buildPaginationRow(page, totalPages) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('prev_page')
-      .setLabel('Onceki')
+      .setLabel('Önceki')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page === 0),
     new ButtonBuilder()
@@ -76,5 +63,4 @@ function buildPaginationRow(page, totalPages) {
   );
 }
 
-module.exports = { logAction, createLogContent, buildPaginationRow, registerActionListener };
-
+module.exports = { logAction, createLogContent, buildPaginationRow };

@@ -1,0 +1,97 @@
+﻿ÔûÂ embed command ÔÇô prefix (run)
+  Ô£ö yetki yoksa hata d├Âner (0.6345ms)
+  Ô£ö hedef kanal resolve edilemezse hata d├Âner (0.1577ms)
+  Ô£û bot hedef kanalda yetkisizse hata d├Âner (0.54ms)
+  Ô£ö ge├ğerli kanal ile buton g├Ânderir (1.068ms)
+Ô£û embed command ÔÇô prefix (run) (2.9868ms)
+ÔûÂ embed command ÔÇô modal submit (handleInteraction)
+  Ô£û ge├ğersiz hex renk reddedilir (0.65ms)
+  Ô£û ge├ğersiz ba┼şl─▒k URL reddedilir (0.3518ms)
+  Ô£û ge├ğersiz resim URL reddedilir (0.3999ms)
+  Ô£û hi├ğbir alan doldurulmam─▒┼şsa reddedilir (0.4659ms)
+  Ô£û kanal bulunamazsa hata d├Âner (0.3516ms)
+  Ô£û bot yetkisizse g├Ânder hatas─▒ d├Âner (0.3876ms)
+  Ô£û ba┼şar─▒l─▒ embed g├Ânderimi (0.3634ms)
+Ô£û embed command ÔÇô modal submit (handleInteraction) (3.3212ms)
+Ôä╣ tests 11
+Ôä╣ suites 2
+Ôä╣ pass 3
+Ôä╣ fail 8
+Ôä╣ cancelled 0
+Ôä╣ skipped 0
+Ôä╣ todo 0
+Ôä╣ duration_ms 600.2319
+
+Ô£û failing tests:
+
+test at test\embed.command.test.js:89:5
+Ô£û bot hedef kanalda yetkisizse hata d├Âner (0.54ms)
+  AssertionError [ERR_ASSERTION]: Bot permission error should surface
+      at TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:100:16)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at test\embed.command.test.js:148:5
+Ô£û ge├ğersiz hex renk reddedilir (0.65ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:150:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1507:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:155:5
+Ô£û ge├ğersiz ba┼şl─▒k URL reddedilir (0.3518ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:157:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:162:5
+Ô£û ge├ğersiz resim URL reddedilir (0.3999ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:164:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:169:5
+Ô£û hi├ğbir alan doldurulmam─▒┼şsa reddedilir (0.4659ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:171:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:176:5
+Ô£û kanal bulunamazsa hata d├Âner (0.3516ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:179:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:184:5
+Ô£û bot yetkisizse g├Ânder hatas─▒ d├Âner (0.3876ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:192:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at test\embed.command.test.js:197:5
+Ô£û ba┼şar─▒l─▒ embed g├Ânderimi (0.3634ms)
+  TypeError: guild.channels.fetch is not a function
+      at Object.handleInteraction (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\src\bot\commands\embed.js:218:52)
+      at async TestContext.<anonymous> (C:\Users\kirin\Desktop\GeassFinal - Kopya (2)\api\test\embed.command.test.js:214:9)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:777:7)

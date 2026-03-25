@@ -1,20 +1,36 @@
 const db = require('../database');
 
 const timers = new Map();
+const executingPenaltyIds = new Set();
 const MAX_TIMER_MS = 2_147_000_000;
-const RECONCILE_INTERVAL_MS = 60_000;
+const RECONCILE_INTERVAL_MS = Math.max(30_000, Math.min(Number(process.env.PENALTY_RECONCILE_INTERVAL_MS) || 60_000, 300_000));
 let reconcileTimer = null;
 
+function getDiscordErrorCode(err) {
+  return Number(err?.code || err?.rawError?.code || 0);
+}
+
+function isMissingGuildError(err) {
+  return new Set([10004, 50001]).has(getDiscordErrorCode(err));
+}
+
+function isMissingMemberError(err) {
+  return getDiscordErrorCode(err) === 10007;
+}
+
 async function markInactive(id) {
-  await db.execute('UPDATE timed_penalties SET active = 0, revoked_at = ? WHERE id = ? AND active = 1', [
+  await db.execute('UPDATE timed_penalties SET active = FALSE, revoked_at = ? WHERE id = ? AND active = TRUE', [
     Date.now(),
     id,
   ]);
 }
 
-async function isPenaltyActive(id) {
-  const [rows] = await db.execute('SELECT active FROM timed_penalties WHERE id = ? LIMIT 1', [Number(id)]);
-  return Number(rows?.[0]?.active || 0) === 1;
+async function getActivePenaltyById(id) {
+  const [rows] = await db.execute(
+    'SELECT id, guild_id, user_id, action_type, role_id, revoke_at FROM timed_penalties WHERE id = ? AND active = TRUE LIMIT 1',
+    [Number(id)]
+  );
+  return rows?.[0] || null;
 }
 
 function normalizeRoleIds(roleIds) {
@@ -26,7 +42,10 @@ async function upsertRoleSnapshot(guildId, userId, roleIds) {
   await db.execute(
     `INSERT INTO timed_penalty_role_snapshots (guild_id, user_id, roles_json)
      VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE roles_json = VALUES(roles_json)`,
+     ON CONFLICT (guild_id, user_id)
+     DO UPDATE SET
+       roles_json = EXCLUDED.roles_json,
+       updated_at = CURRENT_TIMESTAMP`,
     [guildId, userId, JSON.stringify(normalized)]
   );
 }
@@ -66,16 +85,16 @@ function filterRestorableRoleIds(guild, roleIds, jailRoleId) {
   });
 }
 
-async function restoreJailRoles(client, { guildId, userId, jailRoleId = null }, logError = () => {}) {
+async function restoreJailRoles(client, { guildId, userId, jailRoleId = null }, logError = () => { }) {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) {
-    await deleteRoleSnapshot(guildId, userId).catch(() => {});
+    await deleteRoleSnapshot(guildId, userId).catch(() => { });
     return { restored: false, restoredCount: 0 };
   }
 
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) {
-    await deleteRoleSnapshot(guildId, userId).catch(() => {});
+    await deleteRoleSnapshot(guildId, userId).catch(() => { });
     return { restored: false, restoredCount: 0 };
   }
 
@@ -91,7 +110,7 @@ async function restoreJailRoles(client, { guildId, userId, jailRoleId = null }, 
 
   try {
     await member.roles.set(restoreIds, 'Jail kaldirildi');
-    await deleteRoleSnapshot(guildId, userId).catch(() => {});
+    await deleteRoleSnapshot(guildId, userId).catch(() => { });
     return { restored: true, restoredCount: restoreIds.length };
   } catch (err) {
     logError('jail_restore_failed', err, { guildId, userId });
@@ -99,17 +118,57 @@ async function restoreJailRoles(client, { guildId, userId, jailRoleId = null }, 
   }
 }
 
-async function applyPenaltyRevoke(client, row, logError = () => {}) {
-  const guild = client.guilds.cache.get(row.guild_id);
+async function applyPenaltyRevoke(client, row, logError = () => { }) {
+  let guild = client.guilds.cache.get(row.guild_id) || null;
+  if (!guild) {
+    try {
+      guild = await client.guilds.fetch(row.guild_id);
+    } catch (err) {
+      if (isMissingGuildError(err)) {
+        await markInactive(row.id);
+        return { ok: true, inactiveMarked: true, skipped: 'guild_missing' };
+      }
+
+      logError('penalty_revoke_guild_fetch_failed', err, {
+        penaltyId: row.id,
+        guildId: row.guild_id,
+      });
+      return {
+        ok: false,
+        inactiveMarked: false,
+        errorCode: 'guild_fetch_failed',
+      };
+    }
+  }
   if (!guild) {
     await markInactive(row.id);
-    return;
+    return { ok: true, inactiveMarked: true, skipped: 'guild_missing' };
   }
 
-  const member = await guild.members.fetch(row.user_id).catch(() => null);
+  let member = null;
+  try {
+    member = await guild.members.fetch(row.user_id);
+  } catch (err) {
+    if (isMissingMemberError(err)) {
+      await markInactive(row.id);
+      return { ok: true, inactiveMarked: true, skipped: 'member_missing' };
+    }
+
+    logError('penalty_revoke_member_fetch_failed', err, {
+      penaltyId: row.id,
+      guildId: row.guild_id,
+      userId: row.user_id,
+    });
+    return {
+      ok: false,
+      inactiveMarked: false,
+      errorCode: 'member_fetch_failed',
+    };
+  }
+
   if (!member) {
     await markInactive(row.id);
-    return;
+    return { ok: true, inactiveMarked: true, skipped: 'member_missing' };
   }
 
   try {
@@ -124,6 +183,8 @@ async function applyPenaltyRevoke(client, row, logError = () => {}) {
     } else if (row.action_type === 'vcmute') {
       if (member.voice?.serverMute) await member.voice.setMute(false, 'Sure doldu');
     }
+    await markInactive(row.id);
+    return { ok: true, inactiveMarked: true };
   } catch (err) {
     logError('penalty_revoke_failed', err, {
       penaltyId: row.id,
@@ -131,23 +192,39 @@ async function applyPenaltyRevoke(client, row, logError = () => {}) {
       userId: row.user_id,
       action: row.action_type,
     });
-  } finally {
-    await markInactive(row.id);
+    return {
+      ok: false,
+      inactiveMarked: false,
+      errorCode: String(err?.code || err?.message || 'penalty_revoke_failed'),
+    };
   }
 }
 
-async function executePenalty(client, row, logError = () => {}) {
+async function executePenalty(client, row, logError = () => { }) {
   clearScheduledById(row.id);
-  const stillActive = await isPenaltyActive(row.id).catch((err) => {
-    logError('penalty_active_check_failed', err, { penaltyId: row.id });
-    return false;
-  });
-  if (!stillActive) return;
+  const penaltyId = Number(row.id);
+  if (!Number.isFinite(penaltyId) || penaltyId <= 0) return;
+  if (executingPenaltyIds.has(penaltyId)) return;
 
+  executingPenaltyIds.add(penaltyId);
   try {
-    await applyPenaltyRevoke(client, row, logError);
+    const activeRow = await getActivePenaltyById(penaltyId).catch((err) => {
+      logError('penalty_active_row_load_failed', err, { penaltyId });
+      return null;
+    });
+    if (!activeRow) return;
+
+    const revokeAt = Number(activeRow.revoke_at || 0);
+    if (revokeAt > Date.now()) {
+      scheduleRow(client, activeRow, logError);
+      return;
+    }
+
+    await applyPenaltyRevoke(client, activeRow, logError);
   } catch (err) {
-    logError('penalty_execute_failed', err, { penaltyId: row.id });
+    logError('penalty_execute_failed', err, { penaltyId });
+  } finally {
+    executingPenaltyIds.delete(penaltyId);
   }
 }
 
@@ -160,7 +237,7 @@ function clearScheduledById(penaltyId) {
   }
 }
 
-function scheduleRow(client, row, logError = () => {}) {
+function scheduleRow(client, row, logError = () => { }) {
   const id = Number(row.id);
   if (!Number.isFinite(id) || id <= 0) return;
   clearScheduledById(id);
@@ -176,7 +253,7 @@ function scheduleRow(client, row, logError = () => {}) {
     timers.delete(id);
 
     if (delay > MAX_TIMER_MS) {
-      const [rows] = await db.execute('SELECT * FROM timed_penalties WHERE id = ? AND active = 1', [id]);
+      const [rows] = await db.execute('SELECT * FROM timed_penalties WHERE id = ? AND active = TRUE', [id]);
       if (rows?.[0]) scheduleRow(client, rows[0], logError);
       return;
     }
@@ -187,13 +264,13 @@ function scheduleRow(client, row, logError = () => {}) {
   timers.set(id, timeout);
 }
 
-async function reconcileActivePenalties(client, logError = () => {}) {
-  const [rows] = await db.execute('SELECT * FROM timed_penalties WHERE active = 1 ORDER BY revoke_at ASC');
+async function reconcileActivePenalties(client, logError = () => { }) {
+  const [rows] = await db.execute('SELECT id, guild_id, user_id, action_type, role_id, revoke_at FROM timed_penalties WHERE active = TRUE ORDER BY revoke_at ASC');
   for (const row of rows || []) scheduleRow(client, row, logError);
   return (rows || []).length;
 }
 
-async function bootstrap(client, logError = () => {}) {
+async function bootstrap(client, logError = () => { }) {
   const total = await reconcileActivePenalties(client, logError);
 
   if (reconcileTimer) clearInterval(reconcileTimer);
@@ -208,34 +285,67 @@ async function bootstrap(client, logError = () => {}) {
   return total;
 }
 
-async function schedulePenalty(client, data, logError = () => {}) {
+async function schedulePenalty(client, data, logError = () => { }) {
   const { guildId, userId, actionType, roleId = null, revokeAt, reason = null } = data;
   const [result] = await db.execute(
-    'INSERT INTO timed_penalties (guild_id, user_id, action_type, role_id, revoke_at, reason) VALUES (?, ?, ?, ?, ?, ?)',
+    `INSERT INTO timed_penalties
+      (guild_id, user_id, action_type, role_id, revoke_at, reason, active, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL)
+     ON CONFLICT (guild_id, user_id, action_type) WHERE active = TRUE
+     DO UPDATE SET
+       role_id = EXCLUDED.role_id,
+       revoke_at = EXCLUDED.revoke_at,
+       reason = EXCLUDED.reason,
+       active = TRUE,
+       revoked_at = NULL
+     RETURNING id, guild_id, user_id, action_type, role_id, revoke_at`,
     [guildId, userId, actionType, roleId, Number(revokeAt), reason]
   );
 
-  const id = Number(result.insertId);
+  let row = result.rows?.[0] || null;
+  if (!row?.id) {
+    const [rows] = await db.execute(
+      `SELECT id, guild_id, user_id, action_type, role_id, revoke_at
+       FROM timed_penalties
+       WHERE guild_id = ?
+         AND user_id = ?
+         AND action_type = ?
+         AND active = TRUE
+       LIMIT 1`,
+      [guildId, userId, actionType]
+    );
+    row = rows?.[0] || null;
+  }
+
+  const id = Number(row?.id || result.insertId);
+  if (!Number.isFinite(id) || id <= 0) {
+    const err = new Error('timed_penalty_upsert_missing_id');
+    err.code = 'TIMED_PENALTY_UPSERT_MISSING_ID';
+    throw err;
+  }
   scheduleRow(
     client,
-    { id, guild_id: guildId, user_id: userId, action_type: actionType, role_id: roleId, revoke_at: Number(revokeAt) },
+    row || { id, guild_id: guildId, user_id: userId, action_type: actionType, role_id: roleId, revoke_at: Number(revokeAt) },
     logError
   );
   return id;
 }
 
 async function cancelPenalty(guildId, userId, actionType) {
-  const [rows] = await db.execute(
-    'SELECT id FROM timed_penalties WHERE guild_id = ? AND user_id = ? AND action_type = ? AND active = 1',
-    [guildId, userId, actionType]
-  );
-
-  for (const row of rows || []) clearScheduledById(row.id);
-
-  await db.execute(
-    'UPDATE timed_penalties SET active = 0, revoked_at = ? WHERE guild_id = ? AND user_id = ? AND action_type = ? AND active = 1',
+  const [result] = await db.execute(
+    `UPDATE timed_penalties
+        SET active = FALSE,
+            revoked_at = ?
+      WHERE guild_id = ?
+        AND user_id = ?
+        AND action_type = ?
+        AND active = TRUE
+      RETURNING id`,
     [Date.now(), guildId, userId, actionType]
   );
+
+  for (const row of result.rows || []) clearScheduledById(row.id);
+  return Number(result.rowCount || result.rows?.length || 0);
 }
 
 function shutdown() {
@@ -246,6 +356,7 @@ function shutdown() {
 
   for (const timeout of timers.values()) clearTimeout(timeout);
   timers.clear();
+  executingPenaltyIds.clear();
 }
 
 module.exports = {
@@ -260,6 +371,8 @@ module.exports = {
   __internal: {
     normalizeRoleIds,
     filterRestorableRoleIds,
+    applyPenaltyRevoke,
+    getDiscordErrorCode,
   },
 };
 

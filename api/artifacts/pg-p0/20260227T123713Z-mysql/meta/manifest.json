@@ -1,0 +1,317 @@
+{
+  "kind": "mysql_p0_baseline_export",
+  "generatedAt": "2026-02-27T12:37:13.951Z",
+  "outputDir": "C:\\Users\\kirin\\Desktop\\GeassFinal\\api\\artifacts\\pg-p0\\20260227T123713Z-mysql",
+  "source": {
+    "host": "127.0.0.1",
+    "database": "discord_bot",
+    "user": "root"
+  },
+  "tables": {
+    "settings": {
+      "columns": [
+        "guild_id",
+        "prefix",
+        "warn_enabled",
+        "warn_role",
+        "warn_safe_list",
+        "warn_limit",
+        "mute_enabled",
+        "mute_role",
+        "mute_penalty_role",
+        "mute_safe_list",
+        "mute_limit",
+        "kick_enabled",
+        "kick_role",
+        "kick_safe_list",
+        "kick_limit",
+        "jail_enabled",
+        "jail_role",
+        "jail_penalty_role",
+        "jail_safe_list",
+        "jail_limit",
+        "ban_enabled",
+        "ban_role",
+        "ban_safe_list",
+        "ban_limit",
+        "custom_messages",
+        "clear_enabled",
+        "clear_role",
+        "clear_safe_list",
+        "clear_limit",
+        "vcmute_enabled",
+        "vcmute_role",
+        "vcmute_safe_list",
+        "vcmute_limit",
+        "log_enabled",
+        "log_role",
+        "log_safe_list",
+        "log_limit",
+        "created_at",
+        "updated_at",
+        "tag_enabled",
+        "tag_role",
+        "tag_text",
+        "private_vc_enabled",
+        "private_vc_hub_channel",
+        "private_vc_required_role",
+        "private_vc_category",
+        "staff_hierarchy_roles"
+      ],
+      "orderBy": [
+        "guild_id"
+      ],
+      "sequenceColumn": null
+    },
+    "mod_logs": {
+      "columns": [
+        "id",
+        "guild_id",
+        "user_id",
+        "action_type",
+        "timestamp",
+        "reason",
+        "duration",
+        "moderator_id",
+        "created_at"
+      ],
+      "orderBy": [
+        "id"
+      ],
+      "sequenceColumn": "id"
+    },
+    "timed_penalties": {
+      "columns": [
+        "id",
+        "guild_id",
+        "user_id",
+        "action_type",
+        "role_id",
+        "revoke_at",
+        "reason",
+        "active",
+        "created_at",
+        "revoked_at"
+      ],
+      "orderBy": [
+        "id"
+      ],
+      "sequenceColumn": "id"
+    },
+    "timed_penalty_role_snapshots": {
+      "columns": [
+        "guild_id",
+        "user_id",
+        "roles_json",
+        "updated_at"
+      ],
+      "orderBy": [
+        "guild_id",
+        "user_id"
+      ],
+      "sequenceColumn": null
+    },
+    "reaction_rules": {
+      "columns": [
+        "id",
+        "guild_id",
+        "channel_id",
+        "message_id",
+        "emoji_type",
+        "emoji_id",
+        "emoji_name",
+        "trigger_mode",
+        "enabled",
+        "cooldown_seconds",
+        "only_once",
+        "group_key",
+        "allowed_roles_json",
+        "excluded_roles_json",
+        "actions_json",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ],
+      "orderBy": [
+        "id"
+      ],
+      "sequenceColumn": "id"
+    },
+    "reaction_rule_logs": {
+      "columns": [
+        "id",
+        "guild_id",
+        "rule_id",
+        "user_id",
+        "event_type",
+        "status",
+        "action_type",
+        "error_code",
+        "error_message",
+        "created_at"
+      ],
+      "orderBy": [
+        "id"
+      ],
+      "sequenceColumn": "id"
+    },
+    "message_templates": {
+      "columns": [
+        "guild_id",
+        "scope",
+        "command_name",
+        "templates_json",
+        "updated_at"
+      ],
+      "orderBy": [
+        "guild_id",
+        "scope",
+        "command_name"
+      ],
+      "sequenceColumn": null
+    },
+    "private_voice_rooms": {
+      "columns": [
+        "id",
+        "guild_id",
+        "owner_id",
+        "voice_channel_id",
+        "panel_message_id",
+        "locked",
+        "whitelist_member_ids_json",
+        "last_active_at",
+        "created_at",
+        "updated_at"
+      ],
+      "orderBy": [
+        "id"
+      ],
+      "sequenceColumn": "id"
+    }
+  },
+  "rowCounts": {
+    "settings": 2,
+    "mod_logs": 133,
+    "timed_penalties": 3,
+    "timed_penalty_role_snapshots": 0,
+    "reaction_rules": 1,
+    "reaction_rule_logs": 39,
+    "message_templates": 11,
+    "private_voice_rooms": 3
+  },
+  "files": {
+    "schemaShowCreate": {
+      "path": "schema\\p0_show_create_tables.sql",
+      "sha256": "16f7cf0c8f1a1463b67099a0f598c5824989bba5a34f5f682355be9621b2cccf"
+    },
+    "settings.csv": {
+      "path": "data\\settings.csv",
+      "sha256": "f9676417e8f1ff99560fc4c7a739a5d4d3d37d082dc2f132e2e6fd9d833f66ca"
+    },
+    "settings.ndjson": {
+      "path": "data\\settings.ndjson",
+      "sha256": "c3380aae0a1b8e3609480c9615380c727172c489089f20fb29c1ff28155a8d8b"
+    },
+    "mod_logs.csv": {
+      "path": "data\\mod_logs.csv",
+      "sha256": "ce936284d4269beabd3be00e1f6dd64e5b8cb18ad1f41074c068842ca880e9ec"
+    },
+    "mod_logs.ndjson": {
+      "path": "data\\mod_logs.ndjson",
+      "sha256": "1244140dd10d19c9ed6961f6ba81e0210a72df67f2a3921909a59ac907b69b43"
+    },
+    "timed_penalties.csv": {
+      "path": "data\\timed_penalties.csv",
+      "sha256": "030dd13524d49a15c51faca29db98735e863cd2093a7ed7226811904ddbe6d5d"
+    },
+    "timed_penalties.ndjson": {
+      "path": "data\\timed_penalties.ndjson",
+      "sha256": "83ccc8cb9a9b30463393bc4266d646e4f54e28151efaef53c0604f95db30df9d"
+    },
+    "timed_penalty_role_snapshots.csv": {
+      "path": "data\\timed_penalty_role_snapshots.csv",
+      "sha256": "960039877bd171146a79a8bd33226d2a8f810ba20ced84dcf3258f44d5c369ef"
+    },
+    "timed_penalty_role_snapshots.ndjson": {
+      "path": "data\\timed_penalty_role_snapshots.ndjson",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "reaction_rules.csv": {
+      "path": "data\\reaction_rules.csv",
+      "sha256": "d2acf11f657f23fc61ebd77cf82df1f742da346545f12a0dc4423662b501cb39"
+    },
+    "reaction_rules.ndjson": {
+      "path": "data\\reaction_rules.ndjson",
+      "sha256": "306ebf01da84a23b5a6d08407a21c366c12c58aed82e7d33ee13c27953132e24"
+    },
+    "reaction_rule_logs.csv": {
+      "path": "data\\reaction_rule_logs.csv",
+      "sha256": "60c21466292bac11918cb950eb2d6e6635347962bc67c4176df5fb18f5659177"
+    },
+    "reaction_rule_logs.ndjson": {
+      "path": "data\\reaction_rule_logs.ndjson",
+      "sha256": "16deae14db48dd70e0f1426bec703dcba8a864783f47f122fd8114db15ca2f37"
+    },
+    "message_templates.csv": {
+      "path": "data\\message_templates.csv",
+      "sha256": "86dbac175fe2842c3c0ceed39f0e6f93f68bb2391aea9925556463a7e5a23c58"
+    },
+    "message_templates.ndjson": {
+      "path": "data\\message_templates.ndjson",
+      "sha256": "a0c349c5718ed047bf76bcac4a18e491f994d72542f760a142576139a3b3f76e"
+    },
+    "private_voice_rooms.csv": {
+      "path": "data\\private_voice_rooms.csv",
+      "sha256": "64341fb7ae70b38c79c94dca7f7d6fb77d0fa190ec49e8c1028bd39e91bee2b3"
+    },
+    "private_voice_rooms.ndjson": {
+      "path": "data\\private_voice_rooms.ndjson",
+      "sha256": "e905fbfb5819485afc3571f9e41bd59d0ba0c3c3acf4f1829e9883746599c423"
+    },
+    "messageTemplatesPk": {
+      "path": "meta\\message_templates_pk.tsv",
+      "sha256": "28e8866e7c4cc1ebd7a8b01e5fc02fcc3d393463d3b1a488bff18724d5420b77"
+    },
+    "messageTemplatesContract": {
+      "path": "meta\\message_templates_contract.json",
+      "sha256": "65624bda7d3ce723e8e45781bca189174902cfae76afe45b7155cb91916ef6d3"
+    },
+    "timedPenaltiesActive": {
+      "path": "meta\\timed_penalties_active.csv",
+      "sha256": "5b875bcddabec657e554966fc7b1b9d67a93cef24b58b4bcacb26246773d8f87"
+    },
+    "reactionOnlyOnce": {
+      "path": "meta\\reaction_only_once_summary.json",
+      "sha256": "cc70ed1e33eca189f83d9a2f5e4eb50ab6638384e1e33e677548a421ba36316a"
+    },
+    "privateVoiceRoomsActive": {
+      "path": "meta\\private_voice_rooms_active.csv",
+      "sha256": "64341fb7ae70b38c79c94dca7f7d6fb77d0fa190ec49e8c1028bd39e91bee2b3"
+    },
+    "modLogsSummary": {
+      "path": "meta\\mod_logs_summary.json",
+      "sha256": "062d5b7df47a86f5961f5efa1f54673b4ff0acdb799d38bc7652f136ffa925e7"
+    },
+    "rowCounts": {
+      "path": "meta\\row_counts.json",
+      "sha256": "331031e7d5ca4573ba7bbf0a3f24d70a39ca760ae927883d38f1613d93567713"
+    }
+  },
+  "checks": {
+    "messageTemplates": {
+      "rowCount": 11,
+      "globalRuleViolations": 0,
+      "uppercaseViolations": 0,
+      "unknownKeyRows": 0
+    },
+    "timedPenalties": {
+      "activeCount": 0,
+      "totalCount": 3
+    },
+    "modLogs": {
+      "totalCount": 133,
+      "minId": 1,
+      "maxId": 133
+    }
+  }
+}

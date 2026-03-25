@@ -32,7 +32,7 @@ function createPenaltyDbMock() {
       role_id: row.role_id ? String(row.role_id) : null,
       revoke_at: Number(row.revoke_at),
       reason: row.reason || null,
-      active: Number(row.active || 0),
+      active: Boolean(row.active),
       revoked_at: row.revoked_at ? Number(row.revoked_at) : null,
     };
   }
@@ -44,7 +44,7 @@ function createPenaltyDbMock() {
   function deactivatePenalty(id) {
     const row = getPenaltyById(id);
     if (!row) return;
-    row.active = 0;
+    row.active = false;
     row.revoked_at = Date.now();
   }
 
@@ -57,7 +57,7 @@ function createPenaltyDbMock() {
       role_id: input.roleId || null,
       revoke_at: input.revokeAt,
       reason: input.reason || null,
-      active: input.active ? 1 : 0,
+      active: input.active ? true : false,
       revoked_at: input.revokedAt || null,
     });
     state.nextId = Math.max(state.nextId, row.id + 1);
@@ -73,33 +73,64 @@ function createPenaltyDbMock() {
 
     if (query.startsWith('insert into timed_penalties')) {
       const [guildId, userId, actionType, roleId, revokeAt, reason] = params;
-      const id = state.nextId++;
-      state.penalties.push(
-        clonePenalty({
-          id,
-          guild_id: guildId,
-          user_id: userId,
-          action_type: actionType,
-          role_id: roleId || null,
-          revoke_at: Number(revokeAt),
-          reason: reason || null,
-          active: 1,
-          revoked_at: null,
-        })
+      const existing = state.penalties.find(
+        (row) =>
+          row.active === true &&
+          row.guild_id === String(guildId) &&
+          row.user_id === String(userId) &&
+          row.action_type === String(actionType)
       );
-      return [{ insertId: id }];
+      if (existing) {
+        existing.role_id = roleId || null;
+        existing.revoke_at = Number(revokeAt);
+        existing.reason = reason || null;
+        existing.active = true;
+        existing.revoked_at = null;
+        return [{ insertId: existing.id, rows: [clonePenalty(existing)] }];
+      }
+
+      const id = state.nextId++;
+      const created = clonePenalty({
+        id,
+        guild_id: guildId,
+        user_id: userId,
+        action_type: actionType,
+        role_id: roleId || null,
+        revoke_at: Number(revokeAt),
+        reason: reason || null,
+        active: true,
+        revoked_at: null,
+      });
+      state.penalties.push(created);
+      return [{ insertId: id, rows: [clonePenalty(created)] }];
     }
 
     if (
       query.startsWith(
-        'select id from timed_penalties where guild_id = ? and user_id = ? and action_type = ? and active = 1'
+        'select id, guild_id, user_id, action_type, role_id, revoke_at from timed_penalties where guild_id = ? and user_id = ? and action_type = ? and active = true limit 1'
+      )
+    ) {
+      const [guildId, userId, actionType] = params;
+      const row = state.penalties.find(
+        (entry) =>
+          entry.active === true &&
+          entry.guild_id === String(guildId) &&
+          entry.user_id === String(userId) &&
+          entry.action_type === String(actionType)
+      );
+      return [row ? [clonePenalty(row)] : []];
+    }
+
+    if (
+      query.startsWith(
+        'select id from timed_penalties where guild_id = ? and user_id = ? and action_type = ? and active = true'
       )
     ) {
       const [guildId, userId, actionType] = params;
       const rows = state.penalties
         .filter(
           (row) =>
-            row.active === 1 &&
+            row.active === true &&
             row.guild_id === String(guildId) &&
             row.user_id === String(userId) &&
             row.action_type === String(actionType)
@@ -110,33 +141,33 @@ function createPenaltyDbMock() {
 
     if (
       query.startsWith(
-        'update timed_penalties set active = 0, revoked_at = ? where guild_id = ? and user_id = ? and action_type = ? and active = 1'
+        'update timed_penalties set active = false, revoked_at = ? where guild_id = ? and user_id = ? and action_type = ? and active = true returning id'
       )
     ) {
       const [revokedAt, guildId, userId, actionType] = params;
-      let affectedRows = 0;
+      const rows = [];
       for (const row of state.penalties) {
         if (
-          row.active === 1 &&
+          row.active === true &&
           row.guild_id === String(guildId) &&
           row.user_id === String(userId) &&
           row.action_type === String(actionType)
         ) {
-          row.active = 0;
+          row.active = false;
           row.revoked_at = Number(revokedAt);
-          affectedRows += 1;
+          rows.push({ id: row.id });
         }
       }
-      return [{ affectedRows }];
+      return [{ affectedRows: rows.length, rowCount: rows.length, rows }];
     }
 
     if (
-      query.startsWith('update timed_penalties set active = 0, revoked_at = ? where id = ? and active = 1')
+      query.startsWith('update timed_penalties set active = false, revoked_at = ? where id = ? and active = true')
     ) {
       const [revokedAt, id] = params;
       const row = getPenaltyById(id);
-      if (row && row.active === 1) {
-        row.active = 0;
+      if (row && row.active === true) {
+        row.active = false;
         row.revoked_at = Number(revokedAt);
         return [{ affectedRows: 1 }];
       }
@@ -146,18 +177,25 @@ function createPenaltyDbMock() {
     if (query.startsWith('select active from timed_penalties where id = ? limit 1')) {
       const [id] = params;
       const row = getPenaltyById(id);
-      return [[{ active: row ? row.active : 0 }]];
+      return [[{ active: row ? Boolean(row.active) : false }]];
     }
 
-    if (query.startsWith('select * from timed_penalties where id = ? and active = 1')) {
+    if (query.startsWith('select id, guild_id, user_id, action_type, role_id, revoke_at from timed_penalties where id = ? and active = true limit 1')) {
       const [id] = params;
       const row = getPenaltyById(id);
-      return [row && row.active === 1 ? [clonePenalty(row)] : []];
+      return [row && row.active === true ? [clonePenalty(row)] : []];
     }
 
-    if (query.startsWith('select * from timed_penalties where active = 1 order by revoke_at asc')) {
+    if (query.startsWith('select * from timed_penalties where id = ? and active = true')) {
+      const [id] = params;
+      const row = getPenaltyById(id);
+      return [row && row.active === true ? [clonePenalty(row)] : []];
+    }
+
+    if (query.startsWith('select * from timed_penalties where active = true order by revoke_at asc') ||
+      query.startsWith('select id, guild_id, user_id, action_type, role_id, revoke_at from timed_penalties where active = true order by revoke_at asc')) {
       const rows = state.penalties
-        .filter((row) => row.active === 1)
+        .filter((row) => row.active === true)
         .slice()
         .sort((a, b) => Number(a.revoke_at) - Number(b.revoke_at))
         .map((row) => clonePenalty(row));
@@ -194,7 +232,7 @@ function createMuteClientFixture({ guildId = '1', userId = '100', roleId = '900'
     },
     voice: {
       serverMute: false,
-      setMute: async () => {},
+      setMute: async () => { },
     },
   };
 
@@ -247,7 +285,56 @@ test('penalty scheduler integration: manual cancel prevents timed revoke', async
     await wait(220);
 
     assert.equal(getRoleRemoveCalls(), 0);
-    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, 0);
+    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, false);
+  } finally {
+    penaltyScheduler.shutdown();
+    db.execute = originalExecute;
+  }
+});
+
+test('penalty scheduler integration: extending the same active penalty does not revoke on the stale timer', async () => {
+  penaltyScheduler.shutdown();
+
+  const dbMock = createPenaltyDbMock();
+  const originalExecute = db.execute;
+  db.execute = dbMock.execute;
+
+  const { client, getRoleRemoveCalls } = createMuteClientFixture({
+    guildId: '6',
+    userId: '601',
+    roleId: '906',
+  });
+
+  try {
+    const firstId = await penaltyScheduler.schedulePenalty(client, {
+      guildId: '6',
+      userId: '601',
+      actionType: 'mute',
+      roleId: '906',
+      revokeAt: Date.now() + 70,
+      reason: 'initial-window',
+    });
+
+    await wait(25);
+
+    const secondId = await penaltyScheduler.schedulePenalty(client, {
+      guildId: '6',
+      userId: '601',
+      actionType: 'mute',
+      roleId: '906',
+      revokeAt: Date.now() + 220,
+      reason: 'extended-window',
+    });
+
+    assert.equal(firstId, secondId);
+    assert.equal(dbMock.state.penalties.filter((row) => row.active === true).length, 1);
+
+    await wait(110);
+    assert.equal(getRoleRemoveCalls(), 0);
+    assert.equal(dbMock.getPenaltyById(firstId)?.active, true);
+
+    await waitFor(() => dbMock.getPenaltyById(firstId)?.active === false, { timeoutMs: 700 });
+    assert.equal(getRoleRemoveCalls(), 1);
   } finally {
     penaltyScheduler.shutdown();
     db.execute = originalExecute;
@@ -284,7 +371,7 @@ test('penalty scheduler integration: inactive record before timeout should skip 
     await wait(220);
 
     assert.equal(getRoleRemoveCalls(), 0);
-    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, 0);
+    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, false);
   } finally {
     penaltyScheduler.shutdown();
     db.execute = originalExecute;
@@ -317,7 +404,7 @@ test('penalty scheduler integration: bootstrap reconciles expired penalty', asyn
     await penaltyScheduler.bootstrap(client);
     await waitFor(() => getRoleRemoveCalls() === 1);
 
-    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, 0);
+    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, false);
   } finally {
     penaltyScheduler.shutdown();
     db.execute = originalExecute;
@@ -350,8 +437,66 @@ test('penalty scheduler integration: repeated bootstrap should not duplicate rev
     await penaltyScheduler.bootstrap(client);
     await penaltyScheduler.bootstrap(client);
 
-    await waitFor(() => dbMock.getPenaltyById(penaltyId)?.active === 0);
+    await waitFor(() => dbMock.getPenaltyById(penaltyId)?.active === false);
     assert.equal(getRoleRemoveCalls(), 1);
+  } finally {
+    penaltyScheduler.shutdown();
+    db.execute = originalExecute;
+  }
+});
+
+test('penalty scheduler integration: failed revoke stays active for retry', async () => {
+  penaltyScheduler.shutdown();
+
+  const dbMock = createPenaltyDbMock();
+  const originalExecute = db.execute;
+  db.execute = dbMock.execute;
+
+  let removeCalls = 0;
+  const member = {
+    roles: {
+      cache: {
+        has: () => true,
+      },
+      remove: async () => {
+        removeCalls += 1;
+        throw new Error('remove_failed');
+      },
+    },
+    voice: {
+      serverMute: false,
+      setMute: async () => {},
+    },
+  };
+
+  const guild = {
+    id: '5',
+    members: {
+      fetch: async () => member,
+    },
+  };
+
+  const client = {
+    guilds: {
+      cache: new Map([['5', guild]]),
+    },
+  };
+
+  try {
+    const penaltyId = await penaltyScheduler.schedulePenalty(client, {
+      guildId: '5',
+      userId: '501',
+      actionType: 'mute',
+      roleId: '905',
+      revokeAt: Date.now() + 50,
+      reason: 'revoke-failure',
+    });
+
+    await wait(180);
+
+    assert.equal(removeCalls >= 1, true);
+    assert.equal(dbMock.getPenaltyById(penaltyId)?.active, true);
+    assert.equal(dbMock.getPenaltyById(penaltyId)?.revoked_at, null);
   } finally {
     penaltyScheduler.shutdown();
     db.execute = originalExecute;

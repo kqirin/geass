@@ -7,9 +7,9 @@ const {
   isValidHttpUrl,
 } = require('./helpers');
 
-function registerEmbedRoutes(app, { client, requireAuth, routeError }) {
+function registerEmbedRoutes(app, { client, requireAuth, routeError, logSystem = () => {} }) {
   app.post('/api/embed/send', requireAuth, async (req, res) => {
-    const { guildId, channelId, title, description, color, imageUrl, content } = req.body || {};
+    const { guildId, channelId, title, embedTitleUrl, description, color, imageUrl, content } = req.body || {};
     if (!guildId || !channelId) return res.status(400).json({ error: 'Eksik veri' });
     if (!isSnowflake(guildId) || !isSnowflake(channelId)) {
       return res.status(400).json({ error: 'guildId veya channelId gecersiz', requestId: req.requestId });
@@ -26,11 +26,13 @@ function registerEmbedRoutes(app, { client, requireAuth, routeError }) {
       }
 
       const safeTitle = truncate(title, 256);
+      const safeTitleUrl = typeof embedTitleUrl === 'string' ? embedTitleUrl.trim() : '';
       const safeDescription = truncate(description, MAX_EMBED_TEXT_LEN);
       const safeContent = truncate(content, MAX_CONTENT_TEXT_LEN);
       const safeImageUrl = typeof imageUrl === 'string' ? imageUrl.trim() : '';
 
       const hasTitle = safeTitle.length > 0;
+      const hasTitleUrl = safeTitleUrl.length > 0;
       const hasDescription = safeDescription.length > 0;
       const hasImage = safeImageUrl.length > 0;
       const hasContent = safeContent.length > 0;
@@ -41,9 +43,20 @@ function registerEmbedRoutes(app, { client, requireAuth, routeError }) {
       if (hasImage && !isValidHttpUrl(safeImageUrl)) {
         return res.status(400).json({ error: 'Gecersiz imageUrl', requestId: req.requestId });
       }
+      if (hasTitleUrl && !isValidHttpUrl(safeTitleUrl)) {
+        return res
+          .status(400)
+          .json({ error: 'Gecersiz baslik linki. URL http:// veya https:// ile baslamali.', requestId: req.requestId });
+      }
+      if (hasTitleUrl && !hasTitle) {
+        return res.status(400).json({ error: 'Baslik linki icin once embed basligi gerekli.', requestId: req.requestId });
+      }
 
       const embed = new EmbedBuilder();
-      if (hasTitle) embed.setTitle(safeTitle);
+      if (hasTitle) {
+        embed.setTitle(safeTitle);
+        if (hasTitleUrl) embed.setURL(safeTitleUrl);
+      }
       if (hasDescription) embed.setDescription(safeDescription);
       if (color) {
         try {
@@ -59,6 +72,11 @@ function registerEmbedRoutes(app, { client, requireAuth, routeError }) {
         allowedMentions: { parse: [] },
       });
 
+      logSystem(
+        `Embed gonderildi: guild=${guildId} channel=${channelId} titleUrl=${hasTitleUrl ? safeTitleUrl : 'none'}`,
+        'INFO'
+      );
+
       return res.json({ success: true });
     } catch (err) {
       return routeError(res, req, 'embed_send_failed', err, 'Embed gonderilemedi');
@@ -67,4 +85,3 @@ function registerEmbedRoutes(app, { client, requireAuth, routeError }) {
 }
 
 module.exports = { registerEmbedRoutes };
-

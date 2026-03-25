@@ -1,8 +1,11 @@
 const cache = require('../utils/cache');
 const { actionNames, resolveTarget } = require('./moderation.utils');
 const { config } = require('../config');
+const { DEFAULT_STATIC_SETTINGS } = require('../config/static');
 const { createPermissionService } = require('./services/permissionService');
 const { createTemplateSender } = require('../application/messages/templateService');
+const { logSystem } = require('../logger');
+const perfMonitor = require('../utils/perfMonitor');
 
 const logCommand = require('./commands/log');
 const warnCommand = require('./commands/warn');
@@ -13,104 +16,49 @@ const jailCommand = require('./commands/jail');
 const unjailCommand = require('./commands/unjail');
 const banCommand = require('./commands/ban');
 const unbanCommand = require('./commands/unban');
-const clearCommand = require('./commands/clear');
 const vcmuteCommand = require('./commands/vcmute');
 const vcunmuteCommand = require('./commands/vcunmute');
+const yardimCommand = require('./commands/yardim');
+const embedCommand = require('./commands/embed');
+const lockCommand = require('./commands/lock');
+const unlockCommand = require('./commands/unlock');
+const durumCommand = require('./commands/durum');
 
-const protectedCommands = new Set([
-  'log',
-  'warn',
-  'mute',
-  'unmute',
-  'kick',
-  'jail',
-  'unjail',
-  'ban',
-  'unban',
-  'clear',
-  'vcmute',
-  'vcunmute',
-]);
+const permissionService = createPermissionService({
+  config,
+  auditLogger: (event) => {
+    const level = event?.allowed === true ? 'INFO' : 'WARN';
+    logSystem(
+      {
+        event: 'moderation_guard_event',
+        ...event,
+      },
+      level
+    );
+  },
+});
+const templateSender = createTemplateSender();
 
-const permissionKeyMap = {
-  unmute: 'mute',
-  unjail: 'jail',
-  unban: 'ban',
-  vcunmute: 'vcmute',
-};
+const DEFAULT_SETTINGS = DEFAULT_STATIC_SETTINGS;
 
-const permissionService = createPermissionService({ config });
-const templateSender = createTemplateSender({ cache });
-const DEFAULT_SETTINGS = {
-  prefix: '.',
-  custom_messages: {},
-  log_enabled: true,
-  log_role: null,
-  log_safe_list: '',
-  log_limit: 25,
-  warn_enabled: true,
-  warn_role: null,
-  warn_safe_list: '',
-  warn_limit: 0,
-  mute_enabled: true,
-  mute_role: null,
-  mute_penalty_role: null,
-  mute_safe_list: '',
-  mute_limit: 25,
-  kick_enabled: true,
-  kick_role: null,
-  kick_safe_list: '',
-  kick_limit: 5,
-  jail_enabled: true,
-  jail_role: null,
-  jail_penalty_role: null,
-  jail_safe_list: '',
-  jail_limit: 5,
-  ban_enabled: true,
-  ban_role: null,
-  ban_safe_list: '',
-  ban_limit: 5,
-  clear_enabled: true,
-  clear_role: null,
-  clear_safe_list: '',
-  clear_limit: 25,
-  tag_enabled: false,
-  tag_role: null,
-  vcmute_enabled: true,
-  vcmute_role: null,
-  vcmute_safe_list: '',
-  vcmute_limit: 25,
-};
-let weeklyStaffTracker = null;
+const DEFAULT_SETTING_KEYS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 
-function setWeeklyStaffTracker(tracker) {
-  weeklyStaffTracker = tracker || null;
+function hasAllDefaultOwnKeys(rawSettings) {
+  for (const key of DEFAULT_SETTING_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(rawSettings, key)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function normalizeSettings(rawSettings) {
-  const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
-  if (typeof merged.custom_messages === 'string') {
-    try {
-      merged.custom_messages = JSON.parse(merged.custom_messages || '{}');
-    } catch {
-      merged.custom_messages = {};
-    }
-  } else if (!merged.custom_messages || typeof merged.custom_messages !== 'object') {
-    merged.custom_messages = {};
-  }
-  return merged;
-}
-
-async function trackSuccessfulCommand(guildId, userId, command) {
-  if (!weeklyStaffTracker?.trackEvent) return;
-  await weeklyStaffTracker.trackEvent({
-    guildId,
-    userId,
-    eventType: 'command',
-    commandName: command,
-    occurredAt: Date.now(),
-    metadata: { source: 'prefix' },
-  });
+  if (!rawSettings) return DEFAULT_SETTINGS;
+  if (hasAllDefaultOwnKeys(rawSettings)) return rawSettings;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...rawSettings,
+  };
 }
 
 const commandHandlers = {
@@ -123,31 +71,69 @@ const commandHandlers = {
   unjail: unjailCommand,
   ban: banCommand,
   unban: unbanCommand,
-  clear: clearCommand,
   vcmute: vcmuteCommand,
   vcunmute: vcunmuteCommand,
+  yardim: yardimCommand,
+  'yard\u0131m': yardimCommand,
+  embed: embedCommand,
+  lock: lockCommand,
+  unlock: unlockCommand,
+  durum: durumCommand,
 };
 
+const MODERATION_TARGET_COMMANDS = new Set([
+  'warn',
+  'mute',
+  'unmute',
+  'kick',
+  'jail',
+  'unjail',
+  'ban',
+  'unban',
+  'vcmute',
+  'vcunmute',
+]);
+function resolveTargetOptionsForCommand(command) {
+  if (!MODERATION_TARGET_COMMANDS.has(command)) return null;
+  return {
+    allowNumericId: true,
+    allowUserMention: true,
+    allowReplyTarget: false,
+    allowMemberSearch: false,
+    allowUnresolvedTarget: command !== 'ban',
+  };
+}
+
+function buildTargetMention(message, target, targetId, displayUsername) {
+  if (target?.user?.username) {
+    return `@${displayUsername || target.user.username}`;
+  }
+  if (targetId) {
+    return `<@${targetId}>`;
+  }
+  return `@${message.author.username}`;
+}
+
 async function handlePrefix(client, message) {
-  if (message.author.bot) return;
-  if (!message.guild) return;
+  if (message.author.bot) return false;
+  if (!message.guild) return false;
 
   const s = normalizeSettings(cache.getSettings(message.guild.id));
 
   permissionService.maybePruneModerationCaches();
 
-  const prefix = s.prefix || '.';
+  const configuredPrefix = typeof s.prefix === 'string' ? s.prefix.trim() : '';
+  const prefix = configuredPrefix || '.';
   const cleaned = message.content
     .replace(/^(?:\s|<@!?\d+>|<@&\d+>)+/g, '')
     .trimStart();
 
-  if (!cleaned.startsWith(prefix)) return;
+  if (!cleaned.startsWith(prefix)) return false;
 
   const rawArgs = cleaned.slice(prefix.length).trim().split(/ +/);
   const command = (rawArgs.shift() || '').toLowerCase();
   const argsSummary = rawArgs.join(' ').trim().slice(0, 220);
   const commandDisplay = `${prefix}${command}`;
-  const permCommand = permissionKeyMap[command] || command;
 
   const baseTemplateContext = {
     user: `@${message.member?.displayName || message.author.username}`,
@@ -166,89 +152,67 @@ async function handlePrefix(client, message) {
       templateKey,
       context: { ...baseTemplateContext, ...(context || {}) },
       iconUser: options.iconUser || null,
+      targetUserOrId: Object.prototype.hasOwnProperty.call(options, 'targetUserOrId')
+        ? options.targetUserOrId
+        : null,
+      asReply: options.asReply !== false,
+      deleteAfterMs: options.deleteAfterMs || 0,
+      allowReplyFallback: options.allowReplyFallback === true,
     });
   };
 
-  const sendLogStaticTemplate = (templateKey, context = {}) => {
-    const textMap = {
-      permissionDenied: 'bu komutu kullanamazsin, yetkin yok..',
-      roleInsufficient: 'bu komutu kullanamazsin, yetkin yok..',
-      roleNotConfigured: 'bu komut icin yetkili rolu secilmemis..',
-      targetRoleHigher: 'bu kisinin yetkisi senden yuksek.',
-      limitReached: 'hakkin doldu (limit: {limit}/saat)',
-      abuseLock: 'sansini zorladigin icin yetkin elinden alindi..',
-      invalidUsage: 'ID veya reply/mention lazim..',
-      systemError: 'islem basarisiz.',
-    };
-    const template = textMap[templateKey] || textMap.systemError;
-    const rendered = String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (full, key) => {
-      if (!Object.prototype.hasOwnProperty.call(context, key)) return full;
-      const value = context[key];
-      return value === null || value === undefined ? '' : String(value);
-    });
+  // Use the same standard template path for all commands, including log.
+  const sendPermissionTemplate = sendTemplate;
+  const handler = commandHandlers[command];
+  if (!handler?.run) return false;
 
-    return message.reply({
-      content: rendered,
-      allowedMentions: { parse: [] },
-    });
-  };
+  perfMonitor.incCounter('commandsExecuted');
 
-  const sendPermissionTemplate = command === 'log' ? sendLogStaticTemplate : sendTemplate;
-
-  if (protectedCommands.has(command)) {
-    let denial = null;
-    if (!s[`${permCommand}_enabled`]) denial = 'permissionDenied';
-    else if (!s[`${permCommand}_role`]) denial = 'roleNotConfigured';
-    else if (!message.member.roles.cache.has(s[`${permCommand}_role`])) denial = 'roleInsufficient';
-
-    if (denial) {
-      const { shouldReply } = permissionService.registerUnauthorizedAttempt(message.guild.id, message.author.id, permCommand);
-      if (shouldReply) {
-        await sendPermissionTemplate(denial, { target: `<@${message.author.id}>` }, { iconUser: message.author });
-      }
-      return;
-    }
-  }
-
-  let targetData;
-  if (command === 'clear') {
-    targetData = { target: null, targetId: rawArgs[0], cleanArgs: rawArgs, displayUsername: message.author.username };
-  } else {
-    targetData = await resolveTarget(client, message, rawArgs);
-  }
+  const targetResolutionOptions = resolveTargetOptionsForCommand(command);
+  const targetData = targetResolutionOptions
+    ? await resolveTarget(client, message, rawArgs, targetResolutionOptions)
+    : await resolveTarget(client, message, rawArgs);
 
   const { target, targetId, cleanArgs, displayUsername } = targetData;
-  const targetMention = target?.id ? `@${displayUsername}` : `@${message.author.username}`;
+  const targetMention = buildTargetMention(message, target, targetId, displayUsername);
+  const defaultTargetUserOrId = target?.user || targetId || target || null;
 
-  const sendTemplateWithTarget = (templateKey, context = {}, options = {}) =>
-    sendPermissionTemplate(
+  const sendTemplateWithTarget = (templateKey, context = {}, options = {}) => {
+    const mergedOptions = {
+      ...options,
+      targetUserOrId: Object.prototype.hasOwnProperty.call(options, 'targetUserOrId')
+        ? options.targetUserOrId
+        : defaultTargetUserOrId,
+    };
+
+    return sendPermissionTemplate(
       templateKey,
       {
         target: targetMention,
         ...context,
       },
-      options
+      mergedOptions
     );
-
-  const verifyPermission = async (cmdType, targetMember) => {
-    return permissionService.verifyPermission({
-      message,
-      targetMember,
-      settings: s,
-      cmdType,
-      sendTemplate: sendTemplateWithTarget,
-      contextBase: { target: targetMention },
-    });
   };
 
-  let commandSucceeded = false;
-  const incrementLimitOriginal = cache.incrementLimit?.bind(cache);
-  const trackedCache = {
-    ...cache,
-    incrementLimit: (...args) => {
-      commandSucceeded = true;
-      return incrementLimitOriginal ? incrementLimitOriginal(...args) : undefined;
-    },
+  const verifyPermission = async (cmdType, targetMember, options = {}) => {
+    const safeCmd = String(cmdType || '').trim().toLowerCase();
+    const result = await permissionService.verifyPermission({
+      message,
+      targetMember,
+      targetId: Object.prototype.hasOwnProperty.call(options, 'targetId')
+        ? options.targetId
+        : (targetMember?.id || targetId || null),
+      settings: s,
+      cmdType: safeCmd,
+      actionCommand: String(options.actionCommand || command || safeCmd).trim().toLowerCase(),
+      sendTemplate: sendTemplateWithTarget,
+      contextBase: { target: targetMention },
+      execution: options.execution || null,
+      safeListBypassesRoleRestriction: options.safeListBypassesRoleRestriction === true,
+      authoritativeActorRoleCheck: options.authoritativeActorRoleCheck === true,
+    });
+    return result;
   };
 
   const ctx = {
@@ -262,20 +226,18 @@ async function handlePrefix(client, message) {
     settings: s,
     sendTemplate: sendTemplateWithTarget,
     verifyPermission,
-    cache: trackedCache,
+    cache,
     actionNames,
     prefix,
     commandName: command,
     argsSummary,
+    targetResolution: targetData,
   };
 
-  const handler = commandHandlers[command];
-  if (!handler?.run) return;
   await handler.run(ctx);
-  if (commandSucceeded) {
-    await trackSuccessfulCommand(message.guild.id, message.author.id, command);
-  }
+  return true;
 }
 
-module.exports = { handlePrefix, setWeeklyStaffTracker };
-
+module.exports = {
+  handlePrefix,
+};

@@ -11,7 +11,7 @@ export default function SystemHealthCard({ health }) {
           overall ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200'
         }`}
       >
-        {overall ? 'Genel: Saglikli' : 'Genel: Sorunlu'}
+        {overall ? 'Genel: Sağlıklı' : 'Genel: Sorunlu'}
       </span>
       <span
         className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${

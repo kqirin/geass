@@ -3,12 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-"scripts": {
+  "scripts": {
     "dev": "vite --clearScreen true",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test",
     "preview": "vite preview",
-    "format:check": "prettier --check \"src/pages/Login.jsx\" \"src/components/Dashboard/VC.jsx\" \"src/components/Dashboard/vc/useVcController.js\" \"src/components/Dashboard/shell/SystemHealthCard.jsx\" \"src/hooks/useDashboardData.js\""
+    "serve": "vite preview --port 5173",
+    "format:check": "prettier --check \"src/pages/Login.jsx\" \"src/components/Dashboard/shell/SystemHealthCard.jsx\" \"src/components/Dashboard/shell/dashboardTabConfig.js\" \"src/hooks/useDashboardData.js\""
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",

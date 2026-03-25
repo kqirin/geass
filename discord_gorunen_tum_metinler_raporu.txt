@@ -1,0 +1,1310 @@
+1. PROJEYI ANLAMA OZETI
+
+Bu repo aktif olarak Node.js + discord.js tabanli tek-sunucu odakli bir bot/API uygulamasi. Discord tarafinda gorunen metinlerin ana uretim kanallari sunlar:
+- Prefix moderasyon komutlari: `.warn`, `.mute`, `.unmute`, `.kick`, `.jail`, `.unjail`, `.ban`, `.unban`, `.vcmute`, `.vcunmute`, `.log`, `.yardim`, `.embed`, `.lock`, `.unlock`
+- Moderasyon mesaj sablonlari: `api/src/application/messages/catalog.js` + `api/src/application/messages/templateService.js`
+- Moderasyon DM sistemi: `api/src/bot/services/moderationDmService.js`
+- Sicil/log goruntuleme akisi: `api/src/bot/commands/log.js` + `api/src/bot/moderation.logs.js`
+- Private voice/private room paneli, select menu, modal ve transient mesajlar: `api/src/voice/privateRoomService.js`
+- Embed olusturucu button/modal akisi: `api/src/bot/commands/embed.js`
+- Kanal kilitleme/acma embedleri: `api/src/bot/commands/channelLock.helpers.js`
+- Mesaj reaksiyonu kurallari ile ureen DM/reply/link mesajlari: `api/src/application/reactionActions/service.js`
+- Dashboard/API tarafindan Discord'a gonderilen dinamik embed/metin payloadlari: `api/src/interfaces/http/routes/embedRoutes.js`
+- DB tabanli custom command cevabi: `api/src/discordClient.js` + `api/src/utils/cache.js`
+- Discord presence/activity metni: `api/src/config/static/server.js` + `api/src/bot/presenceManager.js`
+
+Repo genelinde slash command altyapisi bulunmuyor. `SlashCommandBuilder`, `isChatInputCommand`, command registration vb. pattern'ler repo taramasinda cikmadi. Bu nedenle Discord'da gorunen aktif kullanici-facing yuzeyler prefix komutlari, interaction component'leri, DM akislari, reaction-action akislari ve private room panelidir.
+
+Sayim metodolojisi:
+- Asagidaki envanter "ayri gorunur string/template" mantigiyla cikartildi.
+- Ayni string birden fazla komutta tekrar kullaniliyorsa tek kayitta toplanip kaynaklarda tekrar kullanimlar not edildi.
+- Bir kayit icinde birden fazla ayri string olabilir; bu kayitlar mantiksal akis bazinda gruplanmistir.
+- Toplam tespit: 216 ayri Discord-visible string/template.
+- Bunlar 33 gruplanmis envanter kaydi halinde sunuluyor.
+
+2. TARAMA KAPSAMI
+
+Taranan temel kaynaklar:
+- `api/src/index.js`
+- `api/src/discordClient.js`
+- `api/src/bot/moderation.js`
+- `api/src/bot/moderation.utils.js`
+- `api/src/bot/moderation.logs.js`
+- `api/src/bot/commands/*.js`
+- `api/src/bot/services/*.js`
+- `api/src/application/messages/*.js`
+- `api/src/application/reactionActions/*.js`
+- `api/src/voice/*.js`
+- `api/src/interfaces/http/routes/*.js`
+- `api/src/config/static/*.js`
+- `api/src/features/tagRole.js`
+- `api/src/postgresSchema.js`
+- `api/src/utils/cache.js`
+- `api/artifacts/pg-p0/verify-run/data/custom_commands.ndjson`
+- `api/artifacts/pg-p0/verify-run/data/reaction_rules.ndjson`
+
+Ozellikle aranan pattern'ler:
+- `message.reply`
+- `message.channel.send`
+- `interaction.reply`
+- `interaction.followUp`
+- `interaction.editReply`
+- `user.send`
+- `member.send`
+- `EmbedBuilder`
+- `ButtonBuilder`
+- `UserSelectMenuBuilder`
+- `RoleSelectMenuBuilder`
+- `ModalBuilder`
+- `TextInputBuilder`
+- `setTitle`, `setDescription`, `addFields`, `setFooter`, `setLabel`, `setPlaceholder`
+- `channel.setName`
+
+Dogrulama icin yapilan ek kontroller:
+- Moderasyon template'leri ve DM metinleri Node ile runtime'da render edilerek dogrulandi.
+- Private room ve embed command testleri kosuldu.
+- `api/test/privateRoom.integration.test.js` icinde source ile test beklentisi arasinda drift tespit edildi.
+
+3. TUM GORUNEN METINLER ENVANTERI
+
+[ID]
+MOD-001
+[GÖRÜNEN METİN]
+- `Bu komutu kullanamazsin, yetkin yok.`
+- `Bu komut icin rolun yetmiyor.`
+- `Bu komut icin gerekli rol ayari yapilmamis.`
+- `Bu kullanicinin rolu senden yuksek.`
+- `Bu islem kullaniciya uygulanamadi.`
+- `Limit doldu. Saatlik limit: {limit}.`
+- `Kullanici bulunamadi.`
+- `Hatali kullanim. Komutu dogru sekilde tekrar dene.`
+- `Beklenmeyen bir hata olustu.`
+- `Asiri limit ihlali nedeniyle yetkin gecici olarak kaldirildi.`
+[METİN TÜRÜ]
+Prefix command embed author text, permission/validation/system error
+[NE ZAMAN TETİKLENİR]
+Tum temel moderasyon komutlarinda yetki, rol, limit, hedef, kullanim veya sistem hatasi oldugunda
+[NE İŞE YARAR]
+Ortak guard ve hata cevabi verir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye, kanalda normal reply olarak
+[KAYNAK]
+`api/src/application/messages/catalog.js:91-153` -> `BASE_TEMPLATE_DEFAULTS`
+`api/src/application/messages/templateService.js:185-227` -> `sendTemplate()`
+`api/src/bot/services/permissionService.js:464-806`
+[DEĞİŞKENLER]
+`{limit}` = saatlik limit sayisi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Bu komutu kullanamazsin, yetkin yok.`
+[NOT]
+Hepsi embed modunda ve `withIcon=true`; kullanici bunlari embed author satirinda gorur. Ayni metinler `warn/mute/unmute/kick/jail/unjail/ban/unban/vcmute/vcunmute` akislari tarafindan ortak kullanilir.
+
+[ID]
+MOD-002
+[GÖRÜNEN METİN]
+- `.warn` basarisi: `{target} uyarildi.`
+- `.mute` basarisi: `{target} timeout aldi.`
+- `.unmute` basarisi: `{target} timeout kaldirildi.`
+- `.kick` basarisi: `{target} sunucudan atildi.`
+- `.jail` basarisi: `{target} karantinaya alindi.`
+- `.unjail` basarisi: `{target} karantinadan cikarildi.`
+- `.ban` basarisi: `{target} banlandi.`
+- `.unban` basarisi: `{target} ban kaldirildi.`
+- `.vcmute` basarisi: `{target} ses susturuldu.`
+- `.vcunmute` basarisi: `{target} ses susturmasi kaldirildi.`
+[METİN TÜRÜ]
+Prefix command embed author text, success message
+[NE ZAMAN TETİKLENİR]
+Ilgili moderasyon komutunun primary action'i basariyla tamamlandiginda
+[NE İŞE YARAR]
+Islemin hedef uzerinde uygulandigini bildirir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve komutun yazildigi kanaldakilere
+[KAYNAK]
+`api/src/application/messages/catalog.js:227-276` -> `COMMAND_TEMPLATE_DEFAULTS`
+`api/src/application/messages/templateService.js:204-223`
+`api/src/bot/services/actionExecution.js:157-167`
+[DEĞİŞKENLER]
+`{target}` = hedef mention veya hedef gosterimi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`@Target timeout aldi.`
+[NOT]
+Bunlar embed author alaninda gosterilir. Bazilarinda ek embed description da bulunur; o description'lar `MOD-003` altinda ayrica listelendi.
+
+[ID]
+MOD-003
+[GÖRÜNEN METİN]
+- `.warn` success description: `**(sebep: {reason}) ({caseId})**`
+- `.mute` success description: `**(sure: {time}, sebep: {reason}) ({caseId})**`
+- `.unmute` success description: `**(sebep: {reason}) ({caseId})**`
+- `.kick` success description: `**(sebep: {reason}) ({caseId})**`
+- `.jail` success description: `**(sure: {time}, sebep: {reason}) ({caseId})**`
+- `.ban` success description: `**(sebep: {reason}) ({caseId})**`
+- `.vcmute` success description: `**(sure: {time}, sebep: {reason}) ({caseId})**`
+[METİN TÜRÜ]
+Prefix command embed description
+[NE ZAMAN TETİKLENİR]
+Ilgili komut basarili oldugunda ve template `embedTitle` alanina veri koydugunda
+[NE İŞE YARAR]
+Sebep, sure ve case numarasini gosterir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/application/messages/catalog.js:227-276`
+`api/src/application/messages/templateService.js:214-223`
+[DEĞİŞKENLER]
+`{reason}` = islem sebebi
+`{time}` = sure metni
+`{caseId}` = `#191` benzeri vaka numarasi gosterimi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**(sure: 10m, sebep: Kufur) (#191)**`
+[NOT]
+`unjail`, `unban`, `vcunmute` success mesajlarinda bu ikinci satir yok.
+
+[ID]
+MOD-004
+[GÖRÜNEN METİN]
+- `.mute`: `{target} zaten aktif timeout altinda.`
+- `.mute`: `Timeout tabanli mute icin sure zorunlu.`
+- `.mute`: `Gecersiz sure formati. Ornek: 10m, 1h, 7d.`
+- `.mute`: `Timeout suresi {maxDuration} sinirini asamaz.`
+- `.mute`: `{target} owner veya administrator oldugu icin timeout alamaz.`
+- `.mute`: `{target} seste oldugu icin botta MoveMembers izni olmadan timeout uygulanamaz.`
+- `.mute`: `{target} sesten dusurulemedigi icin timeout tamamlanmadi. {rollbackStatus}`
+- `.unmute`: `{target} aktif timeout altinda degil.`
+- `.kick`: `{target} hedefi kicklenemiyor.`
+- `.jail`: `{target} zaten karantinada.`
+- `.unjail`: `{target} zaten karantinada degil.`
+- `.ban`: `{target} zaten banli.`
+- `.unban`: `{target} zaten banli degil.`
+- `.vcmute`: `{target} zaten ses susturulmus.`
+- `.vcmute`: `{target} ses kanalinda degil.`
+- `.vcunmute`: `{target} zaten ses susturulmamis.`
+- `.vcunmute`: `{target} ses kanalinda degil.`
+[METİN TÜRÜ]
+Prefix command embed author text, command-specific failure message
+[NE ZAMAN TETİKLENİR]
+Komuta ozgu preflight veya verification kontrolleri basarisiz oldugunda
+[NE İŞE YARAR]
+Discord native limit, ceza state'i veya ses durumu gibi komuta ozel engelleri aciklar
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/application/messages/catalog.js:230-276`
+`api/src/bot/commands/mute.js`
+`api/src/bot/commands/unmute.js`
+`api/src/bot/commands/kick.js`
+`api/src/bot/commands/jail.js`
+`api/src/bot/commands/unjail.js`
+`api/src/bot/commands/ban.js`
+`api/src/bot/commands/unban.js`
+`api/src/bot/commands/vcmute.js`
+`api/src/bot/commands/vcunmute.js`
+[DEĞİŞKENLER]
+`{target}` = hedef mention/gosterim
+`{maxDuration}` = Discord timeout ust siniri
+`{rollbackStatus}` = genelde `Timeout geri alindi.`
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`@Target seste oldugu icin botta MoveMembers izni olmadan timeout uygulanamaz.`
+[NOT]
+Hepsi embed author olarak cikar. `kick` icin generic `operationNotAllowed` metni override edilmistir; bu yuzden diger komutlardakiyle ayni degildir.
+
+[ID]
+MOD-005
+[GÖRÜNEN METİN]
+- `⚠️ {target} uyarildi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} timeout aldi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} timeouti kaldirildi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} sunucudan atildi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} karantinaya alindi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} karantinadan cikarildi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} banlandi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} bani kaldirildi fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} ses susturuldu fakat takip islemleri eksik kaldi: {labels}.`
+- `⚠️ {target} ses susturmasi kaldirildi fakat takip islemleri eksik kaldi: {labels}.`
+[METİN TÜRÜ]
+Plain text warning reply/follow-up
+[NE ZAMAN TETİKLENİR]
+Ana moderasyon islemi basarili oldugu halde yan etkilerden biri hata verdiginde
+[NE İŞE YARAR]
+Degrade state'i bildirir; kullaniciya primary action yapildi ama log/DM/scheduler gibi seylerden bazilarinin eksik kaldigini soyler
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/services/actionExecution.js:13-30, 161-166`
+`api/src/bot/commands/warn.js:42`
+`api/src/bot/commands/mute.js:333`
+`api/src/bot/commands/unmute.js:160`
+`api/src/bot/commands/kick.js:52`
+`api/src/bot/commands/jail.js:95`
+`api/src/bot/commands/unjail.js:63`
+`api/src/bot/commands/ban.js:141`
+`api/src/bot/commands/unban.js:127`
+`api/src/bot/commands/vcmute.js:84`
+`api/src/bot/commands/vcunmute.js:58`
+[DEĞİŞKENLER]
+`{target}` = hedef mention
+`{labels}` = `log kaydi`, `ceza zamanlayici`, `ceza iptali`, `basari bildirimi`, `limit commit` gibi eksik yan islem etiketleri
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`⚠️ @Target timeout aldi fakat takip islemleri eksik kaldi: log kaydi, basari bildirimi.`
+[NOT]
+Bu mesajlar embed degil duz metindir.
+
+[ID]
+MOD-006
+[GÖRÜNEN METİN]
+- `Geass'ta {executorName} tarafından {reason} sebebiyle uyarıldın. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'ta {executorName} tarafından {reason} sebebiyle {duration} süreyle timeout uygulandi. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'ta uygulanan timeout cezan {executorName} tarafından kaldirildi.`
+- `Geass'ta {executorName} tarafından {reason} sebebiyle yasaklandın. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'taki yasağın {executorName} tarafından kaldırıldı.`
+- `Geass'tan {executorName} tarafından {reason} sebebiyle atıldın. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'ta {executorName} tarafından {reason} sebebiyle cezalıya alındın. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'ta cezalı durumun {executorName} tarafından kaldırıldı.`
+- `Geass'ta uygulanan uyarı işlemin {executorName} tarafından kaldırıldı.`
+- `Geass'ta {executorName} tarafından {reason} sebebiyle ses kanallarında susturuldun. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- `Geass'ta ses susturma cezan {executorName} tarafından kaldırıldı.`
+[METİN TÜRÜ]
+DM message
+[NE ZAMAN TETİKLENİR]
+Moderasyon DM bildirimi acikken ilgili ceza/islem hedef kullaniciya bildirildiginde
+[NE İŞE YARAR]
+Hedefe hangi islemin, kim tarafindan, hangi sebeple uygulandigini bildirir
+[KİME GÖRÜNÜR]
+Hedef kullaniciya DM olarak
+[KAYNAK]
+`api/src/bot/services/moderationDmService.js:148-200, 296-314`
+[DEĞİŞKENLER]
+`{executorName}` = backtick ile sarmalanan yetkili adi
+`{reason}` = normalize edilmis sebep
+`{duration}` = sure metni
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Geass'ta \`Kirin\` tarafından kufur sebebiyle 10m süreyle timeout uygulandi. İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+[NOT]
+`warn_remove/unwarn` DM metni kodda var ama aktif komut akisinda ulasilabilirligi supheli; bu nokta `RISKLI / DEAD / SUPHELI METINLER` bolumunde ayrica isaretlendi.
+
+[ID]
+LOG-001
+[GÖRÜNEN METİN]
+- `Birden fazla kullanici eslesti. ID veya mention kullan.`
+- `Kullanici bulunamadi.`
+- `Goruntule`
+- `**{targetMention}** sicili hazir.`
+- `Sicil mesaji gonderilemedi.`
+- `Sadece komutu yazan bakabilir.`
+[METİN TÜRÜ]
+Prefix command reply, button label, ephemeral response
+[NE ZAMAN TETİKLENİR]
+`.log` komutunun kullanimi, invite olusumu ve button interaction akisinda
+[NE İŞE YARAR]
+Hedef cozumleme, invite/goruntuleme ve yetki kisitini yonetir
+[KİME GÖRÜNÜR]
+`Birden fazla...`, `Kullanici bulunamadi.`, `Sicil mesaji gonderilemedi.` -> komutu kullanan kisiye
+`**{targetMention}** sicili hazir.` -> kanaldakilere
+`Goruntule` -> button uzerinde gorulur
+`Sadece komutu yazan bakabilir.` -> baska tiklayan kullaniciya ephemeral
+[KAYNAK]
+`api/src/bot/commands/log.js:4-64`
+[DEĞİŞKENLER]
+`{targetMention}` = hedef mention
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**@Target** sicili hazir.`
+[NOT]
+Bu akista slash command yok; tamamen prefix + button pattern'i kullaniliyor.
+
+[ID]
+LOG-002
+[GÖRÜNEN METİN]
+- `**{logUserId}** sicili temiz.`
+- Code block header/body:
+  ```ml
+  ID: {logUserId} Sicil Kaydı (Sayfa {page}/{totalPages})
+    -> {actionLabel} | Yetkili: {moderatorLabel} | Sebep: "{reason}" (#{caseId})
+  ```
+- `Önceki`
+- `Sonraki`
+- Aksiyon etiketleri:
+  `UYARI`, `TIMEOUT`, `TIMEOUT KALDIR`, `ATMA`, `KARANTINA`, `KARANTINA KALDIR`, `BAN`, `BAN KALDIR`, `SES SUSTURMA`, `SES SUSTURMA KALDIR`
+[METİN TÜRÜ]
+Ephemeral log output, button label
+[NE ZAMAN TETİKLENİR]
+`.log` button'ina tiklanip kayitlar gosterildiginde
+[NE İŞE YARAR]
+Kullanicinin mod-log gecmisini paginated sekilde gosterir
+[KİME GÖRÜNÜR]
+Sadece komutu yazan kisiye ephemeral olarak
+[KAYNAK]
+`api/src/bot/moderation.logs.js:14-60`
+`api/src/bot/moderation.utils.js:9-18`
+[DEĞİŞKENLER]
+`{logUserId}` = hedef kullanici ID'si
+`{page}` / `{totalPages}` = sayfalama
+`{actionLabel}` = aksiyon Turkce etiketi
+`{moderatorLabel}` = moderator username veya ID
+`{reason}` = log reason
+`{caseId}` = log satir id'si
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`ID: 123456789 Sicil Kaydı (Sayfa 1/2)`
+[NOT]
+Bu sistem dedicated log kanali kullanmiyor; loglar DB'de tutulup talep edilince ephemeral olarak aciliyor.
+
+[ID]
+HELP-001
+[GÖRÜNEN METİN]
+- Author: `{authorName} - Yardim Menusu`
+- Description:
+  `Bot uzerinde kullanabileceginiz moderasyon ve sistem komutlari asagida kategorize edilmistir.`
+  `Argumanlarin yanindaki [ ] istege bagli, < > ise zorunlu alanlari temsil eder.`
+- Footer: `Geass Bot - Yardim Sistemi`
+[METİN TÜRÜ]
+Embed author, embed description, embed footer
+[NE ZAMAN TETİKLENİR]
+`.yardim` calistirildiginda
+[NE İŞE YARAR]
+Yardim embed'inin iskelet metinlerini uretir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/yardim.js:13-19, 55-64`
+[DEĞİŞKENLER]
+`{authorName}` = displayName/globalName/username
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Kirin - Yardim Menusu`
+[NOT]
+Footer icon'u varsa bot avatar'i ekleniyor ama bu gorunen bir metin degil.
+
+[ID]
+HELP-002
+[GÖRÜNEN METİN]
+- Field name: `Moderasyon Islemleri`
+- Field value:
+  `**{prefix}ban <@kullanici> [sebep]**`
+  `Belirtilen kullaniciyi sunucudan yasaklar.`
+  `*Ornek: \`{prefix}ban @Kullanici Kurallara uymamak\`*`
+  `**{prefix}unban <kullanici_id> [sebep]**`
+  `ID'si belirtilen kullanicinin sunucu yasagini kaldirir.`
+  `*Ornek: \`{prefix}unban 123456789 Ozur diledi\`*`
+  `**{prefix}kick <@kullanici> [sebep]**`
+  `Belirtilen kullaniciyi sunucudan atar.`
+  `*Ornek: \`{prefix}kick @Kullanici Troll yapmak\`*`
+  `**{prefix}warn <@kullanici> [sebep]**`
+  `Kullaniciyi uyarir ve siciline uyari olarak kaydeder.`
+  `*Ornek: \`{prefix}warn @Kullanici Spam yapmak\`*`
+[METİN TÜRÜ]
+Embed field
+[NE ZAMAN TETİKLENİR]
+`.yardim` embed'i icinde
+[NE İŞE YARAR]
+Ban/unban/kick/warn kullanim bilgisini verir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/yardim.js:23-31`
+[DEĞİŞKENLER]
+`{prefix}` = aktif prefix
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**.ban <@kullanici> [sebep]**`
+[NOT]
+Tum satirlar ayni field value string'i icinde gonderilir.
+
+[ID]
+HELP-003
+[GÖRÜNEN METİN]
+- Field name: `Timeout ve Karantina`
+- Field value:
+  `**{prefix}mute <@kullanici> <sure> [sebep]**`
+  `Kullaniciya Discord native timeout uygular. Sure zorunludur ve en fazla 28 gun olabilir (Orn: 10m, 1h, 7d).`
+  `*Ornek: \`{prefix}mute @Kullanici 1h Ortami germek\`*`
+  `**{prefix}unmute <@kullanici> [sebep]**`
+  `Kullanicinin aktif timeout cezasini kaldirir.`
+  `*Ornek: \`{prefix}unmute @Kullanici\`*`
+  `**{prefix}vcmute <@kullanici> [sure] [sebep]**`
+  `Kullaniciya ses kanallarinda susturma verir.`
+  `*Ornek: \`{prefix}vcmute @Kullanici 30m Sesi bozmak\`*`
+  `**{prefix}vcunmute <@kullanici> [sebep]**`
+  `Kullanicinin ses kanallarindaki susturmasini kaldirir.`
+  `*Ornek: \`{prefix}vcunmute @Kullanici\`*`
+  `**{prefix}jail <@kullanici> [sure] [sebep]**`
+  `Kullaniciyi karantina rolune gonderir.`
+  `*Ornek: \`{prefix}jail @Kullanici 1d Supheli hareket\`*`
+  `**{prefix}unjail <@kullanici> [sebep]**`
+  `Kullanicinin karantina cezasini kaldirir.`
+  `*Ornek: \`{prefix}unjail @Kullanici\`*`
+[METİN TÜRÜ]
+Embed field
+[NE ZAMAN TETİKLENİR]
+`.yardim` embed'i icinde
+[NE İŞE YARAR]
+Mute/unmute/vcmute/vcunmute/jail/unjail kullanim bilgisini verir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/yardim.js:32-44`
+[DEĞİŞKENLER]
+`{prefix}` = aktif prefix
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**.mute <@kullanici> <sure> [sebep]**`
+[NOT]
+Timeout metni ile voice mute/karantina tonlari ayni field icinde toplanmis.
+
+[ID]
+HELP-004
+[GÖRÜNEN METİN]
+- Field name: `Sistem ve Bilgi`
+- Field value:
+  `**{prefix}log <@kullanici / ID>**`
+  `Kullanicinin daha onceki uyarilarini ve sicil loglarini goruntuler.`
+  `*Ornek: \`{prefix}log @Kullanici\`*`
+  `**{prefix}yardim**`
+  `Bu yardim menusunu goruntuler.`
+  `*Ornek: \`{prefix}yardim\`*`
+[METİN TÜRÜ]
+Embed field
+[NE ZAMAN TETİKLENİR]
+`.yardim` embed'i icinde
+[NE İŞE YARAR]
+Bilgi/sicil komutlarini aciklar
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/yardim.js:45-52`
+[DEĞİŞKENLER]
+`{prefix}` = aktif prefix
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**.log <@kullanici / ID>**`
+[NOT]
+`.embed`, `.lock`, `.unlock` burada yardim menusu icine dahil edilmemis.
+
+[ID]
+EMB-001
+[GÖRÜNEN METİN]
+- `❌ Bu komutu kullanmak icin **Mesajlari Yonet** iznine ihtiyacin var.`
+- `❌ Gecerli bir metin kanali belirtin. Ornek: \`.embed #kanal\``
+- `❌ Botun **{channel}** kanalinda mesaj gonderme veya embed paylasma izni yok.`
+[METİN TÜRÜ]
+Prefix command reply, permission/validation error
+[NE ZAMAN TETİKLENİR]
+`.embed` baslangic guard'larinda
+[NE İŞE YARAR]
+Embed akisini baslatmadan once kullanici ve bot permission/dogru kanal kontrolu yapar
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye
+[KAYNAK]
+`api/src/bot/commands/embed.js:115-147`
+[DEĞİŞKENLER]
+`{channel}` = hedef text channel mention'i
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`❌ Botun **#duyurular** kanalinda mesaj gonderme veya embed paylasma izni yok.`
+[NOT]
+Bu komut prefix tabanlidir; slash degildir.
+
+[ID]
+EMB-002
+[GÖRÜNEN METİN]
+- Button label: `Embed Olustur`
+- Preview embed description:
+  `**Hedef kanal:** {targetChannel}`
+  `**Mesaj icerigi:** {normalContentPreview}`
+  `Asagidaki butona tiklayarak embed detaylarini girin.`
+[METİN TÜRÜ]
+Button label, embed description
+[NE ZAMAN TETİKLENİR]
+`.embed` komutu gecerli sekilde baslatildiginda
+[NE İŞE YARAR]
+Modali acacak butonu ve on izleme bilgilerini gosterir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/embed.js:162-184`
+[DEĞİŞKENLER]
+`{targetChannel}` = hedef kanal mention'i
+`{normalContentPreview}` = normal content'in ilk 120 karakterlik onizlemesi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`**Hedef kanal:** #duyurular`
+[NOT]
+`Mesaj icerigi` satiri yalnizca plain content varsa eklenir.
+
+[ID]
+EMB-003
+[GÖRÜNEN METİN]
+- `❌ Bu embed oturumu artik gecerli degil. Komutu yeniden baslatin.`
+- `❌ Bu islemi sadece komutu baslatan yetkili tamamlayabilir.`
+- `❌ Bu islemi tamamlamak icin Mesajlari Yonet izni gerekiyor.`
+- `❌ Sunucu bilgisi alinamadi.`
+- `❌ Hedef kanal artik mevcut degil veya gecerli bir metin kanali degil.`
+- `❌ Botun **{channel}** kanalinda mesaj gonderme veya embed paylasma izni yok.`
+[METİN TÜRÜ]
+Ephemeral interaction response / follow-up
+[NE ZAMAN TETİKLENİR]
+Embed button veya modal interaction guard'larinda
+[NE İŞE YARAR]
+Session actor check, permission check ve stale channel check yapar
+[KİME GÖRÜNÜR]
+Sadece interaction'i yapan kullaniciya, ephemeral
+[KAYNAK]
+`api/src/bot/commands/embed.js:48-102, 226-243`
+[DEĞİŞKENLER]
+`{channel}` = stale olmayan hedef kanal mention'i
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`❌ Bu embed oturumu artik gecerli degil. Komutu yeniden baslatin.`
+[NOT]
+`replyError()` icinde `flags: 64` kullanildigi icin bunlar ephemeral gorunur.
+
+[ID]
+EMB-004
+[GÖRÜNEN METİN]
+- Modal title: `Embed Olusturucu`
+- Input label: `Baslik (opsiyonel)`
+- Input label: `Baslik linki (opsiyonel)`
+- Input label: `Renk (hex, ornek: #5865F2)`
+- Placeholder: `#5865F2`
+- Input label: `Resim URL (opsiyonel)`
+- Input label: `Aciklama metni (opsiyonel)`
+[METİN TÜRÜ]
+Modal title, modal input label, placeholder
+[NE ZAMAN TETİKLENİR]
+`.embed` onizleme button'una tiklandiginda
+[NE İŞE YARAR]
+Kullanicidan embed ayrintilarini toplar
+[KİME GÖRÜNÜR]
+Butona basan yetkiliye modal UI olarak
+[KAYNAK]
+`api/src/bot/commands/embed.js:191-223`
+[DEĞİŞKENLER]
+Yok
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Embed Olusturucu`
+[NOT]
+Bu akista title URL, color ve image URL validation'i daha sonra yapiliyor.
+
+[ID]
+EMB-005
+[GÖRÜNEN METİN]
+- `❌ Gecersiz renk formati: \`{rawColor}\`. Ornek: \`#5865F2\``
+- `❌ Gecersiz baslik linki: \`{rawUrl}\`. Gecerli bir HTTP/HTTPS URL girin.`
+- `❌ Gecersiz resim URL: \`{rawImage}\`. Gecerli bir HTTP/HTTPS URL girin.`
+- `❌ En az bir alan doldurun: Baslik, Aciklama veya Resim URL.`
+- `❌ Mesaj gonderilemedi: {errorMessage}`
+- `✅ Embed **{targetChannel}** kanalina basariyla gonderildi.`
+[METİN TÜRÜ]
+Ephemeral validation error, edited reply success embed description
+[NE ZAMAN TETİKLENİR]
+Embed modal submit edilirken validation veya gonderim asamasinda
+[NE İŞE YARAR]
+Kullaniciyi gecerli input ve gonderim sonucu konusunda bilgilendirir
+[KİME GÖRÜNÜR]
+Modal submit eden yetkiliye, ephemeral
+[KAYNAK]
+`api/src/bot/commands/embed.js:252-312`
+[DEĞİŞKENLER]
+`{rawColor}` = kullanicinin girdigi renk
+`{rawUrl}` = title URL input'u
+`{rawImage}` = image URL input'u
+`{errorMessage}` = exception mesaji veya `Bilinmeyen hata`
+`{targetChannel}` = hedef kanal mention'i
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`✅ Embed **#duyurular** kanalina basariyla gonderildi.`
+[NOT]
+Basari mesaji `interaction.editReply()` ile embed olarak guncellenir.
+
+[ID]
+LOCK-001
+[GÖRÜNEN METİN]
+- `Bu komutu kullanmak icin ManageChannels veya Admin yetkisi gerekli.`
+- `Botun bu islem icin ManageChannels yetkisine ihtiyaci var.`
+- `Hedef kanal bulunamadi.`
+- `Bu komut sadece text kanalda calisir.`
+- `@everyone rolu bulunamadi.`
+- `Kilit uygulanamadi, izin overwrite kontrolu basarisiz.`
+- `Kanal acilirken bir hata olustu.`
+[METİN TÜRÜ]
+Error embed description
+[NE ZAMAN TETİKLENİR]
+`.lock` / `.unlock` komutlarinda permission, target veya overwrite verification sorununda
+[NE İŞE YARAR]
+Kanal kilitleme/acma guard ve failure durumlarini bildirir
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/channelLock.helpers.js:390-448, 466-561`
+[DEĞİŞKENLER]
+Yok
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Bu komut sadece text kanalda calisir.`
+[NOT]
+Bu komutlarda slash yok; hedef kanal mevcut message channel'idir.
+
+[ID]
+LOCK-002
+[GÖRÜNEN METİN]
+- Embed title: `Kanal kilitlendi`
+- Embed title: `Kanal acildi`
+- Field name: `Hedef Kanal`
+- Field name: `Tur`
+- Field value: `text`
+[METİN TÜRÜ]
+Embed title, embed field
+[NE ZAMAN TETİKLENİR]
+`.lock` / `.unlock` basariyla tamamlandiginda
+[NE İŞE YARAR]
+Hangi kanal turunun kilitlendigini/actigini ozetler
+[KİME GÖRÜNÜR]
+Komutu kullanan kisiye ve kanala
+[KAYNAK]
+`api/src/bot/commands/channelLock.helpers.js:367-385, 494-569`
+[DEĞİŞKENLER]
+`Hedef Kanal` field value'su runtime'da `#kanal` veya kanal mention'i olarak gelir
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Kanal kilitlendi`
+[NOT]
+Basari embed'inin timestamp'i var ama bu metinsel bir oge degil.
+
+[ID]
+PVR-001
+[GÖRÜNEN METİN]
+- Embed title: `🔊 Oda Kontrol`
+- Embed description template:
+  `Oda Kontrol`
+  `Adi Degistir | Kilitle | Kilidi Ac`
+  `Limit | Gizle | Goster`
+  `Devret | Izin Ver | Izin Al/Yasakla | Kanali Sil`
+  `Oda Durumu`
+  `Sahip: <@{ownerId}>`
+  `Izin verilen uyeler: {allowedLine}`
+  `Kilitleme: {lockedLabel}`
+  `Gorunurluk: {visibilityLabel}`
+- Embed footer: `Ses kanalini yonetmek icin asagidaki butonlari kullanin`
+[METİN TÜRÜ]
+Embed title, embed description, embed footer
+[NE ZAMAN TETİKLENİR]
+Private room panel mesaji ilk olusturuldugunda veya sync edildiginde
+[NE İŞE YARAR]
+Oda owner'ina panel uzerinden yapabilecegi islemleri ve odanin anlik durumunu gosterir
+[KİME GÖRÜNÜR]
+Voice channel text alani gorulebilen herkese
+[KAYNAK]
+`api/src/voice/privateRoomService.js:411-442`
+[DEĞİŞKENLER]
+`{ownerId}` = oda sahibi
+`{allowedLine}` = whitelist user/role mention listesi, yoksa `Yok`, 16'dan fazlaysa `(+n)` eklenir
+`{lockedLabel}` = `Kilitli` veya `Acik`
+`{visibilityLabel}` = `Gosteriliyor` veya `Gizli`
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Izin verilen uyeler: <@123>, <@&456> (+2)`
+[NOT]
+Panel butonlari text label tasimiyor; emoji-only component. Bu yuzden metin sayimina button label eklenmedi.
+
+[ID]
+PVR-002
+[GÖRÜNEN METİN]
+- `❌ Yetkin yok`
+- `❌ Oda kaydi bulunamadi`
+- `❌ Oda kanali bulunamadi`
+- `❌ Oda islemi su an mesgul, tekrar dene`
+- `❌ Gecersiz panel butonu`
+- `❌ Gecersiz modal`
+- `❌ Bu panel guncel degil. Odaya yeniden girerek paneli yenile.`
+- `❌ Islem sirasinda hata olustu`
+- `⚠️ Bu menu kaldirildi. Sadece 👥 butonundaki uye seciciyi kullan.`
+[METİN TÜRÜ]
+Ephemeral response / follow-up
+[NE ZAMAN TETİKLENİR]
+Private room button/select/modal interaction guard'larinda
+[NE İŞE YARAR]
+Owner check, stale panel check, lock check ve generic exception durumlarini bildirir
+[KİME GÖRÜNÜR]
+Interaction'i yapan kullaniciya, genelde ephemeral
+[KAYNAK]
+`api/src/voice/privateRoomService.js:647-656, 2662-2668, 2948-2957`
+[DEĞİŞKENLER]
+Yok
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`❌ Bu panel guncel degil. Odaya yeniden girerek paneli yenile.`
+[NOT]
+`tryAcknowledge()` reply/followUp kullaniyor ve default olarak ephemeral gonderiyor.
+
+[ID]
+PVR-003
+[GÖRÜNEN METİN]
+- Content: `Uye Yonetimi{info}`
+- Content: `Reject Yonetimi{info}`
+- Select placeholder: `İzin verilecek üyeleri seç`
+- Select placeholder: `İzin verilecek rolleri seç`
+- Select placeholder: `Yasaklanacak uyeleri sec`
+- Select placeholder: `Yasaklanacak rolleri sec`
+[METİN TÜRÜ]
+Ephemeral content, select menu placeholder
+[NE ZAMAN TETİKLENİR]
+Private room'da uye/rol izin veya yasaklama menusu acildiginda
+[NE İŞE YARAR]
+Whitelist ve reject listelerini secilebilir menulerle acmak icin
+[KİME GÖRÜNÜR]
+Panelde ilgili butona basan oda sahibine
+[KAYNAK]
+`api/src/voice/privateRoomService.js:1901-1963, 2391-2423`
+[DEĞİŞKENLER]
+`{info}` = gerekirse ` ({hiddenUserCount} uye / {hiddenRoleCount} rol secicide gorunmuyor)` eklentisi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Uye Yonetimi (3 uye / 1 rol secicide gorunmuyor)`
+[NOT]
+Select placeholder'lar private room UI text sayiminin buyuk kismini olusturuyor.
+
+[ID]
+PVR-004
+[GÖRÜNEN METİN]
+- `❌ Bot bu odanin izinlerini yonetemiyor`
+- `⚠️ Oda zaten kilitli`
+- `⚠️ Oda zaten acik`
+- `❌ Oda kilit durumu kaydedilemedi`
+- `🔒 Oda kilitlendi`
+- `🔓 Oda acildi`
+- `⚠️ Oda zaten gorunur`
+- `⚠️ Oda zaten gizli`
+- `❌ Gorunurluk degistirilemedi`
+- `✅ Oda gorunur yapildi`
+- `⚠️ Oda gizlendi`
+[METİN TÜRÜ]
+Ephemeral success/error response
+[NE ZAMAN TETİKLENİR]
+Private room lock/unlock/hide/show butonlarinda
+[NE İŞE YARAR]
+Baglanti izni ve gorunurluk degisikliklerinin sonucunu bildirir
+[KİME GÖRÜNÜR]
+Oda sahibine
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2444-2575`
+[DEĞİŞKENLER]
+Yok
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`🔒 Oda kilitlendi`
+[NOT]
+`Oda gizlendi` basari durumunda yesil check yerine warning emoji ile veriliyor; ton tutarsizligi mevcut.
+
+[ID]
+PVR-005
+[GÖRÜNEN METİN]
+- Content: `Oda Devri`
+- Select placeholder: `Devredilecek uyeyi sec`
+- `❌ Oda kanali silinemedi`
+- `✅ Oda silindi`
+- `❌ Gecerli bir yeni sahip secin.`
+- `❌ Hedef uye bulunamadi.`
+- `❌ Sahiplik sadece odadaki bir uyeye devredilebilir.`
+- `❌ Hedef uye gerekli role sahip degil.`
+- `❌ Hedef kisinin zaten aktif bir odasi var.`
+- `❌ Devir isleminde hata.`
+- `✅ Oda sahipligi <@{targetId}> kullanicisina devredildi.`
+[METİN TÜRÜ]
+Ephemeral content, select placeholder, success/failure response
+[NE ZAMAN TETİKLENİR]
+Transfer ve delete butonlarinda
+[NE İŞE YARAR]
+Sahiplik devri ve oda silme akislarini yonetir
+[KİME GÖRÜNÜR]
+Oda sahibine
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2582-2610, 2692-2778`
+[DEĞİŞKENLER]
+`{targetId}` = yeni owner ID
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`✅ Oda sahipligi <@123456789> kullanicisina devredildi.`
+[NOT]
+Delete basarisinda oda channel'i de fiilen yok olur; bu metin Discord tarafinda son onaydir.
+
+[ID]
+PVR-006
+[GÖRÜNEN METİN]
+- `❌ Permit listesi guncellenemedi`
+- `❌ Reject listesi guncellenemedi`
+- `✅ Permit listesi guncellendi`
+- `✅ Reject listesi guncellendi`
+- `+{added} / -{removed}`
+- `⚠️ Gorunmeyen {count} uye korundu`
+- `✅ {n} kisi eklendi`
+- `⚠️ Zaten vardi: {mentions}`
+- `⚠️ Owner listeden ayri tutulur`
+- `Degisiklik yok`
+[METİN TÜRÜ]
+Ephemeral success/failure response
+[NE ZAMAN TETİKLENİR]
+Whitelist/reject member select menu submit'lerinde
+[NE İŞE YARAR]
+Permit/reject member listesinin sync sonucunu bildirir
+[KİME GÖRÜNÜR]
+Oda sahibine
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2786-2818`
+[DEĞİŞKENLER]
+`{added}` = eklenen uye sayisi
+`{removed}` = cikarilan uye sayisi
+`{count}` = secicide gorunmeyen ama korunmus uye sayisi
+`{n}` = legacy add modunda eklenen kisi sayisi
+`{mentions}` = zaten listede olan mention'lar
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`✅ Permit listesi guncellendi`
+`+2 / -1`
+[NOT]
+Burada hem yeni sync akisi hem de `legacyAddMode` icin eski metinler halen kodda yasiyor.
+
+[ID]
+PVR-007
+[GÖRÜNEN METİN]
+- `❌ Permit rolleri guncellenemedi`
+- `❌ Reject rolleri guncellenemedi`
+- `✅ Permit rolleri guncellendi`
+- `✅ Reject rolleri guncellendi`
+- `⚠️ Gorunmeyen {count} rol korundu`
+[METİN TÜRÜ]
+Ephemeral success/failure response
+[NE ZAMAN TETİKLENİR]
+Permit/reject role select menu submit'lerinde
+[NE İŞE YARAR]
+Odadaki rol bazli erişim listelerini gunceller
+[KİME GÖRÜNÜR]
+Oda sahibine
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2831-2846`
+[DEĞİŞKENLER]
+`{count}` = secicide gorunmeyen ama korunmus rol sayisi
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`✅ Reject rolleri guncellendi`
+[NOT]
+Member ve role akislarindaki fiil standardi benzer ama birebir ayni degil.
+
+[ID]
+PVR-008
+[GÖRÜNEN METİN]
+- Modal title: `Oda Adi`
+- Input label: `Yeni oda adi`
+- Modal title: `Kullanici Limiti`
+- Input label: `0-99 (0 = limitsiz)`
+- Default input value: `0`
+[METİN TÜRÜ]
+Modal title, modal input label, default value
+[NE ZAMAN TETİKLENİR]
+Rename veya limit butonuna basildiginda
+[NE İŞE YARAR]
+Oda adini ve user limitini kullanicidan almak icin
+[KİME GÖRÜNÜR]
+Oda sahibine modal UI olarak
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2622-2658`
+[DEĞİŞKENLER]
+Default value runtime'da mevcut limitten gelir; yoksa `0`
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Kullanici Limiti`
+[NOT]
+Butun private room UI'si textless emoji butonlar + select/modal metinleri kombinasyonuyla ilerliyor.
+
+[ID]
+PVR-009
+[GÖRÜNEN METİN]
+- `❌ Oda adi bos olamaz`
+- `❌ Oda adi guncellenemedi`
+- `✅ Oda adi guncellendi`
+- Voice room rename output: `{nextName}`
+- `❌ 0-99 arasi deger gir`
+- `❌ Limit guncellenemedi`
+- `✅ Limit guncellendi: {limit}`
+[METİN TÜRÜ]
+Ephemeral response, voice room rename output
+[NE ZAMAN TETİKLENİR]
+Rename/limit modal submit akisinda
+[NE İŞE YARAR]
+Oda adinin ve limitinin degistirildigini veya neden degismedigini bildirir
+[KİME GÖRÜNÜR]
+Ephemeral cevaplar oda sahibine
+`{nextName}` ise ses kanalini gorebilen herkese dolayli gorunur
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2852-2928`
+[DEĞİŞKENLER]
+`{nextName}` = yeni kanal adi
+`{limit}` = user limit
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`✅ Limit guncellendi: 4`
+[NOT]
+Kanal adi degisimi Discord arayuzunde direkt kanal isminde gorundugu icin bu gorev kapsaminda kullanici-facing sayildi.
+
+[ID]
+PVR-010
+[GÖRÜNEN METİN]
+- `❌ <@{memberId}> oda acabilmek icin <@&{requiredRoleId}> rolune sahip olmalisin.`
+- `❌ Mevcut odana tasinilamadi. Lutfen tekrar dene.`
+- `⚠️ Mevcut odana su an erisilemiyor. Tekrar dene.`
+- `❌ Oda olusturuldu ama tasima basarisiz oldu. Islem geri alindi, tekrar dene.`
+- Voice room create name: `{displayNameOrUsername} - oda`
+[METİN TÜRÜ]
+Transient channel text, voice room name output
+[NE ZAMAN TETİKLENİR]
+Private room olusturma trigger voice kanalina girildiginde
+[NE İŞE YARAR]
+Role gerekliligi, mevcut oda reuse ve create/move rollback durumlarini bildirir; olusan kanal adini belirler
+[KİME GÖRÜNÜR]
+Transient text -> ilgili voice channel text alanini gorebilenlere
+Kanal adi -> sunucuda kanali gorebilen herkese
+[KAYNAK]
+`api/src/voice/privateRoomService.js:2206-2328`
+[DEĞİŞKENLER]
+`{memberId}` = oda acmaya calisan uye
+`{requiredRoleId}` = gerekli rol
+`{displayNameOrUsername}` = displayName veya username
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Kirin - oda`
+[NOT]
+Transient mesajlar `sendTransient()` ile gonderilip 8 saniye sonra silinmeye calisilir.
+
+[ID]
+DYN-001
+[GÖRÜNEN METİN]
+- Dynamic custom command response: `{command_response}`
+- Mevcut artifact ornegi: `world`
+[METİN TÜRÜ]
+Channel message
+[NE ZAMAN TETİKLENİR]
+Mesaj icerigi prefix ile eslesen bir custom command oldugunda
+[NE İŞE YARAR]
+Dashboard/DB uzerinden tanimlanmis sabit komut cevaplarini kanala gonderir
+[KİME GÖRÜNÜR]
+Komutun yazildigi kanaldakilere
+[KAYNAK]
+`api/src/discordClient.js:105-114`
+`api/src/utils/cache.js:220-242`
+`api/src/interfaces/http/routes/commandRoutes.js:40-94`
+`api/artifacts/pg-p0/verify-run/data/custom_commands.ndjson:1`
+[DEĞİŞKENLER]
+`{command_response}` = DB'deki ham cevap metni
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`world`
+[NOT]
+Bu yuzey statik source dosyasinda sabit degil; dashboard/API ile degisebilir.
+
+[ID]
+DYN-002
+[GÖRÜNEN METİN]
+- Internal reaction-command DM: `Partner başvuru bilgisi: Profilini düzgün doldur, aktifliğini koru ve kuralları kabul et.`
+- Reaction action DM payload: `{payload.text}`
+- Reaction action reply payload: `<@{memberId}> {payload.text}`
+- Reaction action channel-link reply: `<@{memberId}> https://discord.com/channels/{guildId}/{channelId}`
+- Reaction action channel-link DM: `https://discord.com/channels/{guildId}/{channelId}`
+[METİN TÜRÜ]
+DM message, channel reply
+[NE ZAMAN TETİKLENİR]
+Mesaj reaksiyonu kurali match oldugunda ve aksiyon tipi `DM_SEND`, `REPLY`, `CHANNEL_LINK` veya `RUN_INTERNAL_COMMAND(partner-bilgi)` secildiginde
+[NE İŞE YARAR]
+Reaksiyona gore DM, mention'li cevap veya kanal linki gonderir
+[KİME GÖRÜNÜR]
+`DM_SEND`, `CHANNEL_LINK(dm)`, `partner-bilgi` -> hedef kullaniciya DM
+`REPLY`, `CHANNEL_LINK(reply)` -> ilgili kanaldakilere
+[KAYNAK]
+`api/src/application/reactionActions/service.js:14-16, 245-267`
+[DEĞİŞKENLER]
+`{payload.text}` = reaction rule payload text'i
+`{memberId}` = reaksiyonu yapan uye
+`{guildId}` / `{channelId}` = hedef kanal link parametreleri
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`<@123456789> Merhaba, rolun verildi.`
+[NOT]
+Mevcut `verify-run` artifact'inde yalnızca `ROLE_ADD` kuralı bulundu; DM/reply/link aksiyonlari kodda destekleniyor ama artifact verisinde aktif ornek yok.
+
+[ID]
+DYN-003
+[GÖRÜNEN METİN]
+- Dashboard raw content payload: `{content}`
+- Dashboard embed title payload: `{title}`
+- Dashboard embed description payload: `{description}`
+[METİN TÜRÜ]
+Channel message content, embed title, embed description
+[NE ZAMAN TETİKLENİR]
+Dashboard `/api/embed/send` route'u ile Discord'a mesaj atildiginda
+[NE İŞE YARAR]
+Web panelden Discord kanalina serbest icerikli mesaj/embed gonderir
+[KİME GÖRÜNÜR]
+Hedef kanaldakilere
+[KAYNAK]
+`api/src/interfaces/http/routes/embedRoutes.js:9-73`
+[DEĞİŞKENLER]
+`{content}` = plain text
+`{title}` = embed title
+`{description}` = embed description
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`Sunucu bakimi basliyor`
+[NOT]
+Bu yuzey source kodda sabit string tutmaz; tamamen dashboard istegi ile belirlenir. Image ve title URL de Discord'da gorunebilir ama metinsel olmadigi icin bu raporda ana sayima dahil edilmedi.
+
+[ID]
+DYN-004
+[GÖRÜNEN METİN]
+- `All Hail Lelouch!`
+[METİN TÜRÜ]
+Bot activity/presence text
+[NE ZAMAN TETİKLENİR]
+Bot startup veya static presence apply aninda
+[NE İŞE YARAR]
+Discord member listesinde botun activity text'ini belirler
+[KİME GÖRÜNÜR]
+Botu gorebilen tum sunucu uyelerine
+[KAYNAK]
+`api/src/config/static/server.js:72-76`
+`api/src/discordClient.js:303-316`
+`api/src/bot/presenceManager.js:170-178`
+[DEĞİŞKENLER]
+Yok
+[ÖRNEK NİHAİ GÖRÜNÜM]
+`All Hail Lelouch!`
+[NOT]
+Bu deger static config kaynakli; dashboard uzerinden degistirilemez.
+
+4. KATEGORİK SINIFLANDIRMA
+
+A) Kullanicıya direkt gorunenler
+- `MOD-001`
+- `MOD-002`
+- `MOD-003`
+- `MOD-004`
+- `MOD-005`
+- `LOG-001`
+- `HELP-001`
+- `HELP-002`
+- `HELP-003`
+- `HELP-004`
+- `EMB-001`
+- `EMB-002`
+- `LOCK-001`
+- `LOCK-002`
+- `PVR-001`
+- `PVR-010`
+- `DYN-001`
+- `DYN-002` (`REPLY` ve `CHANNEL_LINK(reply)` parcasi)
+- `DYN-003`
+- `DYN-004`
+
+B) Yetkiliye gorunenler
+- `MOD-001`
+- `MOD-002`
+- `MOD-003`
+- `MOD-004`
+- `MOD-005`
+- `LOG-001`
+- `LOG-002`
+- `EMB-001`
+- `EMB-002`
+- `EMB-003`
+- `EMB-004`
+- `EMB-005`
+- `LOCK-001`
+- `LOCK-002`
+- `PVR-002`
+- `PVR-003`
+- `PVR-004`
+- `PVR-005`
+- `PVR-006`
+- `PVR-007`
+- `PVR-008`
+- `PVR-009`
+
+C) DM olarak gidenler
+- `MOD-006`
+- `DYN-002` (`partner-bilgi`, `DM_SEND`, `CHANNEL_LINK(dm)`)
+
+D) Log kanalina gidenler
+- Bu kod tabaninda otomatik dedicated log kanalina giden sabit Discord-visible metin tespit edilmedi.
+- Log-facing/sicil-facing Discord metinleri `LOG-001` ve `LOG-002` kayitlarinda.
+
+E) Sadece ephemeral olanlar
+- `LOG-001` (`Sadece komutu yazan bakabilir.`)
+- `LOG-002`
+- `EMB-003`
+- `EMB-005`
+- `PVR-002`
+- `PVR-003`
+- `PVR-004`
+- `PVR-005`
+- `PVR-006`
+- `PVR-007`
+- `PVR-009`
+
+F) Sadece embed icinde gorunenler
+- `MOD-001`
+- `MOD-002`
+- `MOD-003`
+- `MOD-004`
+- `HELP-001`
+- `HELP-002`
+- `HELP-003`
+- `HELP-004`
+- `EMB-002` (preview embed)
+- `EMB-005` (success embed)
+- `LOCK-001` (error embed)
+- `LOCK-002`
+- `PVR-001`
+- `DYN-003` (`title` ve `description`)
+
+G) Bilesen/UI metinleri (button/select/modal)
+- `LOG-001` (`Goruntule`)
+- `LOG-002` (`Önceki`, `Sonraki`)
+- `EMB-002` (`Embed Olustur`)
+- `EMB-004`
+- `PVR-003`
+- `PVR-005` (`Devredilecek uyeyi sec`)
+- `PVR-008`
+
+H) Voice/private room sisteminde oda adi veya kanal davranisiyla iliskili gorunen ciktılar
+- `PVR-001`
+- `PVR-004`
+- `PVR-005`
+- `PVR-006`
+- `PVR-007`
+- `PVR-008`
+- `PVR-009`
+- `PVR-010`
+
+I) Hata/basarisizlik metinleri
+- `MOD-001`
+- `MOD-004`
+- `MOD-005`
+- `LOG-001` (ilgili error satirlari)
+- `EMB-001`
+- `EMB-003`
+- `EMB-005` (validation/send fail satirlari)
+- `LOCK-001`
+- `PVR-002`
+- `PVR-004` (error/warn satirlari)
+- `PVR-005` (error satirlari)
+- `PVR-006` (error/warn satirlari)
+- `PVR-007` (error/warn satirlari)
+- `PVR-009` (error satirlari)
+- `PVR-010` (error/warn satirlari)
+
+J) Basari/onay metinleri
+- `MOD-002`
+- `MOD-003`
+- `LOG-001` (`sicili hazir`)
+- `LOG-002` (kayit listeleme)
+- `EMB-005` (success)
+- `LOCK-002`
+- `PVR-004` (kilitlendi/acildi/gorunur/gizlendi)
+- `PVR-005` (silindi/devredildi)
+- `PVR-006`
+- `PVR-007`
+- `PVR-009`
+
+5. TUTARSIZLIK / KALITE ANALIZI
+
+1. En cok kullanilan ortak cevap kaliplari
+- Moderasyon tarafinda en baskin kalip `templateService` tabanli embed-author cevabi. Neredeyse tum ceza komutlari ayni gorsel/formatsal dille cevap veriyor.
+- `Kullanici bulunamadi.`, `Hatali kullanim. Komutu dogru sekilde tekrar dene.`, `Bu komutu kullanamazsin, yetkin yok.` gibi ortak guard metinleri en cok tekrar eden sablonlar.
+- Private room sisteminde butun interaction cevaplari `✅`, `❌`, `⚠️`, `🔒`, `🔓` prefix'li kisa tek satir status mesajlari olarak kurgulanmis.
+- Embed builder ve private room component akislarinda ephemeral + modal/select dil yapisi baskin.
+
+2. Ayni anlama gelen ama farkli yazilmis tutarsiz metinler
+- Yetki/hiyerarsi:
+  `Bu islem kullaniciya uygulanamadi.`
+  `@Target hedefi kicklenemiyor.`
+  `Bot bu odanin izinlerini yonetemiyor`
+  `Bu islemi tamamlamak icin Mesajlari Yonet izni gerekiyor.`
+- Yok/bulunamadi:
+  `Kullanici bulunamadi.`
+  `Hedef uye bulunamadi.`
+  `Hedef kanal bulunamadi.`
+  `Oda kaydi bulunamadi`
+  `Oda kanali bulunamadi`
+  `Sunucu bilgisi alinamadi.`
+- Basari fiilleri:
+  `basariyla gonderildi`
+  `banlandi`
+  `guncellendi`
+  `gizlendi`
+- Ceza kaldirma fiilleri:
+  `timeout kaldirildi`
+  `timeouti kaldirildi`
+  `bani kaldirildi`
+  `ban kaldirildi`
+
+3. Tonlama tutarsizliklari
+- Moderasyon public reply'lari ASCII-Turkce, kuru ve sistematik: `banlandi`, `guncellendi`, `kaldirildi`.
+- DM metinleri daha duygusal ve suslu: `İtirazın varsa, ticket açabilirsin ୭ ˚. !!`
+- Private room cevaplari emoji agirlikli ve daha UI/oyunlastirilmis: `🔒 Oda kilitlendi`, `⚠️ Oda gizlendi`
+- Yardim menusu daha resmi ve dokumantasyon dili tasiyor.
+- Bazi yerlerde gercek Turkce karakter var (`Önceki`, `İzin verilecek üyeleri seç`), bazi yerlerde tamamen ASCII transliterasyon var (`guncellendi`, `kaldirildi`, `Gecersiz`).
+
+4. Kullanici-facing ama muhtemelen erisilemeyen / dead code olan metinler
+- `Geass'ta uygulanan uyarı işlemin {executorName} tarafından kaldırıldı.` -> `warn_remove/unwarn` DM sablonu mevcut ama aktif command akisinda karsiligi gorulmedi.
+- `legacyAddMode` altindaki:
+  `✅ {n} kisi eklendi`
+  `⚠️ Zaten vardi: {mentions}`
+  `⚠️ Owner listeden ayri tutulur`
+  `Degisiklik yok`
+  hala kodda; yeni whitelist sync akisi bunlari by-pass ediyor. Eski panel/select message kalmis ise yine tetiklenebilir.
+- `message_templates` MySQL artifact verileri mevcut ama current Postgres schema ve runtime tarafinda kullanilmiyor.
+
+5. Icerikte bozuk karakter / encoding / Turkce yazim hatasi olan metinler
+- Kaynak dosyalar PowerShell ciktilarinda yer yer mojibake gorunuyor: `BaÅŸarÄ±lÄ±`, `Ä°zin`, `Ã–nceki` vb.
+- Runtime dogrulamasinda `catalog.js`, `moderationDmService.js` ve `moderation.logs.js` metinlerinin dogru render edildigi goruldu; yani bu daha cok kaynak dosya/terminal encoding goruntuleme problemi.
+- Buna ragmen private room testinde placeholder ve `Permit Yonetimi` beklentisi ile source/runtime arasinda drift oldugu icin encoding/isimlendirme riski tamamen kapatilmis degil.
+- Yazim/gramer:
+  `timeouti kaldirildi`
+  `bani kaldirildi`
+  `oda acabilmek icin`
+  `secicide gorunmuyor`
+  kaynakta genel olarak ASCII-Turkce tercih edildigi icin okunabilirlik dusuyor.
+
+6. Placeholder yanlisligi veya kullaniciya kotu gorunen teknik metinler
+- `({caseId})` formatinda case ID parantez icinde `(#191)` olarak description'a yaziliyor; teknik ama kabul edilebilir.
+- `+{added} / -{removed}` private room sync sonucu UI'da cok teknik duruyor; son kullanici icin daha acik bir dil degil.
+- `Hedef seste oldugu icin botta MoveMembers izni olmadan timeout uygulanamaz.` teknik permission adi (`MoveMembers`) son kullaniciya dogrudan gosteriliyor.
+- `Mesaj gonderilemedi: {errorMessage}` raw exception mesaji kullaniciya yansiyabiliyor.
+- Reaction link mesajlari ham Discord URL'si gonderiyor; daha aciklayici etiket yok.
+
+7. Ayni is icin birden fazla farkli hata mesaji kullanilip kullanilmadigi
+- Evet, belirgin sekilde kullaniliyor.
+- "Hedef bulunamadi" ailesi birden fazla varyanta ayrilmis.
+- Permission/hierarchy failure'lari bazen generic (`Bu islem kullaniciya uygulanamadi.`), bazen action-specific (`@Target hedefi kicklenemiyor.`), bazen UI-specific (`Bot bu odanin izinlerini yonetemiyor`) olarak geliyor.
+- Invalid input icin embed builder, moderation, private room ve dashboard taraflarinda tamamen ayri sozlukler kullaniliyor.
+
+8. Gelistirilmesi gereken metin standardizasyon alanlari
+- Public moderation reply'lari ile DM tonunun standardize edilmesi
+- ASCII-Turkce yerine ya tamamen duzgun Turkce karakterli ya da tamamen bilincli transliterasyonlu tek standart secilmesi
+- `kaldirildi`, `guncellendi`, `gorunur yapildi`, `gizlendi` gibi success fiillerinin ortak bir stil rehberine baglanmasi
+- Permission/hierarchy hatalari icin ortak, aciklayici ama teknik olmayan bir sozluk
+- Private room warning/success emoji semantiginin tutarli hale getirilmesi
+
+6. RİSKLİ / DEAD / ŞÜPHELİ METİNLER
+
+1. `api/src/bot/services/moderationDmService.js`
+- `warn_remove/unwarn` metni kodda mevcut ama aktif prefix command setinde ilgili bir komut yok.
+- Kullanici-facing DM oldugu icin gelecekte beklenmedik sekilde canlanabilir; dead-code adayi.
+
+2. `api/src/voice/privateRoomService.js`
+- `legacyAddMode` altindaki eski whitelist metinleri halen duruyor.
+- Kod artik `Uye Yonetimi` ve sync tabanli yeni akis kullanirken testte eski `Permit Yonetimi` beklentisi var.
+- Bu, eski UI branch'lerin kismen hayatta oldugunu ve metin standardizasyonunun tamamlanmadigini gosteriyor.
+
+3. `api/test/privateRoom.integration.test.js:479-489`
+- Test, source/runtime ile tam uyumlu degil.
+- `Permit Yonetimi` ve mojibake placeholder beklentileri mevcut; current source `Uye Yonetimi` ve duzeltilmis Turkce metinlere kaymis.
+- Bu fark, kullanici-facing metin envanteri ile test fixture'lari arasinda drift oldugunu dogruluyor.
+
+4. `api/artifacts/pg-p0/20260227T*/*/message_templates.*`
+- Legacy `message_templates` export'lari bulunuyor ama current schema/runtime tarafinda artik otoriter kaynak degiller.
+- Eski mesaj varyantlarini yansitabilirler; current Discord output olarak kabul edilmemeli.
+
+5. Dinamik yuzeyler
+- `DYN-001`, `DYN-002`, `DYN-003` koddan tam enumerate edilemiyor; gercek metin DB veya dashboard payload'ina bagli.
+- Bu raporda yalnizca sablon/yapi ve mevcut artifact ornekleri verildi.
+
+7. GENEL SONUÇ
+
+Kod tabani boyunca Discord'da gorunebilen tum ana metin yuzeyleri tarandi. Aktif yuzeylerin agirlik merkezi moderasyon template sistemi, private room interaction sistemi, log/sicil akisi, embed builder ve reaction-action servisidir. Slash command yoktur. Dedicated otomatik log kanali mesaji yoktur; log gorevi `DB -> .log -> ephemeral goruntuleme` modeliyle cozulmustur.
+
+Toplam 216 ayri Discord-visible string/template tespit edildi.
+- 14 adet DM metni
+- 20 adet log/sicil-facing metin
+- 70 adet embed text
+- 21 adet button/modal/select UI text
+
+En buyuk kalite riski, metin tonu ve karakter standardizasyonundaki daginikliktir:
+- Moderasyon public reply'lari ile DM dili farkli
+- ASCII-Turkce ve gercek Turkce karakterler karisik
+- Private room tarafinda eski/yeni UI isimlendirmeleri birlikte yasiyor
+
+Rapor, proje kokundeki `discord_gorunen_tum_metinler_raporu.txt` dosyasina kaydedildi.

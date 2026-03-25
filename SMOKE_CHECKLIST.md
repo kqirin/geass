@@ -114,7 +114,7 @@ Each step includes: precondition, action, expected result, and expected log sign
 ### 6.2 Validation failure (400)
 - Precondition: Open relevant form (reaction/VC/settings).
 - Action: Submit invalid snowflake/empty required field.
-- Expected result: User sees clear error message, and request id appears when returned.
+- Expected result: User sees explicit error message, and request id appears when returned.
 - Expected log: Structured route error includes `requestId` and route context.
 
 ### 6.3 Session/auth edge

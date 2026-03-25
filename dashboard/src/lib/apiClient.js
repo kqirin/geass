@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+const metaEnv = typeof import.meta !== 'undefined' && import.meta?.env ? import.meta.env : {};
+const API_BASE = metaEnv.VITE_API_BASE || 'http://localhost:3000';
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -8,7 +9,7 @@ export const apiClient = axios.create({
   timeout: 15_000,
 });
 
-export function extractApiError(error, fallback = 'Islem basarisiz') {
+export function extractApiError(error, fallback = 'İşlem başarısız') {
   return error?.response?.data?.error || fallback;
 }
 

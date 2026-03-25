@@ -1,205 +1,357 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-import { ShieldCheck, X } from 'lucide-react';
+import { Bot, Hash, Shield, ShieldAlert, Tag } from 'lucide-react';
 
 import { MODERATION_COMMANDS } from './moderation/constants';
-import { getUserLabel, normalizeIdList } from './moderation/helpers';
-import PrefixCard from './moderation/PrefixCard';
-import CommandCard from './moderation/CommandCard';
-import CommandMessageTemplates from './CommandMessageTemplates';
+import { normalizeIdList } from './moderation/helpers';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+const PRESENCE_TYPE_LABELS = {
+  CUSTOM: 'Ozel Durum',
+  PLAYING: 'Oynuyor',
+  LISTENING: 'Dinliyor',
+  WATCHING: 'Izliyor',
+  COMPETING: 'Yarisiyor',
+};
 
-export default function Moderation({ roles, modSettings, setModSettings, handleSave, guildId, showToast }) {
-  const [searchResults, setSearchResults] = useState([]);
-  const [activeSearch, setActiveSearch] = useState(null);
-  const [userMap, setUserMap] = useState({});
-  const [editorCommand, setEditorCommand] = useState('');
-  const selectableRoles = useMemo(() => (roles || []).filter((r) => r.id !== '0'), [roles]);
-
-  const storageKey = useMemo(() => `auri_user_map_${guildId || 'noguild'}`, [guildId]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) setUserMap(JSON.parse(raw));
-    } catch {}
-  }, [storageKey]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(userMap));
-    } catch {}
-  }, [storageKey, userMap]);
-
-  const handleSearch = async (value) => {
-    if (!value || value.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-
-    try {
-      const res = await axios.get(`${API_BASE}/api/settings/search-members/${guildId}?q=${encodeURIComponent(value)}`, {
-        withCredentials: true,
-      });
-      setSearchResults(Array.isArray(res.data) ? res.data : []);
-    } catch {
-      setSearchResults([]);
-    }
-  };
-
-  const resolveUserId = useCallback(
-    async (id) => {
-      if (!id || userMap[id]) return;
-
-      try {
-        const res = await axios.get(
-          `${API_BASE}/api/settings/search-members/${guildId}?q=${encodeURIComponent(id)}`,
-          {
-            withCredentials: true,
-          }
-        );
-        const first = Array.isArray(res.data) ? res.data[0] : null;
-        if (first?.id) {
-          const label = getUserLabel(first);
-          setUserMap((prev) => ({ ...prev, [first.id]: label }));
-        }
-      } catch {}
-    },
-    [guildId, userMap]
-  );
-
-  useEffect(() => {
-    const allIds = new Set();
-
-    MODERATION_COMMANDS.forEach((cmd) => {
-      normalizeIdList(modSettings[`${cmd.id}_safe_list`]).forEach((id) => allIds.add(id));
-    });
-
-    [...allIds].slice(0, 50).forEach((id) => resolveUserId(id));
-  }, [guildId, modSettings, resolveUserId]);
-
-  const addSafeUser = (cmdId, user) => {
-    const current = normalizeIdList(modSettings[`${cmdId}_safe_list`]);
-
-    if (!current.includes(user.id)) {
-      const label = getUserLabel(user);
-      setModSettings({
-        ...modSettings,
-        [`${cmdId}_safe_list`]: [...current, user.id].join(','),
-      });
-      setUserMap((prev) => ({ ...prev, [user.id]: label }));
-    }
-
-    setSearchResults([]);
-    setActiveSearch(null);
-  };
-
-  const removeSafeUser = (cmdId, id) => {
-    const newList = normalizeIdList(modSettings[`${cmdId}_safe_list`])
-      .filter((item) => item !== id)
-      .join(',');
-
-    setModSettings({ ...modSettings, [`${cmdId}_safe_list`]: newList });
-  };
+function SourceBadge({ meta, scopeLabel = null }) {
+  const source = String(meta?.source || 'config').toUpperCase();
 
   return (
-    <div className="space-y-10 pb-20">
-      <PrefixCard
-        prefix={modSettings.prefix}
-        onChange={(value) => setModSettings({ ...modSettings, prefix: value })}
-      />
-
-      <div className="grid grid-cols-2 gap-8">
-        {MODERATION_COMMANDS.map((cmd) => (
-          <CommandCard
-            key={cmd.id}
-            cmd={cmd}
-            roles={roles}
-            modSettings={modSettings}
-            setModSettings={setModSettings}
-            userMap={userMap}
-            searchResults={searchResults}
-            activeSearch={activeSearch}
-            setActiveSearch={setActiveSearch}
-            onSearch={handleSearch}
-            onAddSafeUser={addSafeUser}
-            onRemoveSafeUser={removeSafeUser}
-            getUserLabel={getUserLabel}
-            onEditMessages={setEditorCommand}
-          />
-        ))}
-      </div>
-
-      <div className="bg-[#16162a]/80 p-10 rounded-[2.5rem] border border-white/5 flex flex-col gap-6 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/5 rounded-2xl text-cyan-300 text-sm font-black">#</div>
-            <span className="font-black italic text-xl uppercase tracking-tight text-white">TAG AUTO ROL</span>
-          </div>
-          <button
-            onClick={() => setModSettings({ ...modSettings, tag_enabled: !Boolean(modSettings.tag_enabled) })}
-            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${
-              Boolean(modSettings.tag_enabled) ? 'bg-purple-600 shadow-[0_0_15px_#9333ea]' : 'bg-gray-800'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 bg-white rounded-full transition-transform duration-300 ${
-                Boolean(modSettings.tag_enabled) ? 'translate-x-6' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-cyan-300 uppercase ml-2 tracking-widest">Verilecek Rol</label>
-            <select
-              value={modSettings.tag_role || ''}
-              onChange={(e) => setModSettings({ ...modSettings, tag_role: e.target.value })}
-              className="w-full bg-[#0c0c16] border border-white/5 rounded-2xl p-4 text-xs font-bold outline-none focus:border-cyan-500/40 text-white transition-all"
-            >
-              <option value="">Rol Sec...</option>
-              {selectableRoles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="text-xs text-gray-400">
-          Aciksa: kullanici bu sunucuyu primary guild olarak etiketle kullaniyorsa rol verilir; kapatirsa veya baska sunucuya gecerse rol geri alinir.
-        </div>
-      </div>
-
-      <button
-        onClick={handleSave}
-        className="w-full py-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-[3rem] font-black text-2xl uppercase italic tracking-tighter shadow-[0_20px_40px_rgba(147,51,234,0.3)] transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-5 text-white"
-      >
-        <ShieldCheck size={32} /> GUVENLIK AYARLARINI GUNCELLE
-      </button>
-
-      {editorCommand && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center">
-          <div className="w-full max-w-[1250px] max-h-[92vh] overflow-auto rounded-[2rem] border border-white/15 bg-[#0e0f20] shadow-[0_40px_80px_rgba(0,0,0,0.55)]">
-            <div className="sticky top-0 z-10 px-6 py-4 border-b border-white/10 bg-[#0e0f20]/95 backdrop-blur-sm flex items-center justify-between">
-              <div className="text-sm font-black uppercase tracking-widest text-white/80">Komut Mesajlari: {editorCommand}</div>
-              <button
-                onClick={() => setEditorCommand('')}
-                className="w-9 h-9 rounded-xl border border-white/20 bg-black/20 text-white/80 hover:text-white flex items-center justify-center"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="p-6">
-              <CommandMessageTemplates guildId={guildId} showToast={showToast} commandName={editorCommand} />
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-cyan-100">
+      <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1">
+        Read Only
+      </span>
+      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-gray-300">
+        Source: {source}
+      </span>
+      {scopeLabel ? (
+        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-gray-300">
+          Scope: {scopeLabel}
+        </span>
+      ) : null}
     </div>
   );
 }
 
+function StatusBadge({ enabled }) {
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.25em] ${
+        enabled
+          ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'
+          : 'border-rose-400/20 bg-rose-500/10 text-rose-100'
+      }`}
+    >
+      {enabled ? 'Aktif' : 'Kapali'}
+    </span>
+  );
+}
+
+function SnapshotRow({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/6 bg-[#0d0d17] px-4 py-3">
+      <div className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">{label}</div>
+      <div className="mt-2 text-sm font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function IdChipList({ ids, resolveLabel, emptyLabel = 'Kayit yok' }) {
+  if (!ids.length) {
+    return (
+      <div className="rounded-2xl border border-white/6 bg-[#0d0d17] px-4 py-4 text-xs text-gray-500">
+        {emptyLabel}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {ids.map((id, index) => (
+        <div
+          key={`${id}-${index}`}
+          className="rounded-xl border border-white/8 bg-[#0d0d17] px-3 py-2 text-[11px] font-bold text-white"
+        >
+          {resolveLabel(id, index)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatRoleLabel(roleId, roleNameMap) {
+  const normalizedRoleId = String(roleId || '').trim();
+  if (!normalizedRoleId) return 'Atanmamis';
+
+  const roleName = roleNameMap.get(normalizedRoleId);
+  return roleName ? roleName : `${normalizedRoleId} (sunucuda yok)`;
+}
+
+function formatSafeListValue(ids) {
+  if (!ids.length) return 'Bos';
+  return `${ids.length} uye`;
+}
+
+function formatLimitValue(limit) {
+  const normalized = Number(limit || 0);
+  if (!Number.isFinite(normalized) || normalized <= 0) return 'Kapali';
+  return `${normalized} / saat`;
+}
+
+export default function Moderation({
+  roles,
+  modSettings,
+  settingsMeta,
+  botPresenceSettings,
+  botPresenceMeta,
+  botPresenceLoadState,
+}) {
+  const roleNameMap = new Map(
+    (Array.isArray(roles) ? roles : [])
+      .filter((role) => String(role?.id || '').trim() !== '0')
+      .map((role) => [String(role.id), role.name])
+  );
+  const staticCommands = MODERATION_COMMANDS.filter((command) => !command.messageOnly);
+  const hierarchyRoleIds = normalizeIdList(modSettings.staff_hierarchy_roles);
+  const hardProtectedRoleIds = normalizeIdList(modSettings.hard_protected_roles);
+  const hardProtectedUserIds = normalizeIdList(modSettings.hard_protected_users);
+  const tagEnabled = Boolean(modSettings.tag_enabled);
+  const botPresenceEnabled = Boolean(botPresenceSettings?.enabled);
+  const presenceType = String(botPresenceSettings?.type || 'CUSTOM');
+  const presenceText = String(botPresenceSettings?.text || '').trim();
+  const presenceStatusText =
+    botPresenceLoadState?.status === 'loading'
+      ? 'Global bot presence yukleniyor.'
+      : botPresenceLoadState?.status === 'error'
+        ? botPresenceLoadState?.error || 'Global bot presence okunamadi.'
+        : 'Global bot presence config snapshot olarak gosteriliyor.';
+
+  return (
+    <div className="space-y-8 pb-20">
+      <div className="rounded-[2.5rem] border border-cyan-400/10 bg-[#16162a]/80 p-10 shadow-2xl">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-[780px] space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-cyan-500/10 p-3 text-cyan-300">
+                <Shield size={20} />
+              </div>
+              <div className="font-black italic text-2xl uppercase tracking-tight text-white">
+                Policy Snapshot
+              </div>
+            </div>
+            <div className="text-sm leading-relaxed text-gray-300">
+              Dashboard artik static moderation, hierarchy, safe list, prefix, tag ve bot presence
+              ayarlarinin write authority katmani degil. Bu sekme yalnizca config-authoritative
+              policy snapshot gosterir.
+            </div>
+          </div>
+
+          <SourceBadge meta={settingsMeta} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="rounded-[2rem] border border-white/6 bg-[#16162a]/80 p-8 shadow-2xl">
+          <div className="flex items-center gap-4">
+            <div className="rounded-2xl bg-white/5 p-3 text-purple-200">
+              <Hash size={18} />
+            </div>
+            <div>
+              <div className="font-black italic text-xl uppercase tracking-tight text-white">Prefix</div>
+              <div className="mt-1 text-xs text-gray-400">
+                Bot komut on eki config dosyasindan okunur.
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 rounded-[2rem] border border-white/6 bg-[#0d0d17] px-6 py-5 text-3xl font-black text-white">
+            {String(modSettings.prefix || '.')}
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/6 bg-[#16162a]/80 p-8 shadow-2xl">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-white/5 p-3 text-amber-200">
+                <Tag size={18} />
+              </div>
+              <div>
+                <div className="font-black italic text-xl uppercase tracking-tight text-white">
+                  Tag Auto Rol
+                </div>
+                <div className="mt-1 text-xs text-gray-400">
+                  Static feature toggle ve bagli rol buradan degistirilemez.
+                </div>
+              </div>
+            </div>
+
+            <StatusBadge enabled={tagEnabled} />
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <SnapshotRow label="Rol" value={formatRoleLabel(modSettings.tag_role, roleNameMap)} />
+            <SnapshotRow label="Tag Metni" value={String(modSettings.tag_text || 'Atanmamis')} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[2.5rem] border border-white/6 bg-[#16162a]/80 p-10 shadow-2xl">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-white/5 p-3 text-cyan-200">
+                <Bot size={18} />
+              </div>
+              <div className="font-black italic text-xl uppercase tracking-tight text-white">
+                Global Bot Presence
+              </div>
+            </div>
+            <div className="text-xs text-gray-400">{presenceStatusText}</div>
+          </div>
+
+          <SourceBadge meta={botPresenceMeta} scopeLabel={botPresenceMeta?.scope || 'global'} />
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SnapshotRow label="Durum" value={botPresenceEnabled ? 'Aktif' : 'Kapali'} />
+          <SnapshotRow
+            label="Tur"
+            value={PRESENCE_TYPE_LABELS[presenceType] || presenceType || 'Atanmamis'}
+          />
+          <SnapshotRow label="Metin" value={presenceText || 'Bos'} />
+        </div>
+      </div>
+
+      <div className="rounded-[2.5rem] border border-white/6 bg-[#16162a]/80 p-10 shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl bg-white/5 p-3 text-cyan-200">
+            <ShieldAlert size={18} />
+          </div>
+          <div>
+            <div className="font-black italic text-xl uppercase tracking-tight text-white">
+              Static Moderation Policies
+            </div>
+            <div className="mt-1 text-xs text-gray-400">
+              Moderation rol, penalty rol, safe list, static toggle ve limit ayarlari config
+              snapshot olarak gosterilir.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {staticCommands.map((command) => {
+            const Icon = command.Icon;
+            const enabled = Boolean(modSettings[`${command.id}_enabled`]);
+            const safeIds = normalizeIdList(modSettings[`${command.id}_safe_list`]);
+
+            return (
+              <div
+                key={command.id}
+                className="rounded-[2rem] border border-white/6 bg-[#0d0d17] p-6"
+              >
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-2xl bg-white/5 p-3">
+                      <Icon size={18} className={command.iconClass} />
+                    </div>
+                    <div>
+                      <div className="font-black italic text-lg uppercase tracking-tight text-white">
+                        {command.name}
+                      </div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-gray-500">
+                        Config-backed policy
+                      </div>
+                    </div>
+                  </div>
+
+                  <StatusBadge enabled={enabled} />
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <SnapshotRow
+                    label="Yetkili Rol"
+                    value={formatRoleLabel(modSettings[`${command.id}_role`], roleNameMap)}
+                  />
+                  <SnapshotRow
+                    label="Safe List"
+                    value={formatSafeListValue(safeIds)}
+                  />
+                  <SnapshotRow
+                    label="Saatlik Limit"
+                    value={formatLimitValue(modSettings[`${command.id}_limit`])}
+                  />
+                  {command.penalty ? (
+                    <SnapshotRow
+                      label="Penalty Rol"
+                      value={formatRoleLabel(modSettings[`${command.id}_penalty_role`], roleNameMap)}
+                    />
+                  ) : null}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">
+                    Safe List Detayi
+                  </div>
+                  <IdChipList
+                    ids={safeIds}
+                    emptyLabel="Safe list bos."
+                    resolveLabel={(id) => id}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-[2.5rem] border border-white/6 bg-[#16162a]/80 p-10 shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl bg-white/5 p-3 text-cyan-200">
+            <Shield size={18} />
+          </div>
+          <div>
+            <div className="font-black italic text-xl uppercase tracking-tight text-white">
+              Hierarchy ve Hard Protected
+            </div>
+            <div className="mt-1 text-xs text-gray-400">
+              Staff hierarchy, hard protected role listesi ve kullanici listesi dashboard uzerinden
+              degistirilemez.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="space-y-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">
+              Staff Hierarchy
+            </div>
+            <IdChipList
+              ids={hierarchyRoleIds}
+              emptyLabel="Hierarchy tanimsiz."
+              resolveLabel={(id, index) => `#${index + 1} ${formatRoleLabel(id, roleNameMap)}`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">
+              Hard Protected Roller
+            </div>
+            <IdChipList
+              ids={hardProtectedRoleIds}
+              emptyLabel="Hard protected rol yok."
+              resolveLabel={(id) => formatRoleLabel(id, roleNameMap)}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500">
+              Hard Protected Kullanici ID
+            </div>
+            <IdChipList
+              ids={hardProtectedUserIds}
+              emptyLabel="Hard protected kullanici yok."
+              resolveLabel={(id) => id}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

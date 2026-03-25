@@ -1,0 +1,251 @@
+{
+  "generatedAt": "2026-02-27T12:40:49.934Z",
+  "rowCount": 11,
+  "pkSetSha256": "e69b5d8f0d09d7126775e11bf805a7c3e14a3875310948f769740af317207eec",
+  "globalRuleViolations": 0,
+  "uppercaseViolations": 0,
+  "unknownKeyRows": 0,
+  "rows": [
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "ban",
+      "updated_at": "2026-02-25T05:08:01.000Z",
+      "raw_json_sha256": "11eabe45372b54b7fa9e8765e7348707e7f3f99e434ec4633e5fad3b5c7eecff",
+      "canonical_json_sha256": "a85163a86517b23bec458a4fcdbc1a6b0bbc3e4098f2f8015d6045b9f022dc20",
+      "key_list": [
+        "abuseLock",
+        "alreadyApplied",
+        "invalidUsage",
+        "limitReached",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "clear",
+      "updated_at": "2026-02-25T05:13:00.000Z",
+      "raw_json_sha256": "3c9526919693d32e34b4d337f99719b5c963d15452c03d94132182e9fd727188",
+      "canonical_json_sha256": "991bf6c273c3fb3f453372a08545843d03b52cfaa9c7c447734b525b5053aafc",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "jail",
+      "updated_at": "2026-02-25T05:04:14.000Z",
+      "raw_json_sha256": "ffaad1dce4b7a9dc46d77c92510c42d67503812e9ed82db45f617f0b2c6bed6b",
+      "canonical_json_sha256": "1411f3b572f5d71128d16074dd45923f61b304364ea8642592272446b6fdd8bb",
+      "key_list": [
+        "abuseLock",
+        "alreadyApplied",
+        "invalidUsage",
+        "limitReached",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "kick",
+      "updated_at": "2026-02-25T05:00:08.000Z",
+      "raw_json_sha256": "0c73e5257fc29daff7fab62a9b584f41cec754beb964d660770d55cbee394ed5",
+      "canonical_json_sha256": "0b8d68b8a5cfddb301217391b0d42f833689c138d78a2ec2afde4c76c976960d",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "operationNotAllowed",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "mute",
+      "updated_at": "2026-02-25T04:47:09.000Z",
+      "raw_json_sha256": "0bdf9638dbaa15ab3ed905b69752cafee117c2c585fdfd977deb8febd7caa2d7",
+      "canonical_json_sha256": "16b44bf89adb4a6bdafe66b1e9cc2ce2b6f6d2985ec33b0f02d3a72774c5f58d",
+      "key_list": [
+        "abuseLock",
+        "alreadyApplied",
+        "invalidUsage",
+        "limitReached",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "unban",
+      "updated_at": "2026-02-25T05:26:18.000Z",
+      "raw_json_sha256": "3a6109bd7878968eea4b72ea12beaf251968f89c8e5455d4231e7ff43ecc335c",
+      "canonical_json_sha256": "c21deab71823e0af56975ebc6a0e334804bd0ca997e162acb693dddf882b3eb6",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "notApplied",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "unjail",
+      "updated_at": "2026-02-25T05:26:31.000Z",
+      "raw_json_sha256": "eaee0fdbfbc1a2c75737256ee9ae797d30edc0577903f732589e2955fc8a0c22",
+      "canonical_json_sha256": "c9978f93a30d638b8fde0d616afbf40381af0b3d3e891d67a05255b0720209ca",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "notApplied",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "unmute",
+      "updated_at": "2026-02-25T05:27:02.000Z",
+      "raw_json_sha256": "762f2819e6899d76db084f65c92604fdaa1e48ebf9b3bd4ea4ed2e361dddac24",
+      "canonical_json_sha256": "5ef02932840e28bd1202a19ae4448934eabd2ee6554f890b188749ac161d39ba",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "notApplied",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "vcmute",
+      "updated_at": "2026-02-25T04:55:54.000Z",
+      "raw_json_sha256": "d87109183356c862044a0bf84485680c6d3cfaf8ae7f5185c70363bf4e483041",
+      "canonical_json_sha256": "dba728777a09239ee5b676375d0706203c4b5957eb87afdf7ef1374852aba7fb",
+      "key_list": [
+        "abuseLock",
+        "alreadyApplied",
+        "invalidUsage",
+        "limitReached",
+        "notInVoice",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "vcunmute",
+      "updated_at": "2026-02-25T05:26:51.000Z",
+      "raw_json_sha256": "60dccaa308b18d49f86a51ce2a37214f6f9a4190689a2119419bda380d2b2c5b",
+      "canonical_json_sha256": "832a46dc036a92c3dd9ebe83bd1b805bc6b939df7b8168611f9952a87000a06e",
+      "key_list": [
+        "invalidUsage",
+        "limitReached",
+        "notApplied",
+        "notInVoice",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    },
+    {
+      "guild_id": "1471242450386550835",
+      "scope": "command",
+      "command_name": "warn",
+      "updated_at": "2026-02-26T15:21:55.000Z",
+      "raw_json_sha256": "9ec338ab68828a1472c41fcc751dc4f40947b88160aa5bf31c43a6f69069286a",
+      "canonical_json_sha256": "ebfd9584ee884f379fcf7063988d9b40865fddf9e083ef871d5481934ac6a092",
+      "key_list": [
+        "abuseLock",
+        "invalidUsage",
+        "limitReached",
+        "permissionDenied",
+        "roleInsufficient",
+        "roleNotConfigured",
+        "success",
+        "systemError",
+        "targetRoleHigher",
+        "userNotFound"
+      ],
+      "unknown_keys": []
+    }
+  ]
+}

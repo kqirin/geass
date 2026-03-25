@@ -1,8 +1,26 @@
-export default function DashboardHeader({ guilds, guildId, canSelectGuild, onGuildChange, onLogout }) {
+export default function DashboardHeader({
+  guilds,
+  guildId,
+  activeGuildName,
+  singleGuildMode,
+  canSelectGuild,
+  onGuildChange,
+  onLogout,
+}) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-6">
-        <div className="text-3xl font-black italic tracking-tight">AURI</div>
+    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
+        <div>
+          <div className="text-3xl font-black italic tracking-tight">GEASS</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">
+            <span>{activeGuildName || 'Sunucu'}</span>
+            {singleGuildMode ? (
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-cyan-100">
+                Single Guild
+              </span>
+            ) : null}
+          </div>
+        </div>
 
         {canSelectGuild ? (
           <select
@@ -16,11 +34,7 @@ export default function DashboardHeader({ guilds, guildId, canSelectGuild, onGui
               </option>
             ))}
           </select>
-        ) : (
-          <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-widest text-gray-200">
-            {guilds.find((g) => g.id === guildId)?.name || 'Sunucu'}
-          </div>
-        )}
+        ) : null}
       </div>
 
       <button
