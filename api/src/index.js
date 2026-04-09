@@ -1,3 +1,4 @@
+const http = require('node:http');
 const db = require('./database');
 const cache = require('./utils/cache');
 const moderationBot = require('./bot/moderation');
@@ -219,6 +220,29 @@ async function main() {
     logError,
     targetGuildId: config.discord.targetGuildId || null,
   });
+  const healthPort = String(process.env.PORT || '').trim();
+  let healthServer = null;
+  if (healthPort) {
+    healthServer = http.createServer((_req, res) => {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.end('ok');
+    });
+    await new Promise((resolve, reject) => {
+      const onError = (err) => {
+        healthServer.off('listening', onListening);
+        reject(err);
+      };
+      const onListening = () => {
+        healthServer.off('error', onError);
+        resolve();
+      };
+      healthServer.once('error', onError);
+      healthServer.once('listening', onListening);
+      healthServer.listen(Number(healthPort));
+    });
+    logSystem(`Health listener: ${healthPort} portunda hazir.`, 'INFO');
+  }
 
   setStartupPhase('bot_instance_lock_acquire', logSystem);
   let botInstanceLockConn = await waitForStartupGate(
@@ -242,6 +266,22 @@ async function main() {
     shuttingDown = true;
     logDiag('process.shutdown_start', buildProcessDiagContext({ signal, exitCode }), 'WARN');
     logSystem(`Kapanis sinyali alindi: ${signal}`, 'INFO');
+
+    if (healthServer) {
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
+        healthServer.close(() => {
+          logSystem('Health server kapatildi', 'INFO');
+          finish();
+        });
+        setTimeout(finish, 5000).unref();
+      });
+    }
 
     try {
       penaltyScheduler.shutdown();
