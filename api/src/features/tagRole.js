@@ -43,10 +43,19 @@ function createTagRoleFeature({
     return `${member.guild.id}:${member.id}`;
   }
 
+  const pendingRerun = new Set();
+
   function withMemberLock(member, task) {
     const key = buildMemberKey(member);
     const existing = inFlight.get(key);
-    if (existing) return existing;
+    if (existing) {
+      pendingRerun.add(key);
+      return existing.then(() => {
+        if (!pendingRerun.has(key)) return undefined;
+        pendingRerun.delete(key);
+        return withMemberLock(member, task);
+      });
+    }
 
     const promise = Promise.resolve()
       .then(task)

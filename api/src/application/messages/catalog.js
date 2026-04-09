@@ -12,8 +12,6 @@ const MESSAGE_COMMANDS = [
   { name: 'unjail', label: 'Unjail' },
   { name: 'ban', label: 'Ban' },
   { name: 'unban', label: 'Unban' },
-  { name: 'vcmute', label: 'VC Mute' },
-  { name: 'vcunmute', label: 'VC Unmute' },
 ];
 
 const TEMPLATE_KEY_META = {

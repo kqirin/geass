@@ -29,10 +29,16 @@ const perfMonitor = require('./utils/perfMonitor');
 const BOT_INSTANCE_LOCK_NAME = 'auri_discord_gateway_lock';
 const PG_LOCK_KEY_SQL = "('x' || substr(md5(?), 1, 16))::bit(64)::bigint";
 let startupPhase = 'bootstrap_init';
+const LOG_STARTUP_PHASES =
+  config.nodeEnv !== 'production' ||
+  isDiagModeEnabled() ||
+  String(process.env.LOG_STARTUP_PHASE || '').trim() === '1';
 
 function setStartupPhase(phase, logSystem = () => {}) {
   startupPhase = String(phase || 'unknown_phase');
-  logSystem(`startup_phase=${startupPhase}`, 'INFO');
+  if (LOG_STARTUP_PHASES) {
+    logSystem(`startup_phase=${startupPhase}`, 'INFO');
+  }
 }
 
 async function acquireBotInstanceLock() {
@@ -67,7 +73,7 @@ async function releaseBotInstanceLock(lockConn, logError = () => { }) {
   }
 }
 
-function buildStartupRetryOptions(logSystem, logError, { attempts, baseDelayMs, maxDelayMs }) {
+function buildStartupRetryOptions(logSystem, _logError, { attempts, baseDelayMs, maxDelayMs }) {
   return {
     attempts,
     baseDelayMs,
@@ -82,16 +88,6 @@ function buildStartupRetryOptions(logSystem, logError, { attempts, baseDelayMs, 
         )}]`,
         'WARN'
       );
-    },
-    onFinalFailure: ({ taskName, attempt, attempts: totalAttempts, err, code, retryable }) => {
-      logError('startup_retry_exhausted', err, {
-        feature: 'startup',
-        action: taskName,
-        attempt,
-        attempts: totalAttempts,
-        code: code || 'unknown',
-        retryable: Boolean(retryable),
-      });
     },
   };
 }

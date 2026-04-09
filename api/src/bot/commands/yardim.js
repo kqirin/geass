@@ -35,8 +35,6 @@ async function run(ctx) {
         value:
           `**${prefix}mute <@kullan\u0131c\u0131> [s\u00fcre] [sebep]**\nKullan\u0131c\u0131ya Discord native timeout uygular. S\u00fcre verilmezse otomatik olarak 28 g\u00fcn uygulan\u0131r.\n*\u00d6rnek: \`${prefix}mute @Kullanici Ortami germek\`*\n\n` +
           `**${prefix}unmute <@kullan\u0131c\u0131> [sebep]**\nKullan\u0131c\u0131n\u0131n susturmas\u0131n\u0131 kald\u0131r\u0131r.\n*\u00d6rnek: \`${prefix}unmute @Kullanici\`*\n\n` +
-          `**${prefix}vcmute <@kullan\u0131c\u0131> [s\u00fcre] [sebep]**\nKullan\u0131c\u0131y\u0131 sesli kanallarda susturur.\n*\u00d6rnek: \`${prefix}vcmute @Kullanici 30m Sesi bozmak\`*\n\n` +
-          `**${prefix}vcunmute <@kullan\u0131c\u0131> [sebep]**\nKullan\u0131c\u0131n\u0131n sesli kanal susturmas\u0131n\u0131 kald\u0131r\u0131r.\n*\u00d6rnek: \`${prefix}vcunmute @Kullanici\`*\n\n` +
           `**${prefix}jail <@kullan\u0131c\u0131> [s\u00fcre] [sebep]**\nKullan\u0131c\u0131y\u0131 Underworld'e g\u00f6nderir.\n*\u00d6rnek: \`${prefix}jail @Kullanici 1d \u015e\u00fcpheli hareket\`*\n\n` +
           `**${prefix}unjail <@kullan\u0131c\u0131> [sebep]**\nKullan\u0131c\u0131y\u0131 Underworld'den \u00e7\u0131kar\u0131r.\n*\u00d6rnek: \`${prefix}unjail @Kullanici\`*`,
         inline: false,
@@ -45,6 +43,10 @@ async function run(ctx) {
         name: 'Sistem ve Bilgi',
         value:
           `**${prefix}log <@kullan\u0131c\u0131 / ID>**\nKullan\u0131c\u0131n\u0131n sicil kay\u0131tlar\u0131n\u0131 g\u00f6r\u00fcnt\u00fcler.\n*\u00d6rnek: \`${prefix}log @Kullanici\`*\n\n` +
+          `**${prefix}embed [#kanal] [mesaj]**\nSe\u00e7ilen kanala embed mesaj g\u00f6nderimini ba\u015flat\u0131r.\n*\u00d6rnek: \`${prefix}embed #genel Duyuru metni\`*\n\n` +
+          `**${prefix}lock**\nBulunulan yaz\u0131 kanal\u0131n\u0131 kilitler.\n*\u00d6rnek: \`${prefix}lock\`*\n\n` +
+          `**${prefix}unlock**\nBulunulan yaz\u0131 kanal\u0131n\u0131n kilidini kald\u0131r\u0131r.\n*\u00d6rnek: \`${prefix}unlock\`*\n\n` +
+          `**${prefix}durum**\nBotun anl\u0131k durum bilgilerini g\u00f6r\u00fcnt\u00fcler.\n*\u00d6rnek: \`${prefix}durum\`*\n\n` +
           `**${prefix}yardim**\nYard\u0131m men\u00fcs\u00fcn\u00fc g\u00f6r\u00fcnt\u00fcler.\n*\u00d6rnek: \`${prefix}yardim\`*`,
         inline: false,
       }

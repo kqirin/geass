@@ -17,7 +17,6 @@ const ENABLED_ACTION_SPECS = Object.freeze([
   { enabledKey: 'kick_enabled', roleKey: 'kick_role' },
   { enabledKey: 'jail_enabled', roleKey: 'jail_role', requiredExtraRoleKeys: ['jail_penalty_role'] },
   { enabledKey: 'ban_enabled', roleKey: 'ban_role' },
-  { enabledKey: 'vcmute_enabled', roleKey: 'vcmute_role' },
   { enabledKey: 'lock_enabled', roleKey: 'lock_role' },
   { enabledKey: 'tag_enabled', roleKey: 'tag_role' },
   { enabledKey: 'private_vc_enabled', roleKey: 'private_vc_required_role', requiredChannelKeys: ['private_vc_hub_channel'] },
@@ -76,9 +75,16 @@ async function resolveEmoji(client, guild, emojiId) {
 async function validateGuildStaticConfig(client, guildId) {
   const errors = [];
   const warnings = [];
+  const roleValidationErrorSet = new Set();
   const guild = await resolveGuild(client, guildId);
   const settings = getStaticGuildSettings(guildId);
   const bindings = getStaticGuildBindings(guildId);
+  const pushRoleValidationError = (roleKey, roleId) => {
+    const message = `Role bulunamadi veya gecersiz: ${roleKey}=${roleId} (guild=${guildId})`;
+    if (roleValidationErrorSet.has(message)) return;
+    roleValidationErrorSet.add(message);
+    errors.push(message);
+  };
 
   if (!guild) {
     errors.push(`Static config guild bulunamadi: ${guildId}`);
@@ -99,7 +105,7 @@ async function validateGuildStaticConfig(client, guildId) {
 
     const primaryRole = await resolveRole(guild, primaryRoleId);
     if (!primaryRole || primaryRole.id === guild.id || primaryRole.name === '@everyone') {
-      errors.push(`Role bulunamadi veya gecersiz: ${spec.roleKey}=${primaryRoleId} (guild=${guildId})`);
+      pushRoleValidationError(spec.roleKey, primaryRoleId);
     }
 
     for (const extraRoleKey of spec.requiredExtraRoleKeys || []) {
@@ -110,7 +116,7 @@ async function validateGuildStaticConfig(client, guildId) {
       }
       const extraRole = await resolveRole(guild, extraRoleId);
       if (!extraRole || extraRole.id === guild.id || extraRole.name === '@everyone') {
-        errors.push(`Role bulunamadi veya gecersiz: ${extraRoleKey}=${extraRoleId} (guild=${guildId})`);
+        pushRoleValidationError(extraRoleKey, extraRoleId);
       }
     }
 
@@ -136,7 +142,6 @@ async function validateGuildStaticConfig(client, guildId) {
     'jail_role',
     'jail_penalty_role',
     'ban_role',
-    'vcmute_role',
     'lock_role',
     'tag_role',
     'private_vc_required_role',
@@ -145,7 +150,7 @@ async function validateGuildStaticConfig(client, guildId) {
     if (!roleId) continue;
     const role = await resolveRole(guild, roleId);
     if (!role || role.id === guild.id || role.name === '@everyone') {
-      errors.push(`Role bulunamadi veya gecersiz: ${key}=${roleId} (guild=${guildId})`);
+      pushRoleValidationError(key, roleId);
     }
   }
 
@@ -242,7 +247,7 @@ async function validateGuildStaticConfig(client, guildId) {
   return { guildId, errors, warnings };
 }
 
-async function validateStaticConfig(client, logSystem = () => {}, logError = () => {}) {
+async function validateStaticConfig(client, logSystem = () => {}, _logError = () => {}) {
   const errors = [];
   const warnings = [];
   const guildIds = getConfiguredStaticGuildIds();
@@ -284,7 +289,11 @@ async function validateStaticConfig(client, logSystem = () => {}, logError = () 
 
   if (errors.length > 0) {
     const error = new Error(`Static config validation failed: ${errors.join(' | ')}`);
-    logError('static_config_validation_failed', error, { errors, warnings });
+    const firstError = String(errors[0] || 'unknown').slice(0, 220);
+    logSystem(
+      `static_config_validation_failed: ${firstError} (errors=${errors.length}, warnings=${warnings.length})`,
+      'ERROR'
+    );
     throw error;
   }
 

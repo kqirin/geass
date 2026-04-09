@@ -202,7 +202,6 @@ test('static guild validation warns but does not fail when startup voice channel
           kick_enabled: false,
           jail_enabled: false,
           ban_enabled: false,
-          vcmute_enabled: false,
           startup_voice_channel_id: '60001',
         },
       },

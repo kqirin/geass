@@ -16,8 +16,6 @@ const jailCommand = require('./commands/jail');
 const unjailCommand = require('./commands/unjail');
 const banCommand = require('./commands/ban');
 const unbanCommand = require('./commands/unban');
-const vcmuteCommand = require('./commands/vcmute');
-const vcunmuteCommand = require('./commands/vcunmute');
 const yardimCommand = require('./commands/yardim');
 const embedCommand = require('./commands/embed');
 const lockCommand = require('./commands/lock');
@@ -71,8 +69,6 @@ const commandHandlers = {
   unjail: unjailCommand,
   ban: banCommand,
   unban: unbanCommand,
-  vcmute: vcmuteCommand,
-  vcunmute: vcunmuteCommand,
   yardim: yardimCommand,
   'yard\u0131m': yardimCommand,
   embed: embedCommand,
@@ -90,8 +86,6 @@ const MODERATION_TARGET_COMMANDS = new Set([
   'unjail',
   'ban',
   'unban',
-  'vcmute',
-  'vcunmute',
 ]);
 function resolveTargetOptionsForCommand(command) {
   if (!MODERATION_TARGET_COMMANDS.has(command)) return null;

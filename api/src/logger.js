@@ -1,11 +1,20 @@
 const { config } = require('./config');
 
+function isBlankText(value) {
+  return String(value ?? '').trim().length === 0;
+}
+
 function logSystem(message, type = "INFO") {
   if (config.logging.format === 'json') {
+    if (message && typeof message === 'object' && !Array.isArray(message)) {
+      if (Object.keys(message).length === 0) return;
+    } else if (isBlankText(message)) {
+      return;
+    }
     const payload =
       message && typeof message === 'object' && !Array.isArray(message)
         ? message
-        : { msg: String(message) };
+        : { msg: String(message).trim() };
     console.log(
       JSON.stringify({
         ts: new Date().toISOString(),
@@ -20,7 +29,8 @@ function logSystem(message, type = "INFO") {
   const text =
     message && typeof message === 'object' && !Array.isArray(message)
       ? JSON.stringify(message)
-      : String(message);
+      : String(message).trim();
+  if (isBlankText(text)) return;
   const logMsg = `[${time}] [${type}] ${text}`;
   console.log(logMsg);
 }

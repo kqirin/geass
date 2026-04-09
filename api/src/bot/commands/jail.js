@@ -30,13 +30,10 @@ async function run(ctx) {
   }
 
   const durationMs = parseTime(cleanArgs[0]);
-  const durationText = durationMs ? formatTime(cleanArgs[0]) : 'Suresiz';
+  const durationText = durationMs ? formatTime(cleanArgs[0]) : 'Süresiz';
   let reason = durationMs ? cleanArgs.slice(1).join(' ') : cleanArgs.join(' ');
   reason = reason || 'Yok';
   let caseId = null;
-  const snapshotRoles = authoritativeTarget.roles.cache
-    .filter((r) => r.id !== message.guild.id && r.id !== jailRole)
-    .map((r) => r.id);
 
   const executionResult = await executeModerationAction({
     message,
@@ -45,9 +42,13 @@ async function run(ctx) {
     mutationKey: `moderation:${message.guild.id}:${authoritativeTarget.id}`,
     beforePrimaryAction: async () => check.consumeLimit(),
     primaryAction: async () => {
+      const freshTarget = await message.guild.members.fetch(authoritativeTarget.id);
+      const snapshotRoles = freshTarget.roles.cache
+        .filter((r) => r.id !== message.guild.id && r.id !== jailRole)
+        .map((r) => r.id);
       await penaltyScheduler.upsertRoleSnapshot(message.guild.id, authoritativeTarget.id, snapshotRoles);
       try {
-        await authoritativeTarget.roles.set([jailRole]);
+        await freshTarget.roles.set([jailRole]);
       } catch (err) {
         await penaltyScheduler.deleteRoleSnapshot(message.guild.id, authoritativeTarget.id).catch(() => {});
         throw err;
@@ -55,7 +56,7 @@ async function run(ctx) {
     },
     sideEffects: [
       {
-        label: 'log kaydi',
+        label: 'log kaydı',
         requiredForSuccess: true,
         run: async () => {
           caseId = await logAction(message.guild.id, authoritativeTarget.id, message.author.id, 'jail', reason, durationText);
@@ -64,7 +65,7 @@ async function run(ctx) {
       ...(durationMs
         ? [
             {
-              label: 'ceza zamanlayici',
+              label: 'ceza zamanlayıcı',
               requiredForSuccess: true,
               run: async () => {
                 await penaltyScheduler.schedulePenalty(message.client, {

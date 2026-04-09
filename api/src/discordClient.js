@@ -317,10 +317,7 @@ function createDiscordClient({
       }
     }
 
-    logSystem(
-      `========================================\n[READY] ${c.user.tag} BOT & PANEL HAZIR!\n========================================`,
-      'SUCCESS'
-    );
+    logSystem(`[READY] ${c.user?.tag || 'unknown'} bot hazir (guilds=${c.guilds?.cache?.size || 0})`, 'INFO');
 
     await resolvedStartupVoiceAutoJoiner?.run?.({
       trigger: 'discord_ready',

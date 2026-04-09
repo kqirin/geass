@@ -11,8 +11,6 @@ const COMMAND_FILES = [
   'unjail',
   'ban',
   'unban',
-  'vcmute',
-  'vcunmute',
   'yardim',
   'embed',
   'lock',

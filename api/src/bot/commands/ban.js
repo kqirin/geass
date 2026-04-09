@@ -96,7 +96,7 @@ async function run(ctx) {
           if (String(err?.code || '') === 'GUILD_BAN_NOT_PRESENT') throw err;
           logVerifyFailure('ban_command_post_action_verify_failed', err, {
             guildId: message.guild.id,
-            targetId: freshTarget.id,
+            targetId: freshTarget?.id || resolvedTargetId,
           }, 'WARN');
           confirmedBan = null;
         }
@@ -117,10 +117,10 @@ async function run(ctx) {
     },
     sideEffects: [
       {
-        label: 'log kaydi',
+        label: 'log kaydı',
         requiredForSuccess: true,
         run: async () => {
-          caseId = await logAction(message.guild.id, resolvedTargetId, message.author.id, 'ban', reason, 'Suresiz');
+          caseId = await logAction(message.guild.id, resolvedTargetId, message.author.id, 'ban', reason, 'Süresiz');
         },
       },
     ],

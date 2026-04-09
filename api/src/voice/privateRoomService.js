@@ -2436,7 +2436,8 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
     const [, buttonAction = '', roomToken = ''] = String(interaction.customId || '').split(':');
     if (['lockon', 'lockoff', 'hide', 'show', 'delete'].includes(buttonAction)) {
       await deferInteractionUpdate(interaction);
-    } else if (['allow', 'remove', 'transfer'].includes(buttonAction)) {
+    } else if (['allow', 'remove'].includes(buttonAction)) {
+      await deferInteractionReply(interaction);
     }
 
     const buttonNeedsRoom = [

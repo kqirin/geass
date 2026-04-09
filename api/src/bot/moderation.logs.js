@@ -35,7 +35,7 @@ async function createLogContent(guild, logUserId, actionNames, page = 0) {
   let logText = `\`\`\`ml\nID: ${logUserId} Sicil Kaydı (Sayfa ${safePage + 1}/${totalPages})\n`;
 
   for (const log of currentLogs) {
-    const actionTr = actionNames[log.action_type] || String(log.action_type).toUpperCase();
+    const actionTr = actionNames?.[log.action_type] || String(log.action_type).toUpperCase();
     let modName = log.moderator_id;
 
     const modObj = guild.members.cache.get(log.moderator_id);
