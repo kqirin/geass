@@ -9,7 +9,6 @@ const { config } = require('./config');
 
 const { logSystem, logError, installConsoleDebugHooks } = require('./logger');
 const { createDiscordClient } = require('./discordClient');
-const { createHttpApp } = require('./httpApp');
 const { createPrivateRoomService } = require('./voice/privateRoomService');
 const { createBotPresenceManager } = require('./bot/presenceManager');
 const { validateConfig } = require('./bootstrap/validateConfig');
@@ -221,19 +220,6 @@ async function main() {
     targetGuildId: config.discord.targetGuildId || null,
   });
 
-  const app = createHttpApp({
-    client,
-    moderationBot,
-    reactionActionService,
-    tagRoleFeature,
-    privateRoomService,
-    botPresenceManager,
-    logSystem,
-    logError,
-  });
-
-  const port = config.port;
-  let server = null;
   setStartupPhase('bot_instance_lock_acquire', logSystem);
   let botInstanceLockConn = await waitForStartupGate(
     'acquire_bot_instance_lock',
@@ -256,24 +242,6 @@ async function main() {
     shuttingDown = true;
     logDiag('process.shutdown_start', buildProcessDiagContext({ signal, exitCode }), 'WARN');
     logSystem(`Kapanis sinyali alindi: ${signal}`, 'INFO');
-
-    if (server) {
-      await new Promise((resolve) => {
-        let done = false;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          resolve();
-        };
-
-        server.close(() => {
-          logSystem('HTTP server kapatildi', 'INFO');
-          finish();
-        });
-
-        setTimeout(finish, 5000).unref();
-      });
-    }
 
     try {
       penaltyScheduler.shutdown();
@@ -432,8 +400,6 @@ async function main() {
   logSystem('Reaction actions servisi hazir', 'INFO');
   logSystem('Tag role feature hazir', 'INFO');
 
-  setStartupPhase('http_listen', logSystem);
-  server = app.listen(port, () => logSystem(`Web API: ${port} portunda hazir.`, 'INFO'));
   setStartupPhase('startup_completed', logSystem);
 }
 
@@ -445,4 +411,3 @@ main().catch((err) => {
   });
   process.exit(1);
 });
-

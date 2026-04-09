@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --no-warnings --no-deprecation src/index.js",
     "migrate": "node -e \"const {runMigrations}=require('./src/migrations'); const {logSystem,logError}=require('./src/logger'); runMigrations(logSystem,logError).then(()=>{console.log('migrate-ok')}).catch(()=>process.exit(1))\"",
-    "smoke": "node -e \"require('./src/httpApp'); require('./src/discordClient'); require('./src/bot/moderation'); require('./src/voice/voiceManager'); console.log('smoke-ok')\"",
+    "smoke": "node -e \"require('./src/discordClient'); require('./src/bot/moderation'); require('./src/voice/voiceManager'); console.log('smoke-ok')\"",
     "lint": "eslint src test --max-warnings=0",
     "test": "node --test",
     "format:check": "prettier --check \"src/utils/retry.js\" \"src/application/reactionActions/emoji.js\" \"test/**/*.js\""
@@ -17,12 +17,8 @@
   "type": "commonjs",
   "dependencies": {
     "@discordjs/voice": "^0.18.0",
-    "axios": "^1.13.5",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.6",
     "discord.js": "^14.25.1",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1",
     "pg": "^8.19.0"
   },
   "devDependencies": {

@@ -15,17 +15,9 @@ Both services are compatible with this codebase. Main requirement is PostgreSQL 
 
 Set at least these values in the Railway API service:
 - `NODE_ENV=production`
-- `PORT=3000`
-- `TRUST_PROXY=1`
 - `LOG_FORMAT=json`
 - `TOKEN=...`
 - `TARGET_GUILD_ID=...`
-- `CLIENT_ID=...`
-- `CLIENT_SECRET=...`
-- `REDIRECT_URI=https://<railway-domain>/api/auth/callback`
-- `SESSION_SECRET=<min 16 chars random>`
-- `CORS_ORIGIN=https://<dashboard-domain>`
-- `FRONTEND_URL=https://<dashboard-domain>`
 - `DATABASE_URL=postgresql://...?...sslmode=require`
 - `DB_SSL=1`
 

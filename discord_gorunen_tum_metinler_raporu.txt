@@ -9,7 +9,6 @@ Bu repo aktif olarak Node.js + discord.js tabanli tek-sunucu odakli bir bot/API 
 - Embed olusturucu button/modal akisi: `api/src/bot/commands/embed.js`
 - Kanal kilitleme/acma embedleri: `api/src/bot/commands/channelLock.helpers.js`
 - Mesaj reaksiyonu kurallari ile ureen DM/reply/link mesajlari: `api/src/application/reactionActions/service.js`
-- Dashboard/API tarafindan Discord'a gonderilen dinamik embed/metin payloadlari: `api/src/interfaces/http/routes/embedRoutes.js`
 - DB tabanli custom command cevabi: `api/src/discordClient.js` + `api/src/utils/cache.js`
 - Discord presence/activity metni: `api/src/config/static/server.js` + `api/src/bot/presenceManager.js`
 
@@ -35,7 +34,6 @@ Taranan temel kaynaklar:
 - `api/src/application/messages/*.js`
 - `api/src/application/reactionActions/*.js`
 - `api/src/voice/*.js`
-- `api/src/interfaces/http/routes/*.js`
 - `api/src/config/static/*.js`
 - `api/src/features/tagRole.js`
 - `api/src/postgresSchema.js`
@@ -963,20 +961,19 @@ Channel message
 [NE ZAMAN TETİKLENİR]
 Mesaj icerigi prefix ile eslesen bir custom command oldugunda
 [NE İŞE YARAR]
-Dashboard/DB uzerinden tanimlanmis sabit komut cevaplarini kanala gonderir
+DB uzerinden tanimlanmis sabit komut cevaplarini kanala gonderir
 [KİME GÖRÜNÜR]
 Komutun yazildigi kanaldakilere
 [KAYNAK]
 `api/src/discordClient.js:105-114`
 `api/src/utils/cache.js:220-242`
-`api/src/interfaces/http/routes/commandRoutes.js:40-94`
 `api/artifacts/pg-p0/verify-run/data/custom_commands.ndjson:1`
 [DEĞİŞKENLER]
 `{command_response}` = DB'deki ham cevap metni
 [ÖRNEK NİHAİ GÖRÜNÜM]
 `world`
 [NOT]
-Bu yuzey statik source dosyasinda sabit degil; dashboard/API ile degisebilir.
+Bu yuzey statik source dosyasinda sabit degil; DB kaydi ile degisebilir.
 
 [ID]
 DYN-002
@@ -1008,29 +1005,8 @@ Mevcut `verify-run` artifact'inde yalnızca `ROLE_ADD` kuralı bulundu; DM/reply
 
 [ID]
 DYN-003
-[GÖRÜNEN METİN]
-- Dashboard raw content payload: `{content}`
-- Dashboard embed title payload: `{title}`
-- Dashboard embed description payload: `{description}`
-[METİN TÜRÜ]
-Channel message content, embed title, embed description
-[NE ZAMAN TETİKLENİR]
-Dashboard `/api/embed/send` route'u ile Discord'a mesaj atildiginda
-[NE İŞE YARAR]
-Web panelden Discord kanalina serbest icerikli mesaj/embed gonderir
-[KİME GÖRÜNÜR]
-Hedef kanaldakilere
-[KAYNAK]
-`api/src/interfaces/http/routes/embedRoutes.js:9-73`
-[DEĞİŞKENLER]
-`{content}` = plain text
-`{title}` = embed title
-`{description}` = embed description
-[ÖRNEK NİHAİ GÖRÜNÜM]
-`Sunucu bakimi basliyor`
-[NOT]
-Bu yuzey source kodda sabit string tutmaz; tamamen dashboard istegi ile belirlenir. Image ve title URL de Discord'da gorunebilir ama metinsel olmadigi icin bu raporda ana sayima dahil edilmedi.
-
+[DURUM]
+Dashboard/http surface kaldirildigi icin bu dinamik yuzey artik aktif degil.
 [ID]
 DYN-004
 [GÖRÜNEN METİN]
@@ -1075,7 +1051,6 @@ A) Kullanicıya direkt gorunenler
 - `PVR-010`
 - `DYN-001`
 - `DYN-002` (`REPLY` ve `CHANNEL_LINK(reply)` parcasi)
-- `DYN-003`
 - `DYN-004`
 
 B) Yetkiliye gorunenler
@@ -1137,7 +1112,6 @@ F) Sadece embed icinde gorunenler
 - `LOCK-001` (error embed)
 - `LOCK-002`
 - `PVR-001`
-- `DYN-003` (`title` ve `description`)
 
 G) Bilesen/UI metinleri (button/select/modal)
 - `LOG-001` (`Goruntule`)
@@ -1259,7 +1233,7 @@ J) Basari/onay metinleri
 - Evet, belirgin sekilde kullaniliyor.
 - "Hedef bulunamadi" ailesi birden fazla varyanta ayrilmis.
 - Permission/hierarchy failure'lari bazen generic (`Bu islem kullaniciya uygulanamadi.`), bazen action-specific (`@Target hedefi kicklenemiyor.`), bazen UI-specific (`Bot bu odanin izinlerini yonetemiyor`) olarak geliyor.
-- Invalid input icin embed builder, moderation, private room ve dashboard taraflarinda tamamen ayri sozlukler kullaniliyor.
+- Invalid input icin embed builder, moderation ve private room taraflarinda tamamen ayri sozlukler kullaniliyor.
 
 8. Gelistirilmesi gereken metin standardizasyon alanlari
 - Public moderation reply'lari ile DM tonunun standardize edilmesi
@@ -1289,7 +1263,7 @@ J) Basari/onay metinleri
 - Eski mesaj varyantlarini yansitabilirler; current Discord output olarak kabul edilmemeli.
 
 5. Dinamik yuzeyler
-- `DYN-001`, `DYN-002`, `DYN-003` koddan tam enumerate edilemiyor; gercek metin DB veya dashboard payload'ina bagli.
+- `DYN-001`, `DYN-002` koddan tam enumerate edilemiyor; gercek metin DB payload'ina bagli.
 - Bu raporda yalnizca sablon/yapi ve mevcut artifact ornekleri verildi.
 
 7. GENEL SONUÇ

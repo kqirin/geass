@@ -16,7 +16,6 @@ function toBoolean(value, fallback = false) {
 
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: toNumber(process.env.PORT, 3000, { min: 1, max: 65535 }),
   trustProxy: toBoolean(process.env.TRUST_PROXY, false),
   logging: {
     format: process.env.LOG_FORMAT === 'json' ? 'json' : 'text',
@@ -27,11 +26,6 @@ const config = {
     startupVoiceChannelId: process.env.STARTUP_VOICE_CHANNEL_ID || null,
   },
   oauth: {
-    clientId: process.env.CLIENT_ID || '',
-    clientSecret: process.env.CLIENT_SECRET || '',
-    redirectUri: process.env.REDIRECT_URI || 'http://localhost:3000/api/auth/callback',
-    corsOrigin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173',
-    sessionSecret: process.env.SESSION_SECRET || '',
     singleGuildId: process.env.SINGLE_GUILD_ID || process.env.GUILD_ID || null,
   },
   db: {
@@ -61,13 +55,6 @@ const config = {
     unauthMaxAttempts: toNumber(process.env.UNAUTH_MAX_ATTEMPTS, 8, { min: 1, max: 200 }),
     unauthBlockMs: toNumber(process.env.UNAUTH_BLOCK_MS, 120_000, { min: 1000, max: 60 * 60_000 }),
   },
-  metrics: {
-    token: process.env.METRICS_TOKEN || '',
-  },
 };
 
 module.exports = { config };
-
-discord: {
-  token: process.env.TOKEN
-}

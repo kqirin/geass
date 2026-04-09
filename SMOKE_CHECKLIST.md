@@ -46,8 +46,8 @@ Each step includes: precondition, action, expected result, and expected log sign
 ## 3) Reaction Actions
 
 ### 3.1 Create rule
-- Precondition: Admin session in dashboard; target message exists.
-- Action: Create reaction rule (unicode or custom emoji) with role action.
+- Precondition: Target message exists and reaction rule storage is accessible.
+- Action: Insert a reaction rule (unicode or custom emoji) with role action.
 - Expected result: Rule saved, emoji placed on message, rule appears in list.
 - Expected log: No `reaction_rule_create_failed` / no runtime exception.
 
@@ -103,36 +103,3 @@ Each step includes: precondition, action, expected result, and expected log sign
 - Expected result: Tag role removed.
 - Expected log: No repeated skip spam; throttled warnings only when needed.
 
-## 6) Dashboard (settings + validation + requestId)
-
-### 6.1 Settings save success
-- Precondition: Authenticated admin session.
-- Action: Save moderation/weekly/reaction settings with valid inputs.
-- Expected result: Success toast shown.
-- Expected log: No route error entries.
-
-### 6.2 Validation failure (400)
-- Precondition: Open relevant form (reaction/VC/settings).
-- Action: Submit invalid snowflake/empty required field.
-- Expected result: User sees explicit error message, and request id appears when returned.
-- Expected log: Structured route error includes `requestId` and route context.
-
-### 6.3 Session/auth edge
-- Precondition: Expired cookie/session.
-- Action: Trigger API action from dashboard.
-- Expected result: Redirect or unauthorized message; no silent failure.
-- Expected log: Standard 401/403 behavior without secret leakage.
-
-## 7) `/api/health`
-
-### 7.1 Payload safety
-- Precondition: API running.
-- Action: `GET /api/health`.
-- Expected result: Only minimal fields (`ok`, `ts`, `checks`, `features`, `guildCount`) returned.
-- Expected log: No secret/env/sql/stack data in response.
-
-### 7.2 Header + polling behavior
-- Precondition: Dashboard open.
-- Action: Inspect health response headers and observe polling.
-- Expected result: `Cache-Control: no-store, max-age=0`; polling is graceful and visibility-aware.
-- Expected log: No health-related log spam under normal polling.

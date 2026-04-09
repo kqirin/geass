@@ -224,9 +224,11 @@ const BASE_TEMPLATE_DEFAULTS = {
 const COMMAND_TEMPLATE_DEFAULTS = {
   warn: {
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} uyarıldı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
   },
   mute: {
     success: { embedTitle: '(süre: {time}, sebep: {reason}) ({caseId})', content: '{target} susturuldu.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [süre] [sebep]` — Süre opsiyonel. Örnek: `{command} @Kullanici 10m Spam`' },
     alreadyApplied: { content: '{target} zaten aktif olarak susturulmuş.' },
     durationRequired: { content: 'Susturma işlemi için süre belirtmelisiniz.' },
     invalidDuration: { content: 'Geçersiz süre girdiniz. Örnek: 10m, 1h, 7d.' },
@@ -241,26 +243,32 @@ const COMMAND_TEMPLATE_DEFAULTS = {
   },
   unmute: {
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} susturması kaldırıldı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     notApplied: { content: '{target} zaten aktif olarak susturulmuş değil.' },
   },
   kick: {
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} sunucudan çıkarıldı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     operationNotAllowed: { content: '{target} sunucudan çıkarılamıyor.' },
   },
   jail: {
     success: { embedTitle: '(süre: {time}, sebep: {reason}) ({caseId})', content: '{target} Underworld\'e gönderildi.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [süre] [sebep]` — Örnek: `{command} @Kullanici 1d Şüpheli hareket`' },
     alreadyApplied: { content: '{target} zaten Underworld\'de.' },
   },
   unjail: {
     success: { embedTitle: '', content: '{target} Underworld\'den çıkarıldı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     notApplied: { content: '{target} zaten Underworld\'de değil.' },
   },
   ban: {
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} yasaklandı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı|ID> [sebep]`' },
     alreadyApplied: { content: '{target} zaten yasaklı.' },
   },
   unban: {
     success: { embedTitle: '', content: '{target} yasağı kaldırıldı.' },
+    invalidUsage: { content: 'Kullanım: `{command} <kullanıcı_ID> [sebep]` — Kullanıcı ID gereklidir.' },
     notApplied: { content: '{target} zaten yasaklı değil.' },
   },
   vcmute: {
