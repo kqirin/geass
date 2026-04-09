@@ -12,11 +12,11 @@ const {
 
 const ENABLED_ACTION_SPECS = Object.freeze([
   { enabledKey: 'log_enabled', roleKey: 'log_role' },
-  { enabledKey: 'warn_enabled', roleKey: 'warn_role' },
-  { enabledKey: 'mute_enabled', roleKey: 'mute_role' },
-  { enabledKey: 'kick_enabled', roleKey: 'kick_role' },
-  { enabledKey: 'jail_enabled', roleKey: 'jail_role', requiredExtraRoleKeys: ['jail_penalty_role'] },
-  { enabledKey: 'ban_enabled', roleKey: 'ban_role' },
+  { enabledKey: 'warn_enabled' },
+  { enabledKey: 'mute_enabled' },
+  { enabledKey: 'kick_enabled' },
+  { enabledKey: 'jail_enabled', requiredExtraRoleKeys: ['jail_penalty_role'] },
+  { enabledKey: 'ban_enabled' },
   { enabledKey: 'lock_enabled', roleKey: 'lock_role' },
   { enabledKey: 'tag_enabled', roleKey: 'tag_role' },
   { enabledKey: 'private_vc_enabled', roleKey: 'private_vc_required_role', requiredChannelKeys: ['private_vc_hub_channel'] },
@@ -97,15 +97,17 @@ async function validateGuildStaticConfig(client, guildId) {
 
   for (const spec of ENABLED_ACTION_SPECS) {
     if (settings[spec.enabledKey] !== true) continue;
-    const primaryRoleId = settings[spec.roleKey];
-    if (!primaryRoleId) {
-      errors.push(`Eksik zorunlu static config: ${spec.roleKey} (guild=${guildId})`);
-      continue;
-    }
+    if (spec.roleKey) {
+      const primaryRoleId = settings[spec.roleKey];
+      if (!primaryRoleId) {
+        errors.push(`Eksik zorunlu static config: ${spec.roleKey} (guild=${guildId})`);
+        continue;
+      }
 
-    const primaryRole = await resolveRole(guild, primaryRoleId);
-    if (!primaryRole || primaryRole.id === guild.id || primaryRole.name === '@everyone') {
-      pushRoleValidationError(spec.roleKey, primaryRoleId);
+      const primaryRole = await resolveRole(guild, primaryRoleId);
+      if (!primaryRole || primaryRole.id === guild.id || primaryRole.name === '@everyone') {
+        pushRoleValidationError(spec.roleKey, primaryRoleId);
+      }
     }
 
     for (const extraRoleKey of spec.requiredExtraRoleKeys || []) {
@@ -135,13 +137,8 @@ async function validateGuildStaticConfig(client, guildId) {
 
   for (const key of [
     'log_role',
-    'warn_role',
-    'mute_role',
     'mute_penalty_role',
-    'kick_role',
-    'jail_role',
     'jail_penalty_role',
-    'ban_role',
     'lock_role',
     'tag_role',
     'private_vc_required_role',

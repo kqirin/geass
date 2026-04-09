@@ -6,7 +6,7 @@ Each step includes: precondition, action, expected result, and expected log sign
 ## 1) Moderation (mute/jail/unmute/unjail)
 
 ### 1.1 Timed mute
-- Precondition: Test guild has `mute_role`; moderator command permission enabled.
+- Precondition: Moderator has Discord `ModerateMembers` permission.
 - Action: Use mute command with duration (example: `!mute @user 1m test`).
 - Expected result: Target receives mute role; case/log entry created.
 - Expected log: Moderation action log with `action=mute`, `guildId`, `userId`.

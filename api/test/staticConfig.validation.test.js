@@ -101,8 +101,8 @@ test('authoritative settings ignore runtime overrides for static keys', () => {
       '10001': {
         settings: {
           prefix: '!',
-          warn_enabled: true,
-          warn_role: '20001',
+          log_enabled: true,
+          log_role: '20001',
         },
       },
     },
@@ -111,12 +111,12 @@ test('authoritative settings ignore runtime overrides for static keys', () => {
   try {
     const merged = staticConfig.buildAuthoritativeSettings('10001', {
       prefix: '?',
-      warn_role: '99999',
+      log_role: '99999',
       legacy_runtime_flag: 'x',
     });
 
     assert.equal(merged.prefix, '!');
-    assert.equal(merged.warn_role, '20001');
+    assert.equal(merged.log_role, '20001');
     assert.equal(merged.legacy_runtime_flag, 'x');
   } finally {
     restore();
@@ -128,8 +128,8 @@ test('static config validation fails on missing role bindings and duplicate emoj
     guilds: {
       '10001': {
         settings: {
-          warn_enabled: true,
-          warn_role: '99999',
+          log_enabled: true,
+          log_role: '99999',
           private_vc_enabled: true,
           private_vc_hub_channel: '30001',
           private_vc_required_role: '20001',
@@ -163,8 +163,8 @@ test('static config validation fails when required single-guild target config is
       guilds: {
         '10001': {
           settings: {
-            warn_enabled: true,
-            warn_role: '20001',
+            log_enabled: true,
+            log_role: '20001',
           },
         },
       },
@@ -197,7 +197,6 @@ test('static guild validation warns but does not fail when startup voice channel
         settings: {
           log_enabled: false,
           warn_enabled: true,
-          warn_role: '20001',
           mute_enabled: false,
           kick_enabled: false,
           jail_enabled: false,

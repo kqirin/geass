@@ -22,6 +22,14 @@ const HIERARCHY_CHECK_COMMANDS = new Set([
   'vcmute',
 ]);
 
+const MODERATION_NATIVE_ACTOR_PERMISSIONS = Object.freeze({
+  warn: 'ModerateMembers',
+  mute: 'ModerateMembers',
+  kick: 'KickMembers',
+  ban: 'BanMembers',
+  jail: 'BanMembers',
+});
+
 function normalizeIdListValue(rawValue) {
   return String(rawValue || '')
     .split(',')
@@ -159,6 +167,11 @@ function createPermissionService({ config, auditLogger = null }) {
       safeList: normalizeSafeListValue(getCmdSetting(settings, bucket, 'safe_list', '')),
       limit: getCmdSetting(settings, bucket, 'limit', 0),
     };
+  }
+
+  function resolveNativeActorPermission(actionBucket) {
+    const key = String(actionBucket || '').trim().toLowerCase();
+    return MODERATION_NATIVE_ACTOR_PERMISSIONS[key] || null;
   }
 
   async function resolveAuthoritativeActorMember(message, actorId) {
@@ -346,6 +359,7 @@ function createPermissionService({ config, auditLogger = null }) {
     limit,
     safeList,
     allowedRole,
+    allowAbuseLock = true,
     actorMember,
     consume = false,
   }) {
@@ -397,6 +411,19 @@ function createPermissionService({ config, auditLogger = null }) {
     };
 
     if (current && current.count >= ABUSE_THRESHOLD) {
+      if (!allowAbuseLock) {
+        return {
+          ok: false,
+          stage: 'rate_limit',
+          reasonCode: 'rate_limited',
+          details: {
+            ...baseDetails,
+            abuseLock: false,
+            abuseLockSkipped: true,
+          },
+        };
+      }
+
       let removedRole = false;
       let removalErrorCode = null;
 
@@ -473,6 +500,7 @@ function createPermissionService({ config, auditLogger = null }) {
     const commandName = String(actionCommand || cmdType || '').trim().toLowerCase() || safeCmdType;
     const actionConfig = buildActionConfig(settings, safeCmdType);
     const actionBucket = actionConfig.actionBucket;
+    const nativeActorPermission = resolveNativeActorPermission(actionBucket);
     const safeListIds = normalizeIdListValue(actionConfig.safeList);
     const actorIsSafeListed = actorId ? safeListIds.includes(String(actorId)) : false;
     const normalizedExecution = normalizeExecution(execution);
@@ -559,7 +587,7 @@ function createPermissionService({ config, auditLogger = null }) {
 
     const bypassRoleRestriction = Boolean(safeListBypassesRoleRestriction && actorIsSafeListed);
 
-    if (!actionConfig.allowedRole && !bypassRoleRestriction) {
+    if (!nativeActorPermission && !actionConfig.allowedRole && !bypassRoleRestriction) {
       const { shouldReply } = registerUnauthorizedAttempt(guildId, actorId, commandName);
       return deny({
         stage: 'command_gate',
@@ -584,7 +612,19 @@ function createPermissionService({ config, auditLogger = null }) {
       });
     }
 
-    if (!bypassRoleRestriction && actionConfig.allowedRole) {
+    if (nativeActorPermission && !actorMember.permissions?.has?.(nativeActorPermission)) {
+      const { shouldReply } = registerUnauthorizedAttempt(guildId, actorId, commandName);
+      return deny({
+        stage: 'command_gate',
+        reasonCode: 'missing_command_permission',
+        templateKey: 'permissionDenied',
+        iconUser: message.author,
+        details: { missing: 'native_actor_permission', requiredPermission: nativeActorPermission },
+        suppressReply: !shouldReply,
+      });
+    }
+
+    if (!nativeActorPermission && !bypassRoleRestriction && actionConfig.allowedRole) {
       const requiredRole =
         authoritativeActorRoleCheck === true || actionConfig.allowedRole
           ? await resolveAuthoritativeAllowedRole(message, actionConfig.allowedRole)
@@ -784,6 +824,7 @@ function createPermissionService({ config, auditLogger = null }) {
       limit: actionConfig.limit,
       safeList: actionConfig.safeList,
       allowedRole: actionConfig.allowedRole,
+      allowAbuseLock: !nativeActorPermission || Boolean(actionConfig.allowedRole),
       actorMember,
     };
 

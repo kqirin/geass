@@ -223,10 +223,14 @@ const BASE_TEMPLATE_DEFAULTS = {
 
 const COMMAND_TEMPLATE_DEFAULTS = {
   warn: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} uyarıldı.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
   },
   mute: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(süre: {time}, sebep: {reason}) ({caseId})', content: '{target} susturuldu.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [süre] [sebep]` — Süre opsiyonel. Örnek: `{command} @Kullanici 10m Spam`' },
     alreadyApplied: { content: '{target} zaten aktif olarak susturulmuş.' },
@@ -242,31 +246,43 @@ const COMMAND_TEMPLATE_DEFAULTS = {
     },
   },
   unmute: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} susturması kaldırıldı.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     notApplied: { content: '{target} zaten aktif olarak susturulmuş değil.' },
   },
   kick: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} sunucudan çıkarıldı.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     operationNotAllowed: { content: '{target} sunucudan çıkarılamıyor.' },
   },
   jail: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(süre: {time}, sebep: {reason}) ({caseId})', content: '{target} Underworld\'e gönderildi.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [süre] [sebep]` — Örnek: `{command} @Kullanici 1d Şüpheli hareket`' },
     alreadyApplied: { content: '{target} zaten Underworld\'de.' },
   },
   unjail: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '', content: '{target} Underworld\'den çıkarıldı.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı> [sebep]`' },
     notApplied: { content: '{target} zaten Underworld\'de değil.' },
   },
   ban: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '(sebep: {reason}) ({caseId})', content: '{target} yasaklandı.' },
     invalidUsage: { content: 'Kullanım: `{command} <@kullanıcı|ID> [sebep]`' },
     alreadyApplied: { content: '{target} zaten yasaklı.' },
   },
   unban: {
+    roleInsufficient: { content: 'Bu komutu kullanmak icin gerekli Discord iznine sahip degilsiniz.' },
+    roleNotConfigured: { content: 'Bu komut icin gerekli sunucu ayarlari tamamlanmamis.' },
     success: { embedTitle: '', content: '{target} yasağı kaldırıldı.' },
     invalidUsage: { content: 'Kullanım: `{command} <kullanıcı_ID> [sebep]` — Kullanıcı ID gereklidir.' },
     notApplied: { content: '{target} zaten yasaklı değil.' },

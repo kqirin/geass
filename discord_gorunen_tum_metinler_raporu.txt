@@ -69,8 +69,8 @@ Dogrulama icin yapilan ek kontroller:
 MOD-001
 [GÖRÜNEN METİN]
 - `Bu komutu kullanamazsin, yetkin yok.`
-- `Bu komut icin rolun yetmiyor.`
-- `Bu komut icin gerekli rol ayari yapilmamis.`
+- `Bu komutu kullanmak icin gerekli Discord iznine sahip degilsin.`
+- `Bu komut icin gerekli sunucu ayari tamamlanmamis.`
 - `Bu kullanicinin rolu senden yuksek.`
 - `Bu islem kullaniciya uygulanamadi.`
 - `Limit doldu. Saatlik limit: {limit}.`
@@ -81,7 +81,7 @@ MOD-001
 [METİN TÜRÜ]
 Prefix command embed author text, permission/validation/system error
 [NE ZAMAN TETİKLENİR]
-Tum temel moderasyon komutlarinda yetki, rol, limit, hedef, kullanim veya sistem hatasi oldugunda
+Tum temel moderasyon komutlarinda yetki/izin, limit, hedef, kullanim veya sistem hatasi oldugunda
 [NE İŞE YARAR]
 Ortak guard ve hata cevabi verir
 [KİME GÖRÜNÜR]
