@@ -310,7 +310,7 @@ async function run(ctx) {
     },
     sideEffects: [
       {
-        label: 'log kaydi',
+        label: 'log kaydı',
         requiredForSuccess: true,
         run: async () => {
           caseId = await logAction(message.guild.id, resolvedTargetId, message.author.id, 'mute', reason, durationText);

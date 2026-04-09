@@ -12,7 +12,7 @@ async function run({ message, target, targetId, targetMention, actionNames, veri
   const logUserId = String(target?.id || targetId || '').trim();
   if (!logUserId) {
     return message.reply({
-      content: 'Kullanıcı bulunamadı. ୭ ˚. !!',
+      content: 'Kullanıcı belirtin: etiket veya ID girin. ୭ ˚. !!',
       allowedMentions: { parse: [] },
     }).catch(() => null);
   }
@@ -32,7 +32,7 @@ async function run({ message, target, targetId, targetMention, actionNames, veri
   let inviteMsg = null;
   try {
     inviteMsg = await message.channel.send({
-      content: `**${targetMention}** sicili hazır. ⋆˚࿔`,
+      content: `**${targetMention}** sicili hazır. Görüntüle butonuna tıklayın. ⋆˚࿔`,
       components: [viewButton]
     });
   } catch {

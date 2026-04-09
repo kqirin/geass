@@ -118,7 +118,7 @@ async function validateInteractionActor(interaction, token) {
 }
 
 async function run(ctx) {
-  const { message, cleanArgs } = ctx;
+  const { message, cleanArgs, prefix } = ctx;
 
   if (!hasManageMessagesPermission(message)) {
     return message
@@ -135,7 +135,7 @@ async function run(ctx) {
   if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
     return message
       .reply({
-        content: 'Geçerli bir metin kanalı belirtin. Örnek: `.embed #kanal` ୭ ˚. !!',
+        content: `Geçerli bir metin kanalı belirtin. Örnek: \`${prefix || '.'}embed #kanal\` ୭ ˚. !!`,
         allowedMentions: { parse: [] },
       })
       .catch(() => {});
@@ -300,8 +300,8 @@ async function handleInteraction(interaction) {
       if (flow.normalContent) sendPayload.content = flow.normalContent.slice(0, 2000);
       await targetChannel.send(sendPayload);
       consumePendingFlow(token);
-    } catch (err) {
-      return replyError(interaction, `Mesaj gönderilemedi: ${err?.message || 'Bilinmeyen hata'}. ୭ ˚. !!`);
+    } catch {
+      return replyError(interaction, 'Mesaj gönderilemedi. Lütfen tekrar deneyin. ୭ ˚. !!');
     }
 
     const successEmbed = new EmbedBuilder()
