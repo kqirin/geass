@@ -37,6 +37,7 @@ function createTagRoleFeature({
   const inFlight = new Map();
   const warnCooldownMap = new Map();
   const WARN_COOLDOWN_MS = 5 * 60 * 1000;
+  const TAG_ROLE_DEBUG_ENABLED = String(process.env.DEBUG_TAGROLE || '') === '1';
 
   function buildMemberKey(member) {
     return `${member.guild.id}:${member.id}`;
@@ -85,6 +86,11 @@ function createTagRoleFeature({
     logSystem(message, 'WARN');
   }
 
+  function logTagRoleDebug(event, payload = {}) {
+    if (!TAG_ROLE_DEBUG_ENABLED) return;
+    logSystem({ event, feature: 'tag_role', ...payload }, 'INFO');
+  }
+
   async function syncTagRole(member, reason = 'event', options = {}) {
     const memberId = getMemberUserId(member);
     if (isTagRoleSyncExemptUser(memberId)) {
@@ -104,13 +110,40 @@ function createTagRoleFeature({
         const guild = member.guild;
         const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
         const role = guild.roles.cache.get(roleId) || (await guild.roles.fetch(roleId).catch(() => null));
+        logTagRoleDebug('tag_role_member_context', {
+          guildId: guild.id,
+          userId: member.id,
+          reason,
+          meResolved: Boolean(me),
+          memberManageable: Boolean(member?.manageable),
+          roleResolved: Boolean(role),
+          botTopRolePosition: Number(me?.roles?.highest?.position || 0),
+          targetRolePosition: Number(role?.position || 0),
+        });
         if (!role) return { ok: false, code: 'skip_role_not_found' };
 
         if (!me?.permissions?.has('ManageRoles')) {
+          logTagRoleDebug('tag_role_skip_missing_manage_roles', {
+            guildId: guild.id,
+            userId: member.id,
+            reason,
+            meResolved: Boolean(me),
+            botTopRolePosition: Number(me?.roles?.highest?.position || 0),
+            targetRoleId: role.id,
+            targetRolePosition: Number(role.position || 0),
+          });
           warnThrottled(`missing_manage_roles:${guild.id}`, `TagRole skip: bot_missing_manage_roles guild=${guild.id}`);
           return { ok: false, code: 'skip_missing_manage_roles' };
         }
         if (me.roles.highest.position <= role.position) {
+          logTagRoleDebug('tag_role_skip_role_hierarchy_too_low', {
+            guildId: guild.id,
+            userId: member.id,
+            reason,
+            botTopRolePosition: Number(me.roles.highest.position || 0),
+            targetRoleId: role.id,
+            targetRolePosition: Number(role.position || 0),
+          });
           warnThrottled(
             `role_hierarchy_too_low:${guild.id}:${role.id}`,
             `TagRole skip: role_hierarchy_too_low guild=${guild.id} role=${role.id}`
@@ -187,6 +220,21 @@ function createTagRoleFeature({
     const processed = members.length - exemptSkipped;
     const failSummary = failed > 0 ? ` failCodes=${JSON.stringify(failCodes)}` : '';
     const partial = cachedMembersOnly && guild.memberCount > members.length;
+    if (partial) {
+      logSystem(
+        {
+          event: 'tag_role_sync_partial_cache',
+          feature: 'tag_role',
+          guildId: guild.id,
+          reason,
+          cachedMembersOnly,
+          memberCount: Number(guild.memberCount || 0),
+          cachedMemberCount: members.length,
+          missingFromCache: Math.max(0, Number(guild.memberCount || 0) - members.length),
+        },
+        'WARN'
+      );
+    }
     logSystem(
       `TagRole sync guild=${guild.id} scanned=${members.length} exemptSkipped=${exemptSkipped} processed=${processed} added=${added} removed=${removed} failed=${failed} partial=${partial}${failSummary}`,
       'INFO'

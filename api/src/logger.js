@@ -54,5 +54,43 @@ function logError(context, err, extra = {}) {
   return logStructuredError(context, err, extra, 'ERROR');
 }
 
-module.exports = { logSystem, logError, logStructuredError, serializeError };
+function installConsoleDebugHooks({
+  enableBlankConsoleGuard = String(process.env.DEBUG_CONSOLE_BLANK || '') === '1',
+} = {}) {
+  if (!enableBlankConsoleGuard) return false;
+  if (installConsoleDebugHooks.__installed) return true;
+
+  const originalWarn = console.warn.bind(console);
+  const originalError = console.error.bind(console);
+  const stackPreview = () => String(new Error().stack || '').split('\n').slice(2, 8).join(' | ');
+  const isBlankArgs = (args) =>
+    !Array.isArray(args) ||
+    args.length === 0 ||
+    args.every((item) => String(item ?? '').trim().length === 0);
+
+  console.warn = (...args) => {
+    if (isBlankArgs(args)) {
+      return originalWarn(`[BLANK_CONSOLE_WARN] stack=${stackPreview()}`);
+    }
+    return originalWarn(...args);
+  };
+
+  console.error = (...args) => {
+    if (isBlankArgs(args)) {
+      return originalError(`[BLANK_CONSOLE_ERROR] stack=${stackPreview()}`);
+    }
+    return originalError(...args);
+  };
+
+  installConsoleDebugHooks.__installed = true;
+  return true;
+}
+
+module.exports = {
+  logSystem,
+  logError,
+  logStructuredError,
+  serializeError,
+  installConsoleDebugHooks,
+};
 

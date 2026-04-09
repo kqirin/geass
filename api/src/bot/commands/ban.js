@@ -40,18 +40,15 @@ async function run(ctx) {
 
   const targetMember =
     target?.roles ? target : await message.guild.members.fetch(resolvedTargetId).catch(() => null);
-  if (!targetMember?.id || !targetMember.roles) {
-    return sendTemplate('userNotFound', {}, { iconUser: message.client.user });
-  }
 
   const resolvedTargetMention = targetMention;
-  const iconUser = targetMember.user || message.client.user;
+  const iconUser = targetMember?.user || message.client.user;
 
-  const check = await verifyPermission('ban', targetMember, {
-    execution: {
-      requireTargetMember: true,
-      requireTargetBannable: true,
-    },
+  const check = await verifyPermission('ban', targetMember || null, {
+    targetId: resolvedTargetId,
+    execution: targetMember
+      ? { requireTargetMember: true, requireTargetBannable: true }
+      : { requiredBotPermissions: ['BanMembers'] },
   });
   if (!check.success) return;
 
@@ -80,7 +77,7 @@ async function run(ctx) {
       const releaseBanMutationLock = await acquireGuildBanMutationLock(message.guild.id, resolvedTargetId);
       try {
         const freshTarget = await message.guild.members.fetch(resolvedTargetId).catch(() => null);
-        if (!freshTarget?.bannable) {
+        if (freshTarget && !freshTarget.bannable) {
           const err = new Error('ban_target_state_changed');
           err.code = 'BAN_TARGET_STATE_CHANGED';
           throw err;
@@ -92,9 +89,9 @@ async function run(ctx) {
           err.ban = currentBan;
           throw err;
         }
-        await message.guild.members.ban(freshTarget.id, { reason });
+        await message.guild.members.ban(freshTarget?.id ?? resolvedTargetId, { reason });
         try {
-          confirmedBan = await ensureGuildBanPresent(message.guild, freshTarget.id);
+          confirmedBan = await ensureGuildBanPresent(message.guild, freshTarget?.id ?? resolvedTargetId);
         } catch (err) {
           if (String(err?.code || '') === 'GUILD_BAN_NOT_PRESENT') throw err;
           logVerifyFailure('ban_command_post_action_verify_failed', err, {

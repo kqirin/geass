@@ -17,6 +17,21 @@ const INTERNAL_COMMANDS = {
   },
 };
 const RULE_CACHE_MISS_TTL_MS = 30 * 1000;
+const SWALLOW_DEBUG_ENABLED = String(process.env.DEBUG_SWALLOW_CATCH || '') === '1';
+
+function debugSwallowedCatch(logSystem, context, err, extra = {}) {
+  if (!SWALLOW_DEBUG_ENABLED) return;
+  logSystem(
+    {
+      event: 'swallowed_catch',
+      feature: 'reaction_actions',
+      context,
+      err: String(err?.code || err?.message || 'unknown'),
+      ...extra,
+    },
+    'WARN'
+  );
+}
 
 function extractReactionEmoji(reaction) {
   if (!reaction?.emoji) return null;
@@ -26,13 +41,24 @@ function extractReactionEmoji(reaction) {
   return { emojiType: 'unicode', emojiId: null, emojiName: normalizeUnicodeEmojiName(reaction.emoji?.name) || null };
 }
 
-async function safeFetchReactionPayload(reaction) {
+async function safeFetchReactionPayload(reaction, logSystem = () => {}) {
   if (!reaction) return;
   if (reaction.partial && typeof reaction.fetch === 'function') {
-    await reaction.fetch().catch(() => null);
+    await reaction.fetch().catch((err) => {
+      debugSwallowedCatch(logSystem, 'safe_fetch_reaction_payload.reaction_fetch', err, {
+        messageId: reaction?.message?.id || null,
+      });
+      return null;
+    });
   }
   if (reaction.message?.partial && typeof reaction.message.fetch === 'function') {
-    await reaction.message.fetch().catch(() => null);
+    await reaction.message.fetch().catch((err) => {
+      debugSwallowedCatch(logSystem, 'safe_fetch_reaction_payload.message_fetch', err, {
+        messageId: reaction?.message?.id || null,
+        channelId: reaction?.message?.channelId || null,
+      });
+      return null;
+    });
   }
 }
 
@@ -169,7 +195,16 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
 
   async function ensureGuildMember(guild, user) {
     if (!guild || !user?.id) return null;
-    return guild.members.cache.get(user.id) || (await guild.members.fetch(user.id).catch(() => null));
+    return (
+      guild.members.cache.get(user.id) ||
+      (await guild.members.fetch(user.id).catch((err) => {
+        debugSwallowedCatch(logSystem, 'ensure_guild_member.fetch', err, {
+          guildId: guild?.id || null,
+          userId: user?.id || null,
+        });
+        return null;
+      }))
+    );
   }
 
   function checkRoleConstraints(member, rule) {
@@ -284,7 +319,14 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
       const message = reaction?.message || null;
       if (!message?.reactions?.cache?.find) return { ok: false, code: 'message_reactions_unavailable' };
       if (typeof message.reactions.fetch === 'function') {
-        await message.reactions.fetch().catch(() => null);
+        await message.reactions.fetch().catch((err) => {
+          debugSwallowedCatch(logSystem, 'execute_action.group_reactions_fetch', err, {
+            guildId: guild?.id || null,
+            messageId: message?.id || null,
+            ruleId: rule?.id || null,
+          });
+          return null;
+        });
       }
 
       for (const r of groupRules) {
@@ -426,7 +468,7 @@ function createReactionActionService({ client, logError = () => {}, logSystem = 
   async function handleReactionEvent(eventType, reaction, user) {
     try {
       if (!reaction || !user || user.bot) return;
-      await safeFetchReactionPayload(reaction);
+      await safeFetchReactionPayload(reaction, logSystem);
       const guildId = reaction.message?.guild?.id || reaction.message?.guildId || null;
       const messageId = reaction.message?.id || null;
       if (!guildId || !messageId) return;

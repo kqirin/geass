@@ -7,7 +7,7 @@ const { createTagRoleFeature } = require('./features/tagRole');
 const { runMigrations } = require('./migrations');
 const { config } = require('./config');
 
-const { logSystem, logError } = require('./logger');
+const { logSystem, logError, installConsoleDebugHooks } = require('./logger');
 const { createDiscordClient } = require('./discordClient');
 const { createHttpApp } = require('./httpApp');
 const { createPrivateRoomService } = require('./voice/privateRoomService');
@@ -157,6 +157,7 @@ function buildProcessDiagContext(extra = {}) {
 }
 
 async function main() {
+  installConsoleDebugHooks();
   setStartupPhase('main_entered', logSystem);
   perfMonitor.start();
 
