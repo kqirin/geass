@@ -11,7 +11,7 @@ const {
 } = require('../config/static');
 
 const ENABLED_ACTION_SPECS = Object.freeze([
-  { enabledKey: 'log_enabled', roleKey: 'log_role' },
+  { enabledKey: 'log_enabled' },
   { enabledKey: 'warn_enabled' },
   { enabledKey: 'mute_enabled' },
   { enabledKey: 'kick_enabled' },
@@ -136,7 +136,6 @@ async function validateGuildStaticConfig(client, guildId) {
   }
 
   for (const key of [
-    'log_role',
     'mute_penalty_role',
     'jail_penalty_role',
     'lock_role',

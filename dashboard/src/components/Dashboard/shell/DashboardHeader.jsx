@@ -6,7 +6,12 @@ export default function DashboardHeader({
   canSelectGuild,
   onGuildChange,
   onLogout,
+  onLogin,
+  isAuthenticated = true,
 }) {
+  const actionLabel = isAuthenticated ? 'CIKIS' : 'GIRIS';
+  const actionHandler = isAuthenticated ? onLogout : onLogin;
+
   return (
     <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
@@ -38,10 +43,10 @@ export default function DashboardHeader({
       </div>
 
       <button
-        onClick={onLogout}
+        onClick={actionHandler}
         className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-3"
       >
-        CIKIS
+        {actionLabel}
       </button>
     </div>
   );

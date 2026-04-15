@@ -63,7 +63,7 @@ test('repairMojibakeText keeps valid utf8 text untouched', () => {
 test('catalog defaults ship with valid utf8 text', () => {
   assert.equal(
     getSystemDefaultTemplate('unknown', 'success').content,
-    '\u0130\u015Flem tamamland\u0131. \u22C6\u02DA\u0FD4'
+    '\u0130\u015Flem tamamland\u0131.'
   );
   assert.equal(getTemplateKeyMeta('success').label, 'Ba\u015Far\u0131l\u0131');
 });

@@ -102,7 +102,7 @@ test('authoritative settings ignore runtime overrides for static keys', () => {
         settings: {
           prefix: '!',
           log_enabled: true,
-          log_role: '20001',
+          lock_role: '20001',
         },
       },
     },
@@ -111,25 +111,24 @@ test('authoritative settings ignore runtime overrides for static keys', () => {
   try {
     const merged = staticConfig.buildAuthoritativeSettings('10001', {
       prefix: '?',
-      log_role: '99999',
+      lock_role: '99999',
       legacy_runtime_flag: 'x',
     });
 
     assert.equal(merged.prefix, '!');
-    assert.equal(merged.log_role, '20001');
+    assert.equal(merged.lock_role, '20001');
     assert.equal(merged.legacy_runtime_flag, 'x');
   } finally {
     restore();
   }
 });
 
-test('static config validation fails on missing role bindings and duplicate emoji bindings', async () => {
+test('static config validation fails on duplicate emoji bindings', async () => {
   const { validateStaticConfig, restore } = loadStaticModules({
     guilds: {
       '10001': {
         settings: {
           log_enabled: true,
-          log_role: '99999',
           private_vc_enabled: true,
           private_vc_hub_channel: '30001',
           private_vc_required_role: '20001',
@@ -164,7 +163,6 @@ test('static config validation fails when required single-guild target config is
         '10001': {
           settings: {
             log_enabled: true,
-            log_role: '20001',
           },
         },
       },

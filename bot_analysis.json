@@ -1,0 +1,2461 @@
+{
+  "meta": {
+    "project_name": "Geass",
+    "analysis_version": "1.0",
+    "analysis_date": "2026-04-10",
+    "language_stack": [
+      "JavaScript (Node.js CommonJS backend)",
+      "JavaScript/JSX (React frontend)",
+      "SQL (PostgreSQL)"
+    ],
+    "frameworks": [
+      "discord.js",
+      "@discordjs/voice",
+      "pg",
+      "React",
+      "Vite",
+      "Tailwind CSS",
+      "Axios"
+    ],
+    "runtime": "Node.js single-process Discord bot runtime plus Vite-built React dashboard",
+    "package_managers": [
+      "npm"
+    ],
+    "repo_size_estimate": {
+      "files_scanned": 280,
+      "key_source_files": [
+        "api/src/index.js",
+        "api/src/discordClient.js",
+        "api/src/bot/moderation.js",
+        "api/src/bot/services/permissionService.js",
+        "api/src/bot/services/actionExecution.js",
+        "api/src/bot/commands/mute.js",
+        "api/src/bot/commands/ban.js",
+        "api/src/bot/commands/unban.js",
+        "api/src/bot/penaltyScheduler.js",
+        "api/src/application/reactionActions/service.js",
+        "api/src/voice/privateRoomService.js",
+        "api/src/voice/voiceManager.js",
+        "api/src/features/tagRole.js",
+        "api/src/database.js",
+        "api/src/postgresSchema.js",
+        "api/src/config.js",
+        "api/src/config/static/index.js",
+        "api/src/bootstrap/validateConfig.js",
+        "api/src/bootstrap/validateStaticConfig.js",
+        "dashboard/src/hooks/useDashboardData.js",
+        ".github/workflows/ci.yml",
+        "api/.env.example",
+        "dashboard/.env.example",
+        "OPERATIONS.md",
+        "api/RAILWAY_POSTGRES_SETUP.md"
+      ]
+    },
+    "summary": "The repository is a Node.js Discord moderation/automation bot with a static-config-centric architecture, PostgreSQL persistence, strong command/event test coverage, and an accompanying React dashboard that currently expects HTTP APIs not present in the scanned backend runtime entrypoint.",
+    "overall_confidence": 0.86
+  },
+  "entrypoints": [
+    {
+      "file": "api/src/index.js",
+      "symbol": "main",
+      "role": "Primary backend bootstrap and Discord process lifecycle controller",
+      "notes": "Validates config, runs migrations, acquires PG advisory singleton lock, logs into Discord, bootstraps schedulers/services, starts optional health listener, installs fatal/shutdown handlers.",
+      "confidence": 0.97
+    },
+    {
+      "file": "api/src/discordClient.js",
+      "symbol": "createDiscordClient",
+      "role": "Discord gateway client factory and event wiring hub",
+      "notes": "Registers all runtime event listeners and routes them to moderation/reaction/private-room/tag-role/presence flows.",
+      "confidence": 0.95
+    },
+    {
+      "file": "dashboard/src/main.jsx",
+      "symbol": "ReactDOM.createRoot(...).render(...)",
+      "role": "Dashboard frontend entrypoint",
+      "notes": "Bootstraps SPA with error boundary and routing.",
+      "confidence": 0.99
+    }
+  ],
+  "architecture": {
+    "style": [
+      "Event-driven Discord gateway bot",
+      "Layered backend (bootstrap, bot, application, infrastructure, config)",
+      "Repository pattern for persistence",
+      "Single-process stateful runtime with DB-backed durability"
+    ],
+    "high_level_modules": [
+      {
+        "name": "Bootstrap and Process Lifecycle",
+        "purpose": "Startup sequencing, retries, singleton lock, shutdown and fatal handling",
+        "files": [
+          "api/src/index.js",
+          "api/src/bootstrap/validateConfig.js",
+          "api/src/bootstrap/validateStaticConfig.js",
+          "api/src/migrations.js"
+        ],
+        "depends_on": [
+          "database",
+          "discord client",
+          "static config",
+          "logger/diagnostics"
+        ],
+        "used_by": [
+          "node process entrypoint"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "name": "Discord Event Router",
+        "purpose": "Central gateway event subscriptions and feature dispatch",
+        "files": [
+          "api/src/discordClient.js"
+        ],
+        "depends_on": [
+          "bot/moderation",
+          "reaction action service",
+          "private room service",
+          "tag role feature",
+          "presence manager"
+        ],
+        "used_by": [
+          "bootstrap/index"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "name": "Moderation Command Runtime",
+        "purpose": "Prefix command parsing, command execution, permission gating, action side effects",
+        "files": [
+          "api/src/bot/moderation.js",
+          "api/src/bot/commands/*.js",
+          "api/src/bot/services/permissionService.js",
+          "api/src/bot/services/actionExecution.js",
+          "api/src/bot/moderation.logs.js",
+          "api/src/application/messages/templateService.js"
+        ],
+        "depends_on": [
+          "cache",
+          "database",
+          "Discord guild/member APIs",
+          "security helpers"
+        ],
+        "used_by": [
+          "discord messageCreate"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "name": "Timed Penalty Scheduler",
+        "purpose": "Persist and reconcile expiring moderation actions",
+        "files": [
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "depends_on": [
+          "timed_penalties table",
+          "Discord guild/member APIs"
+        ],
+        "used_by": [
+          "jail command",
+          "startup bootstrap",
+          "manual unjail/cancel flows"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "name": "Reaction Action Engine",
+        "purpose": "Rule-driven automation on reaction add/remove with cooldowns and once-only semantics",
+        "files": [
+          "api/src/application/reactionActions/service.js",
+          "api/src/application/reactionActions/emoji.js",
+          "api/src/infrastructure/repositories/reactionRuleRepository.js"
+        ],
+        "depends_on": [
+          "reaction_rules tables",
+          "Discord reaction/message/member APIs"
+        ],
+        "used_by": [
+          "discord reaction events",
+          "startup cache refresh"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "name": "Private Voice Room Domain",
+        "purpose": "Auto-create/manage private voice channels and owner panel interactions",
+        "files": [
+          "api/src/voice/privateRoomService.js",
+          "api/src/infrastructure/repositories/privateVoiceRepository.js"
+        ],
+        "depends_on": [
+          "private_voice_rooms tables",
+          "Discord voice + interaction APIs"
+        ],
+        "used_by": [
+          "voiceStateUpdate",
+          "interactionCreate",
+          "startup bootstrap"
+        ],
+        "confidence": 0.92
+      },
+      {
+        "name": "Voice Connection Manager",
+        "purpose": "Deterministic connect/disconnect operations with verification and per-guild queueing",
+        "files": [
+          "api/src/voice/voiceManager.js",
+          "api/src/voice/startupVoiceAutoJoiner.js"
+        ],
+        "depends_on": [
+          "@discordjs/voice",
+          "Discord guild channel/member APIs"
+        ],
+        "used_by": [
+          "startup ready hook",
+          "potential future voice commands/services"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "name": "Tag Role Feature",
+        "purpose": "Synchronize a configured role based on Discord profile primary guild identity state",
+        "files": [
+          "api/src/features/tagRole.js"
+        ],
+        "depends_on": [
+          "Discord user/member state",
+          "static tag config"
+        ],
+        "used_by": [
+          "guildMemberAdd",
+          "guildMemberUpdate",
+          "userUpdate",
+          "startup full sync"
+        ],
+        "confidence": 0.91
+      },
+      {
+        "name": "Configuration and Static Authority Layer",
+        "purpose": "Define and normalize immutable server settings/bindings and validate against live guild resources",
+        "files": [
+          "api/src/config.js",
+          "api/src/config/static/server.js",
+          "api/src/config/static/index.js",
+          "api/src/bootstrap/validateStaticConfig.js"
+        ],
+        "depends_on": [
+          "env vars",
+          "Discord fetch APIs"
+        ],
+        "used_by": [
+          "all feature modules via cache/config helpers"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "name": "Dashboard Frontend",
+        "purpose": "Operational UI for settings/reaction rules/embed send/health checks",
+        "files": [
+          "dashboard/src/pages/*.jsx",
+          "dashboard/src/hooks/useDashboardData.js",
+          "dashboard/src/lib/apiClient.js"
+        ],
+        "depends_on": [
+          "HTTP API endpoints under /api/*"
+        ],
+        "used_by": [
+          "human operators"
+        ],
+        "confidence": 0.9
+      }
+    ],
+    "execution_model": {
+      "startup_flow": [
+        "index.main installs console hooks and optional diagnostics timer registry/listener watchers.",
+        "validateConfig validates required env/database wiring.",
+        "runMigrations pings DB and executes ensurePostgresStartupSchema idempotent DDL.",
+        "createDiscordClient wires gateway listeners and returns Client instance.",
+        "construct feature services: presence manager, private room service, reaction service, tag-role feature.",
+        "optional health HTTP server starts when PORT is set.",
+        "acquire_bot_instance_lock uses PostgreSQL advisory lock to enforce singleton instance behavior.",
+        "client.login(TOKEN) connects to Discord gateway.",
+        "validateStaticConfig checks static role/channel/emoji bindings against live guild.",
+        "bootstrap penalty scheduler and private room service; refresh reaction rules; run tag startup sync."
+      ],
+      "runtime_flow": [
+        "messageCreate routes prefix commands first, then custom command cache fallback.",
+        "reaction add/remove events map to reaction action rules.",
+        "voiceStateUpdate drives private room create/reconcile flows.",
+        "interactionCreate routes embed builder IDs first, then private room panel actions.",
+        "member/user updates trigger tag role synchronization.",
+        "scheduled intervals reconcile penalties, private room cleanup, diagnostics/perf snapshots (feature-flagged)."
+      ],
+      "shutdown_flow": [
+        "SIGINT/SIGTERM/fatal events trigger shutdown guard.",
+        "health server closes.",
+        "penalty scheduler/private room/presence services shut down timers.",
+        "Discord client destroy.",
+        "diagnostics watcher stop and timer registry report.",
+        "release PostgreSQL advisory lock and close DB pool.",
+        "process exits with code depending on signal/failure."
+      ],
+      "notes": "Startup uses retry/backoff for transient DB/static validation/bootstrap failures and is designed to wait until dependencies recover instead of immediate crash loops."
+    },
+    "design_patterns_detected": [
+      {
+        "pattern": "Command Dispatcher Map",
+        "where": [
+          "api/src/bot/moderation.js:commandHandlers"
+        ],
+        "notes": "Prefix command names map to handler modules with unified ctx object injection.",
+        "confidence": 0.98
+      },
+      {
+        "pattern": "Repository Pattern",
+        "where": [
+          "api/src/infrastructure/repositories/reactionRuleRepository.js",
+          "api/src/infrastructure/repositories/privateVoiceRepository.js",
+          "api/src/infrastructure/repositories/channelLockSnapshotRepository.js"
+        ],
+        "notes": "Persistence logic separated from service/controller logic.",
+        "confidence": 0.95
+      },
+      {
+        "pattern": "Action Wrapper with Hooks",
+        "where": [
+          "api/src/bot/services/actionExecution.js:executeModerationAction"
+        ],
+        "notes": "beforePrimaryAction, primaryAction, sideEffects, template/error routing, receipt commit/rollback.",
+        "confidence": 0.97
+      },
+      {
+        "pattern": "Per-Entity Mutation Locks",
+        "where": [
+          "api/src/bot/services/actionExecution.js",
+          "api/src/bot/services/guildBanState.js",
+          "api/src/bot/services/permissionService.js",
+          "api/src/voice/privateRoomService.js",
+          "api/src/bot/commands/channelLock.helpers.js"
+        ],
+        "notes": "Serializes conflicting updates by target/guild/channel/room keys to reduce race conditions.",
+        "confidence": 0.96
+      },
+      {
+        "pattern": "Authoritative Verify-After-Write",
+        "where": [
+          "api/src/bot/commands/mute.js",
+          "api/src/bot/commands/ban.js",
+          "api/src/bot/commands/unban.js",
+          "api/src/bot/services/nativeTimeoutService.js",
+          "api/src/bot/services/guildBanState.js"
+        ],
+        "notes": "Post-action state re-fetch with retry before reporting success.",
+        "confidence": 0.95
+      }
+    ]
+  },
+  "discord_bot_model": {
+    "client_library": "discord.js 14.25.1",
+    "bot_type": [
+      "Prefix command bot",
+      "Moderation bot",
+      "Reaction automation bot",
+      "Voice private room automation bot"
+    ],
+    "sharding": {
+      "used": false,
+      "details": "No ShardingManager or shard process model detected; singleton enforced via PostgreSQL advisory lock.",
+      "confidence": 0.96
+    },
+    "gateway_events": [
+      {
+        "event": "messageCreate",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('messageCreate')",
+        "purpose": "Prefix moderation commands plus custom command responses",
+        "confidence": 0.99
+      },
+      {
+        "event": "messageReactionAdd",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('messageReactionAdd')",
+        "purpose": "Reaction rule engine ADD path",
+        "confidence": 0.99
+      },
+      {
+        "event": "messageReactionRemove",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('messageReactionRemove')",
+        "purpose": "Reaction rule engine REMOVE/TOGGLE path",
+        "confidence": 0.99
+      },
+      {
+        "event": "guildMemberAdd",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('guildMemberAdd')",
+        "purpose": "Tag role sync on join",
+        "confidence": 0.97
+      },
+      {
+        "event": "guildMemberUpdate",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('guildMemberUpdate')",
+        "purpose": "Tag role sync on member update",
+        "confidence": 0.97
+      },
+      {
+        "event": "userUpdate",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('userUpdate')",
+        "purpose": "Tag role sync by primaryGuild identity changes",
+        "confidence": 0.94
+      },
+      {
+        "event": "voiceStateUpdate",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('voiceStateUpdate')",
+        "purpose": "Private room create/reconcile/access enforcement",
+        "confidence": 0.98
+      },
+      {
+        "event": "interactionCreate",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.on('interactionCreate')",
+        "purpose": "Embed builder and private room panel interactions",
+        "confidence": 0.99
+      },
+      {
+        "event": "ready/clientReady",
+        "handler_file": "api/src/discordClient.js",
+        "handler_symbol": "client.once('clientReady'), client.once('ready')",
+        "purpose": "Startup cache load, presence apply, startup voice auto-join",
+        "confidence": 0.99
+      }
+    ],
+    "commands": {
+      "slash": [],
+      "prefix": [
+        {
+          "name": "log",
+          "handler_file": "api/src/bot/commands/log.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "warn",
+          "handler_file": "api/src/bot/commands/warn.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "mute",
+          "handler_file": "api/src/bot/commands/mute.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "unmute",
+          "handler_file": "api/src/bot/commands/unmute.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "kick",
+          "handler_file": "api/src/bot/commands/kick.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "jail",
+          "handler_file": "api/src/bot/commands/jail.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "unjail",
+          "handler_file": "api/src/bot/commands/unjail.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "ban",
+          "handler_file": "api/src/bot/commands/ban.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "unban",
+          "handler_file": "api/src/bot/commands/unban.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "yardim/yardim alias",
+          "handler_file": "api/src/bot/commands/yardim.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "embed",
+          "handler_file": "api/src/bot/commands/embed.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "lock",
+          "handler_file": "api/src/bot/commands/lock.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "unlock",
+          "handler_file": "api/src/bot/commands/unlock.js",
+          "handler_symbol": "run"
+        },
+        {
+          "name": "durum",
+          "handler_file": "api/src/bot/commands/durum.js",
+          "handler_symbol": "run"
+        }
+      ],
+      "context_menu": [],
+      "button_interactions": [
+        {
+          "custom_id_prefix": "em_btn_",
+          "handler_file": "api/src/bot/commands/embed.js",
+          "handler_symbol": "handleInteraction"
+        },
+        {
+          "custom_id_prefix": "pvr:",
+          "handler_file": "api/src/voice/privateRoomService.js",
+          "handler_symbol": "handleButtonInteraction"
+        }
+      ],
+      "select_menu_interactions": [
+        {
+          "custom_id_prefix": "pvru:",
+          "handler_file": "api/src/voice/privateRoomService.js",
+          "handler_symbol": "handleUserSelectInteraction"
+        },
+        {
+          "custom_id_prefix": "pvrr:",
+          "handler_file": "api/src/voice/privateRoomService.js",
+          "handler_symbol": "handleRoleSelectInteraction"
+        },
+        {
+          "custom_id_prefix": "pvrm:",
+          "handler_file": "api/src/voice/privateRoomService.js",
+          "handler_symbol": "handleStringSelectInteraction"
+        }
+      ],
+      "modal_interactions": [
+        {
+          "custom_id_prefix": "em_mod_",
+          "handler_file": "api/src/bot/commands/embed.js",
+          "handler_symbol": "handleInteraction"
+        },
+        {
+          "custom_id_prefix": "pvr:",
+          "handler_file": "api/src/voice/privateRoomService.js",
+          "handler_symbol": "handleModalInteraction"
+        }
+      ],
+      "autocomplete": [],
+      "pipelines": {
+        "registration_flow": [
+          "Prefix commands are statically registered in commandHandlers map in api/src/bot/moderation.js.",
+          "Built-in command name list in api/src/bot/builtinCommands.js includes vcmute/vcunmute aliases, but no active handlers were found for these in the dispatcher."
+        ],
+        "dispatch_flow": [
+          "discordClient messageCreate -> moderation.handlePrefix(client, message).",
+          "moderation.handlePrefix parses prefix+command+args, resolves target, builds ctx, invokes handler.run(ctx).",
+          "Handlers call verifyPermission and executeModerationAction wrapper."
+        ],
+        "validation_flow": [
+          "Command enabled/role/native permission checks in permissionService.verifyPermission.",
+          "Hierarchy/protected target checks via nativeHierarchy + hard protected config.",
+          "Execution preconditions: bot perms, target manageable/moderatable/bannable/kickable, managed role config."
+        ],
+        "error_flow": [
+          "Command handlers use template sender for user-facing errors.",
+          "executeModerationAction maps Discord permission/hierarchy failures and records side-effect degradation.",
+          "Global process-level unhandledRejection/uncaughtException triggers controlled shutdown."
+        ]
+      }
+    }
+  },
+  "feature_inventory": [
+    {
+      "feature_name": "Prefix Moderation Command Suite",
+      "category": "Moderation",
+      "description": "Warn, mute/unmute, kick, jail/unjail, ban/unban, log, lock/unlock, status and help commands under a configurable prefix.",
+      "user_flow": [
+        "Moderator sends prefixed command in guild text channel.",
+        "Bot validates permissions and command gates.",
+        "Bot executes moderation action and responds with templated embed/normal message.",
+        "Optional DM notification sent to target user on success."
+      ],
+      "internal_flow": [
+        "messageCreate -> moderation.handlePrefix -> target resolution.",
+        "permissionService.verifyPermission performs command/native/hierarchy/rate checks.",
+        "executeModerationAction wraps primary action and side effects (logging/scheduler).",
+        "templateService renders configured/default response templates."
+      ],
+      "main_files": [
+        "api/src/bot/moderation.js",
+        "api/src/bot/commands/*.js",
+        "api/src/bot/services/permissionService.js",
+        "api/src/bot/services/actionExecution.js"
+      ],
+      "dependencies": [
+        "discord.js",
+        "PostgreSQL mod_logs/timed_penalties",
+        "in-memory rate-limit cache"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.96
+    },
+    {
+      "feature_name": "Timed Penalty Scheduler and Jail Role Snapshot Restore",
+      "category": "Moderation",
+      "description": "Schedules future unmute/unjail/vcunmute revocations and restores pre-jail role snapshots.",
+      "user_flow": [
+        "Moderator applies timed jail/mute-like action.",
+        "Penalty is persisted with revoke_at timestamp.",
+        "Scheduler auto-revokes action when due or on startup reconcile."
+      ],
+      "internal_flow": [
+        "penaltyScheduler.schedulePenalty upserts active penalty row.",
+        "In-memory timer map schedules due callback (bounded timeout for long delays).",
+        "executePenalty re-loads active row and revokes action, marking inactive.",
+        "Periodic reconcile interval rehydrates timers from DB."
+      ],
+      "main_files": [
+        "api/src/bot/penaltyScheduler.js",
+        "api/src/postgresSchema.js"
+      ],
+      "dependencies": [
+        "PostgreSQL timed_penalties and snapshots",
+        "Discord member/role APIs"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.95
+    },
+    {
+      "feature_name": "Authoritative Ban State Management",
+      "category": "Moderation",
+      "description": "Ban/unban commands verify remote guild ban state with retries and mutation locks before success messaging.",
+      "user_flow": [
+        "Moderator issues ban or unban command.",
+        "Bot checks current ban state, applies mutation, then verifies resulting state.",
+        "User-facing success returned only when final state is confirmed."
+      ],
+      "internal_flow": [
+        "guildBanState.fetchAuthoritativeGuildBan uses force fetch and cache eviction for unknown ban errors.",
+        "ensureGuildBanPresent/Absent uses retryModerationVerification schedule.",
+        "ban/unban command uses acquireGuildBanMutationLock per guild+user."
+      ],
+      "main_files": [
+        "api/src/bot/commands/ban.js",
+        "api/src/bot/commands/unban.js",
+        "api/src/bot/services/guildBanState.js"
+      ],
+      "dependencies": [
+        "discord.js guild bans API"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.95
+    },
+    {
+      "feature_name": "Reaction Rules Automation",
+      "category": "Automation",
+      "description": "Configurable reaction triggers execute role/DM/reply/channel-link/internal-command/group cleanup actions with cooldown and only-once controls.",
+      "user_flow": [
+        "Operator configures reaction rule (via expected API/UI path).",
+        "User adds/removes matching reaction.",
+        "Configured action pipeline executes if constraints pass."
+      ],
+      "internal_flow": [
+        "reaction event -> safe fetch partials -> emoji normalization.",
+        "Rule cache lookup by guild/message/emoji key; miss cache throttles reloads.",
+        "Role constraints, cooldown checks, optional only-once reservation.",
+        "Action execution and per-event logging persistence."
+      ],
+      "main_files": [
+        "api/src/application/reactionActions/service.js",
+        "api/src/infrastructure/repositories/reactionRuleRepository.js",
+        "api/src/application/reactionActions/emoji.js"
+      ],
+      "dependencies": [
+        "reaction_rules tables",
+        "Discord reactions/messages/members"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.95
+    },
+    {
+      "feature_name": "Private Voice Room Lifecycle and Control Panel",
+      "category": "Voice",
+      "description": "Auto-provisions owner-specific private rooms from a hub and provides interaction-driven lock/visibility/permit/reject/transfer/rename/limit/delete controls.",
+      "user_flow": [
+        "Eligible user joins configured private hub voice channel.",
+        "Bot creates or reuses private voice room and posts panel controls.",
+        "Room owner uses buttons/selects/modals to manage room access and behavior."
+      ],
+      "internal_flow": [
+        "voiceStateUpdate detects hub join/leave and room occupancy transitions.",
+        "Room data persisted in private_voice_rooms, cached in memory.",
+        "Interaction handlers enforce owner checks and current-panel checks.",
+        "Overwrite snapshots and runtime enforcement disconnect unauthorized members."
+      ],
+      "main_files": [
+        "api/src/voice/privateRoomService.js",
+        "api/src/infrastructure/repositories/privateVoiceRepository.js"
+      ],
+      "dependencies": [
+        "Discord voice channels + interactions",
+        "PostgreSQL private voice tables"
+      ],
+      "stateful": true,
+      "risk_level": "high",
+      "confidence": 0.93
+    },
+    {
+      "feature_name": "Tag Role Synchronization",
+      "category": "Identity Automation",
+      "description": "Assigns/removes configured tag role based on user.primaryGuild identity fields.",
+      "user_flow": [
+        "User profile identity changes or member updates occur.",
+        "Bot computes whether user should have tag role.",
+        "Bot adds/removes role if permissions and hierarchy allow."
+      ],
+      "internal_flow": [
+        "guildMemberAdd/guildMemberUpdate/userUpdate events call syncTagRole.",
+        "Per-member lock avoids concurrent role mutation races.",
+        "Startup sync scans cached members for drift correction."
+      ],
+      "main_files": [
+        "api/src/features/tagRole.js",
+        "api/src/discordClient.js"
+      ],
+      "dependencies": [
+        "Discord primaryGuild payload",
+        "static tag config"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.9
+    },
+    {
+      "feature_name": "Channel Lock Snapshot and Restore",
+      "category": "Moderation",
+      "description": "Lock/unlock command captures text channel SendMessages overwrite snapshot and restores exactly on unlock.",
+      "user_flow": [
+        "Moderator runs lock in text channel.",
+        "Bot denies @everyone send and neutralizes conflicting allows.",
+        "Moderator runs unlock; bot restores saved overwrite states."
+      ],
+      "internal_flow": [
+        "channelLock.helpers enforces actor+bot manage-channel capability.",
+        "Snapshot persisted to text_channel_lock_snapshots table.",
+        "Verification checks lock/unlock convergence before reporting success."
+      ],
+      "main_files": [
+        "api/src/bot/commands/lock.js",
+        "api/src/bot/commands/unlock.js",
+        "api/src/bot/commands/channelLock.helpers.js",
+        "api/src/infrastructure/repositories/channelLockSnapshotRepository.js"
+      ],
+      "dependencies": [
+        "Discord channel permission overwrites",
+        "PostgreSQL lock snapshot table"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.95
+    },
+    {
+      "feature_name": "Embed Builder Prefix Command",
+      "category": "Messaging",
+      "description": "Starts a button+modal flow to send custom embeds to a selected text channel.",
+      "user_flow": [
+        "Moderator runs embed command optionally with target channel and text.",
+        "Bot responds with button to open modal.",
+        "Moderator submits modal fields and bot posts embed to target channel."
+      ],
+      "internal_flow": [
+        "In-memory tokenized flow map with TTL.",
+        "Interaction actor validation and permission re-check.",
+        "Input validation for color/url/content lengths before send."
+      ],
+      "main_files": [
+        "api/src/bot/commands/embed.js",
+        "api/src/discordClient.js"
+      ],
+      "dependencies": [
+        "Discord component interactions"
+      ],
+      "stateful": true,
+      "risk_level": "low",
+      "confidence": 0.94
+    },
+    {
+      "feature_name": "Custom Text Commands Cache",
+      "category": "Messaging",
+      "description": "Allows cached custom command text responses loaded from DB.",
+      "user_flow": [
+        "User sends matching prefixed or plain custom command trigger.",
+        "Bot replies with stored text response."
+      ],
+      "internal_flow": [
+        "cache.loadAllCustomCommands loads custom_commands into memory on ready.",
+        "discordClient checks custom command only when builtin prefix handler did not handle message."
+      ],
+      "main_files": [
+        "api/src/utils/cache.js",
+        "api/src/discordClient.js",
+        "api/src/postgresSchema.js"
+      ],
+      "dependencies": [
+        "custom_commands table"
+      ],
+      "stateful": true,
+      "risk_level": "low",
+      "confidence": 0.9
+    },
+    {
+      "feature_name": "Startup Voice Auto Join",
+      "category": "Voice Ops",
+      "description": "Attempts to connect bot to configured startup voice channels after ready.",
+      "user_flow": [
+        "Bot reaches ready state.",
+        "Auto-joiner attempts verified voice join to configured channels."
+      ],
+      "internal_flow": [
+        "Collect target guild/channel IDs from static config and env fallbacks.",
+        "Validate guild/channel/permissions before connect.",
+        "Use voiceManager verified connect with retry policy."
+      ],
+      "main_files": [
+        "api/src/voice/startupVoiceAutoJoiner.js",
+        "api/src/voice/voiceManager.js",
+        "api/src/discordClient.js"
+      ],
+      "dependencies": [
+        "@discordjs/voice"
+      ],
+      "stateful": true,
+      "risk_level": "low",
+      "confidence": 0.93
+    },
+    {
+      "feature_name": "Dashboard SPA (Control Plane UI)",
+      "category": "Operations UI",
+      "description": "React UI for moderation settings, reaction rules, embeds, guild resources, and health status.",
+      "user_flow": [
+        "User logs in via /api/auth/login.",
+        "Dashboard loads session and guild context.",
+        "UI issues API requests for settings/rules/health/actions."
+      ],
+      "internal_flow": [
+        "useDashboardData orchestrates multi-endpoint data loading and request gating.",
+        "Axios client uses VITE_API_BASE with cookies and 15s timeout."
+      ],
+      "main_files": [
+        "dashboard/src/hooks/useDashboardData.js",
+        "dashboard/src/lib/apiClient.js",
+        "dashboard/src/pages/Login.jsx",
+        "dashboard/src/pages/Dashboard.jsx"
+      ],
+      "dependencies": [
+        "React",
+        "Axios",
+        "backend /api endpoints"
+      ],
+      "stateful": true,
+      "risk_level": "medium",
+      "confidence": 0.88
+    }
+  ],
+  "data_layer": {
+    "storage_systems": [
+      {
+        "type": "relational_database",
+        "technology": "PostgreSQL via pg Pool",
+        "usage": "Durable moderation logs, timed penalties, reaction rules/logs, private room state, channel lock snapshots, custom commands and audit",
+        "files": [
+          "api/src/database.js",
+          "api/src/postgresSchema.js",
+          "api/src/infrastructure/repositories/*.js"
+        ],
+        "schemas_or_models": [
+          "mod_logs",
+          "timed_penalties",
+          "timed_penalty_role_snapshots",
+          "reaction_rules",
+          "reaction_rule_logs",
+          "reaction_rule_only_once_executions",
+          "private_voice_rooms",
+          "private_voice_room_logs",
+          "text_channel_lock_snapshots",
+          "custom_commands",
+          "custom_command_audit"
+        ],
+        "confidence": 0.99
+      },
+      {
+        "type": "in_memory_state",
+        "technology": "Node.js Maps/Sets",
+        "usage": "Runtime locks, cooldowns, custom command cache, rule cache, queue state, temporary interaction sessions",
+        "files": [
+          "api/src/utils/cache.js",
+          "api/src/application/reactionActions/service.js",
+          "api/src/voice/privateRoomService.js",
+          "api/src/voice/voiceManager.js",
+          "api/src/bot/services/*.js",
+          "api/src/bot/commands/embed.js"
+        ],
+        "schemas_or_models": [
+          "moderationRateLimitState",
+          "ruleCache",
+          "timers/executing sets",
+          "mutation locks",
+          "pendingEmbedFlows"
+        ],
+        "confidence": 0.97
+      }
+    ],
+    "caching": [
+      {
+        "technology": "In-memory custom command cache",
+        "purpose": "Fast lookup on messageCreate without DB roundtrip",
+        "files": [
+          "api/src/utils/cache.js",
+          "api/src/discordClient.js"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "technology": "Reaction rule cache + miss cache",
+        "purpose": "Reduce DB/refetch pressure for reaction events",
+        "files": [
+          "api/src/application/reactionActions/service.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "technology": "Static config cache with TTL",
+        "purpose": "Avoid repeated repository/config reads in private room service",
+        "files": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "confidence": 0.9
+      },
+      {
+        "technology": "In-memory moderation rate-limit cache",
+        "purpose": "Per-actor per-action throttling and abuse tracking",
+        "files": [
+          "api/src/utils/cache.js",
+          "api/src/bot/services/permissionService.js"
+        ],
+        "confidence": 0.95
+      }
+    ],
+    "queues_or_jobs": [
+      {
+        "technology": "setTimeout + in-memory map",
+        "purpose": "Timed penalty revoke schedule",
+        "trigger": "Penalty creation/update and startup reconcile",
+        "files": [
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "technology": "setInterval + setTimeout",
+        "purpose": "Private room stale cleanup and transient message deletion",
+        "trigger": "Service bootstrap and interaction side effects",
+        "files": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "technology": "Per-guild promise queue",
+        "purpose": "Serialize voice connect/disconnect operations",
+        "trigger": "Voice manager connect/disconnect requests",
+        "files": [
+          "api/src/voice/voiceManager.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "technology": "Periodic reconcile interval",
+        "purpose": "Resynchronize penalty timers with authoritative DB state",
+        "trigger": "setInterval(PENALTY_RECONCILE_INTERVAL_MS)",
+        "files": [
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "confidence": 0.96
+      }
+    ],
+    "data_models": [
+      {
+        "name": "mod_logs",
+        "fields": [
+          "id",
+          "guild_id",
+          "user_id",
+          "moderator_id",
+          "action_type",
+          "reason",
+          "duration",
+          "created_at"
+        ],
+        "relationships": [
+          "Referenced by log command pagination and moderation audit responses"
+        ],
+        "files": [
+          "api/src/postgresSchema.js",
+          "api/src/bot/moderation.logs.js"
+        ],
+        "confidence": 0.99
+      },
+      {
+        "name": "timed_penalties",
+        "fields": [
+          "id",
+          "guild_id",
+          "user_id",
+          "action_type",
+          "role_id",
+          "revoke_at",
+          "reason",
+          "active",
+          "revoked_at"
+        ],
+        "relationships": [
+          "Linked to timed_penalty_role_snapshots by guild_id/user_id for jail restore"
+        ],
+        "files": [
+          "api/src/postgresSchema.js",
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "confidence": 0.99
+      },
+      {
+        "name": "reaction_rules",
+        "fields": [
+          "id",
+          "guild_id",
+          "channel_id",
+          "message_id",
+          "emoji_type",
+          "emoji_id",
+          "emoji_name",
+          "trigger_mode",
+          "enabled",
+          "cooldown_seconds",
+          "only_once",
+          "group_key",
+          "allowed_roles_json",
+          "excluded_roles_json",
+          "actions_json"
+        ],
+        "relationships": [
+          "1:N to reaction_rule_logs by rule_id",
+          "1:N/guarded by reaction_rule_only_once_executions"
+        ],
+        "files": [
+          "api/src/postgresSchema.js",
+          "api/src/infrastructure/repositories/reactionRuleRepository.js"
+        ],
+        "confidence": 0.99
+      },
+      {
+        "name": "private_voice_rooms",
+        "fields": [
+          "id",
+          "guild_id",
+          "owner_id",
+          "voice_channel_id",
+          "panel_message_id",
+          "locked",
+          "lock_snapshot_json",
+          "visibility_snapshot_json",
+          "whitelist_member_ids_json",
+          "permit_role_ids_json",
+          "reject_member_ids_json",
+          "reject_role_ids_json",
+          "last_active_at"
+        ],
+        "relationships": [
+          "1:N to private_voice_room_logs by room_id"
+        ],
+        "files": [
+          "api/src/postgresSchema.js",
+          "api/src/infrastructure/repositories/privateVoiceRepository.js",
+          "api/src/voice/privateRoomService.js"
+        ],
+        "confidence": 0.99
+      },
+      {
+        "name": "text_channel_lock_snapshots",
+        "fields": [
+          "guild_id",
+          "channel_id",
+          "everyone_role_id",
+          "snapshot_json",
+          "updated_at"
+        ],
+        "relationships": [
+          "Used by lock/unlock helpers for restore"
+        ],
+        "files": [
+          "api/src/postgresSchema.js",
+          "api/src/infrastructure/repositories/channelLockSnapshotRepository.js"
+        ],
+        "confidence": 0.98
+      }
+    ]
+  },
+  "configuration": {
+    "env_vars": [
+      {
+        "name": "TOKEN",
+        "required": true,
+        "default": "",
+        "purpose": "Discord bot token for gateway login",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/index.js"
+        ],
+        "sensitive": true,
+        "confidence": 0.99
+      },
+      {
+        "name": "TARGET_GUILD_ID",
+        "required": false,
+        "default": "",
+        "purpose": "Optional hard filter to single guild for events/commands",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/discordClient.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.98
+      },
+      {
+        "name": "STARTUP_VOICE_CHANNEL_ID",
+        "required": false,
+        "default": "null",
+        "purpose": "Fallback startup auto-join voice channel",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/config/static/index.js",
+          "api/src/voice/startupVoiceAutoJoiner.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.96
+      },
+      {
+        "name": "DATABASE_URL",
+        "required": true,
+        "default": "null",
+        "purpose": "Primary PostgreSQL connection string",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/database.js",
+          "api/src/bootstrap/validateConfig.js"
+        ],
+        "sensitive": true,
+        "confidence": 0.99
+      },
+      {
+        "name": "DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME",
+        "required": "conditional",
+        "default": "DB_PORT=5432",
+        "purpose": "Discrete DB config when DATABASE_URL absent",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/bootstrap/validateConfig.js",
+          "api/src/database.js"
+        ],
+        "sensitive": true,
+        "confidence": 0.99
+      },
+      {
+        "name": "DB_POOL_SIZE",
+        "required": false,
+        "default": "10",
+        "purpose": "PostgreSQL pool max clients",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/database.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.98
+      },
+      {
+        "name": "DB_SSL",
+        "required": false,
+        "default": "false",
+        "purpose": "Enable postgres SSL mode in pool config",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/database.js",
+          "api/src/bootstrap/validateConfig.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.98
+      },
+      {
+        "name": "PORT",
+        "required": false,
+        "default": "",
+        "purpose": "Enable simple health listener returning plain 'ok'",
+        "where_used": [
+          "api/src/index.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.98
+      },
+      {
+        "name": "STATIC_SERVER_CONFIG_JSON",
+        "required": false,
+        "default": "",
+        "purpose": "JSON override of static server config",
+        "where_used": [
+          "api/src/config/static/index.js"
+        ],
+        "sensitive": true,
+        "confidence": 0.95
+      },
+      {
+        "name": "ABUSE_THRESHOLD/UNAUTH_*",
+        "required": false,
+        "default": "ABUSE_THRESHOLD=50, cooldown/window/block defaults in config.js",
+        "purpose": "Moderation abuse and unauthorized attempt controls",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/bot/services/permissionService.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.97
+      },
+      {
+        "name": "CACHE_PRUNE_TICK/CACHE_MAX_KEYS",
+        "required": false,
+        "default": "500/10000",
+        "purpose": "In-memory rate-limit/custom cache pruning",
+        "where_used": [
+          "api/src/config.js",
+          "api/src/utils/cache.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.97
+      },
+      {
+        "name": "PENALTY_RECONCILE_INTERVAL_MS",
+        "required": false,
+        "default": "60000 (bounded 30000-300000)",
+        "purpose": "Timed penalties periodic reconcile cadence",
+        "where_used": [
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.97
+      },
+      {
+        "name": "PRIVATE_ROOM_LOCK_TIMEOUT_MS",
+        "required": false,
+        "default": "5000",
+        "purpose": "Private room lock wait timeout",
+        "where_used": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.96
+      },
+      {
+        "name": "VOICE_CONNECT_* and VOICE_RECONNECT_WAIT_TIMEOUT_MS",
+        "required": false,
+        "default": "20000/4/250/8000",
+        "purpose": "Voice manager verification and reconnect tuning",
+        "where_used": [
+          "api/src/voice/voiceManager.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.96
+      },
+      {
+        "name": "DIAG_MODE",
+        "required": false,
+        "default": "0",
+        "purpose": "Enable diagnostic structured event logging and leak/timer monitoring",
+        "where_used": [
+          "api/src/diagnostics.js",
+          "api/src/index.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.97
+      },
+      {
+        "name": "PERF_MONITOR/PERF_SLOW_QUERY_MS",
+        "required": false,
+        "default": "0/100",
+        "purpose": "Enable perf counters and slow query reporting",
+        "where_used": [
+          "api/src/utils/perfMonitor.js",
+          "api/src/index.js",
+          "api/src/database.js",
+          "api/src/discordClient.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.96
+      },
+      {
+        "name": "DEBUG_SWALLOW_CATCH/DEBUG_TAGROLE/DEBUG_CONSOLE_BLANK/LOG_STARTUP_PHASE",
+        "required": false,
+        "default": "0",
+        "purpose": "Debug verbosity/tactical diagnostics flags",
+        "where_used": [
+          "api/src/application/reactionActions/service.js",
+          "api/src/features/tagRole.js",
+          "api/src/logger.js",
+          "api/src/index.js"
+        ],
+        "sensitive": false,
+        "confidence": 0.95
+      },
+      {
+        "name": "VITE_API_BASE/VITE_SINGLE_GUILD_ID/VITE_GUILD_ID",
+        "required": false,
+        "default": "http://localhost:3000 and empty guild IDs",
+        "purpose": "Dashboard client backend target and guild scope behavior",
+        "where_used": [
+          "dashboard/src/lib/apiClient.js",
+          "dashboard/src/hooks/useDashboardData.js",
+          "dashboard/src/pages/Login.jsx"
+        ],
+        "sensitive": false,
+        "confidence": 0.98
+      }
+    ],
+    "config_files": [
+      {
+        "file": "api/src/config.js",
+        "purpose": "Runtime env parsing and clamped numeric/bool defaults",
+        "confidence": 0.99
+      },
+      {
+        "file": "api/src/config/static/server.js",
+        "purpose": "Authoritative static per-guild settings and bindings source-of-truth",
+        "confidence": 0.99
+      },
+      {
+        "file": "api/src/config/static/index.js",
+        "purpose": "Static config normalization, merging, helper accessors",
+        "confidence": 0.99
+      },
+      {
+        "file": "api/.env.example",
+        "purpose": "Environment variable template for backend deployment",
+        "confidence": 0.97
+      },
+      {
+        "file": "dashboard/.env.example",
+        "purpose": "Environment variable template for frontend build/runtime target",
+        "confidence": 0.97
+      }
+    ],
+    "feature_flags": [
+      "DIAG_MODE",
+      "PERF_MONITOR",
+      "DEBUG_SWALLOW_CATCH",
+      "DEBUG_TAGROLE",
+      "DEBUG_CONSOLE_BLANK",
+      "LOG_STARTUP_PHASE"
+    ]
+  },
+  "external_integrations": [
+    {
+      "name": "Discord API and Gateway",
+      "type": "Platform API",
+      "purpose": "Receive events, execute moderation actions, manage channels/roles/voice/interactions",
+      "auth_method": "Bot token via TOKEN env",
+      "rate_limit_handling": "Mostly delegated to discord.js internals; command-level local throttles exist for abuse control",
+      "retry_strategy": "Explicit retries for ban/timeout verification and startup voice joins",
+      "timeout_strategy": "Voice connect verification timeout; HTTP/REST call timeouts handled by library defaults",
+      "files": [
+        "api/src/discordClient.js",
+        "api/src/bot/commands/*.js",
+        "api/src/voice/voiceManager.js",
+        "api/src/bot/services/guildBanState.js"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "PostgreSQL",
+      "type": "Database",
+      "purpose": "Durable storage for moderation/reaction/private-room/custom-command runtime state",
+      "auth_method": "DATABASE_URL or DB_HOST/USER/PASSWORD env credentials",
+      "rate_limit_handling": "Connection pool max clients; no explicit query rate control",
+      "retry_strategy": "Startup and selected verification operations include retry for transient errors",
+      "timeout_strategy": "No explicit per-query timeout observed in DB client config",
+      "files": [
+        "api/src/database.js",
+        "api/src/migrations.js",
+        "api/src/postgresSchema.js"
+      ],
+      "confidence": 0.99
+    },
+    {
+      "name": "Railway/Supabase/Neon (deployment guidance)",
+      "type": "Hosting/DB platform guidance",
+      "purpose": "Operational setup instructions for production environment",
+      "auth_method": "Environment variable provisioning",
+      "rate_limit_handling": "N/A",
+      "retry_strategy": "N/A",
+      "timeout_strategy": "N/A",
+      "files": [
+        "api/RAILWAY_POSTGRES_SETUP.md"
+      ],
+      "inferred": true,
+      "confidence": 0.6
+    }
+  ],
+  "security": {
+    "secret_handling": {
+      "method": "Secrets loaded from environment variables; .env patterns ignored by git; CI has tracked-file secret scanner.",
+      "risks": [
+        "database.js sets ssl.rejectUnauthorized=false when DB_SSL is enabled, weakening TLS verification against MITM.",
+        "secret-scan only checks tracked source/workflow/script files and may miss accidental leakage in untracked or binary artifacts.",
+        "dashboard expects cookie-based auth APIs, but scanned backend entrypoint exposes only health endpoint, making auth boundary implementation unclear."
+      ],
+      "confidence": 0.83
+    },
+    "permission_model": [
+      {
+        "scope": "Command usage authorization",
+        "mechanism": "permissionService.verifyPermission checks command enabled flag, native Discord permissions, optional role gate, safelist, hierarchy, protected targets, and rate limits",
+        "files": [
+          "api/src/bot/services/permissionService.js",
+          "api/src/application/security/nativeHierarchy.js",
+          "api/src/application/security/roleSafety.js"
+        ],
+        "risks": [
+          "Policy drift possible when static config keys/permissions mapping changes without synchronized tests (currently visible in failing permission tests)."
+        ],
+        "confidence": 0.95
+      },
+      {
+        "scope": "Action feasibility",
+        "mechanism": "Execution requirement checks for bot capabilities and target manageability/moderatability before mutation",
+        "files": [
+          "api/src/bot/services/permissionService.js",
+          "api/src/bot/services/nativeTimeoutService.js",
+          "api/src/bot/commands/*.js"
+        ],
+        "risks": [
+          "Some flows rely on current member fetch; transient Discord fetch errors can downgrade to generic systemError responses."
+        ],
+        "confidence": 0.93
+      },
+      {
+        "scope": "Private room controls",
+        "mechanism": "Owner-only interaction checks plus panel-message staleness checks and mutation locks",
+        "files": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "risks": [
+          "Large monolithic interaction parser increases review surface for edge-case authorization bugs."
+        ],
+        "confidence": 0.91
+      }
+    ],
+    "input_validation": [
+      {
+        "area": "Prefix command args and target parsing",
+        "mechanism": "Snowflake regex, mention parsing, optional member search, usage templates",
+        "gaps": [
+          "Command parser is manual and command-specific; behavior consistency depends on tests and handler discipline."
+        ],
+        "files": [
+          "api/src/bot/moderation.utils.js",
+          "api/src/bot/moderation.js"
+        ],
+        "confidence": 0.92
+      },
+      {
+        "area": "Timeout duration",
+        "mechanism": "parseRequiredTimeoutDuration with 28d cap and safe buffer",
+        "gaps": [
+          "Duration parser accepts concise tokens only (s/m/h/d) and may reject locale variants."
+        ],
+        "files": [
+          "api/src/bot/services/nativeTimeoutService.js"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "area": "Static config integrity",
+        "mechanism": "Guild/role/channel/emoji existence and duplicate-binding validation at startup",
+        "gaps": [
+          "Validation is startup-time only; runtime drift can still occur after startup."
+        ],
+        "files": [
+          "api/src/bootstrap/validateStaticConfig.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "area": "Embed interaction inputs",
+        "mechanism": "Color/url/content length checks and actor binding token",
+        "gaps": [
+          "Pending flow state is in memory only; restart invalidates in-flight UI operations."
+        ],
+        "files": [
+          "api/src/bot/commands/embed.js"
+        ],
+        "confidence": 0.94
+      }
+    ],
+    "abuse_prevention": [
+      {
+        "mechanism": "Per-actor command rate limits with abuse counter and optional role removal lock",
+        "coverage": "Moderation command actions in permissionService",
+        "gaps": [
+          "Rate-limits are in-memory and process-local; do not scale across multi-instance deployment."
+        ],
+        "files": [
+          "api/src/utils/cache.js",
+          "api/src/bot/services/permissionService.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "mechanism": "Unauthorized reply cooldown and temporary block window",
+        "coverage": "Prevents spammy repeated permission-denied responses",
+        "gaps": [
+          "Also process-local and reset on restart."
+        ],
+        "files": [
+          "api/src/bot/services/permissionService.js"
+        ],
+        "confidence": 0.93
+      },
+      {
+        "mechanism": "Reaction rule cooldown + only-once reservation table",
+        "coverage": "Prevents reaction action storms and duplicate one-time actions",
+        "gaps": [
+          "Cooldown map is in-memory; only-once durability exists but cooldown durability does not."
+        ],
+        "files": [
+          "api/src/application/reactionActions/service.js",
+          "api/src/infrastructure/repositories/reactionRuleRepository.js"
+        ],
+        "confidence": 0.94
+      }
+    ],
+    "vulnerabilities_or_risks": [
+      {
+        "title": "PostgreSQL SSL verification disabled when SSL is on",
+        "severity": "high",
+        "description": "database.js config sets ssl.rejectUnauthorized=false for both DATABASE_URL and discrete DB fields.",
+        "where": [
+          "api/src/database.js:toPgConnectionConfig"
+        ],
+        "impact": "TLS MITM or invalid cert acceptance risk in hostile networks.",
+        "recommendation": "Use provider CA or system trust chain and set rejectUnauthorized=true by default; allow explicit insecure override only for local dev.",
+        "confidence": 0.99
+      },
+      {
+        "title": "Dashboard/API contract mismatch",
+        "severity": "high",
+        "description": "Dashboard expects many /api endpoints (auth, settings, reaction rules, bot presence, embed send), but scanned backend entrypoint only exposes plain health listener.",
+        "where": [
+          "dashboard/src/hooks/useDashboardData.js",
+          "dashboard/src/lib/apiClient.js",
+          "api/src/index.js"
+        ],
+        "impact": "Operational UI may be non-functional or may depend on missing/unscanned service; security model of panel endpoints is unclear.",
+        "recommendation": "Document and include actual API server implementation in repo, or align dashboard to available backend surface.",
+        "confidence": 0.9
+      },
+      {
+        "title": "Process-local rate limiting and lock state",
+        "severity": "medium",
+        "description": "Abuse prevention, cooldowns, and many mutation locks are in-memory only.",
+        "where": [
+          "api/src/utils/cache.js",
+          "api/src/bot/services/permissionService.js",
+          "api/src/application/reactionActions/service.js",
+          "api/src/voice/privateRoomService.js"
+        ],
+        "impact": "Behavior drift and abuse bypass in multi-instance scenarios; restart resets counters and temporary protections.",
+        "recommendation": "Move critical throttles/locks to shared storage (Redis/DB advisory locks) if horizontal scale is required.",
+        "confidence": 0.96
+      },
+      {
+        "title": "Broad MessageContent intent usage",
+        "severity": "medium",
+        "description": "Bot subscribes to MessageContent intent for prefix/custom command parsing.",
+        "where": [
+          "api/src/discordClient.js"
+        ],
+        "impact": "Increased data exposure footprint and policy burden for privacy/compliance.",
+        "recommendation": "Minimize content handling where possible or migrate to slash interactions for sensitive deployments.",
+        "confidence": 0.9
+      },
+      {
+        "title": "Hardcoded exempt user IDs in tag role sync",
+        "severity": "medium",
+        "description": "Specific user IDs bypass tag role sync logic in source code.",
+        "where": [
+          "api/src/features/tagRole.js"
+        ],
+        "impact": "Hidden policy exceptions and governance risk; hard to audit operationally.",
+        "recommendation": "Move exemptions into auditable config with explicit rationale and expiry tracking.",
+        "confidence": 0.98
+      },
+      {
+        "title": "Health endpoint has no authentication",
+        "severity": "low",
+        "description": "When PORT is set, server returns plain ok for all requests without auth.",
+        "where": [
+          "api/src/index.js"
+        ],
+        "impact": "Minor exposure of service liveness; can aid reconnaissance.",
+        "recommendation": "Bind to internal network or add path token/IP restrictions at ingress.",
+        "confidence": 0.95
+      },
+      {
+        "title": "Large monolithic private room service",
+        "severity": "medium",
+        "description": "Single ~3k-line module handles many access and mutation paths.",
+        "where": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "impact": "Higher chance of hidden authorization/logic edge cases and harder security review.",
+        "recommendation": "Split into domain modules (access policy, panel routing, overwrite sync, lifecycle orchestration) with isolated tests.",
+        "confidence": 0.93
+      }
+    ]
+  },
+  "reliability": {
+    "error_handling": {
+      "global_strategy": "Process-level fail-fast on uncaughtException/unhandledRejection with structured logging and graceful resource shutdown.",
+      "local_patterns": [
+        "executeModerationAction centralizes primary error mapping and side-effect degradation.",
+        "Many Discord event handlers wrap internals in try/catch and log contextual errors.",
+        "Startup gates use withRetry/waitForStartupGate for transient failures.",
+        "State verification retries used after moderation mutations (ban/timeout)."
+      ],
+      "gaps": [
+        "No dead-letter queue for repeatedly failing scheduled operations.",
+        "Many transient runtime errors are only logged; no alerting escalation in-code.",
+        "Some user-facing failures collapse to generic systemError templates."
+      ],
+      "files": [
+        "api/src/index.js",
+        "api/src/bot/services/actionExecution.js",
+        "api/src/utils/retry.js",
+        "api/src/bot/services/nativeTimeoutService.js",
+        "api/src/bot/services/guildBanState.js",
+        "api/src/discordClient.js"
+      ]
+    },
+    "logging_observability": {
+      "logging": "Custom logger supports text/json formats; contextual structured errors; diagnostics channel under DIAG_MODE.",
+      "metrics": "Optional lightweight perf monitor counters/log lines; no persistent metrics backend detected.",
+      "tracing": "No distributed tracing framework detected.",
+      "alerting": "No native alerting integration detected in repository.",
+      "files": [
+        "api/src/logger.js",
+        "api/src/diagnostics.js",
+        "api/src/utils/perfMonitor.js"
+      ],
+      "maturity_score": 58
+    },
+    "recovery_patterns": [
+      {
+        "pattern": "Startup retry with exponential backoff",
+        "details": "DB migrations, lock acquisition, static config validation, and service bootstraps retry transient failures.",
+        "files": [
+          "api/src/index.js",
+          "api/src/utils/retry.js"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "pattern": "Authoritative post-mutation verification",
+        "details": "Ban/unban and timeout actions verify final remote state with retries before emitting success.",
+        "files": [
+          "api/src/bot/commands/ban.js",
+          "api/src/bot/commands/unban.js",
+          "api/src/bot/commands/mute.js",
+          "api/src/bot/commands/unmute.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "pattern": "Reconcile loops for scheduled state",
+        "details": "Penalty scheduler regularly re-loads active rows and re-schedules timers.",
+        "files": [
+          "api/src/bot/penaltyScheduler.js"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "pattern": "Mutation lock serialization",
+        "details": "Per-target/per-channel/per-room locks prevent racey concurrent state changes.",
+        "files": [
+          "api/src/bot/services/actionExecution.js",
+          "api/src/bot/services/guildBanState.js",
+          "api/src/bot/commands/channelLock.helpers.js",
+          "api/src/voice/privateRoomService.js"
+        ],
+        "confidence": 0.96
+      }
+    ]
+  },
+  "performance_and_scalability": {
+    "current_scaling_model": "Single runtime process with PostgreSQL advisory lock singleton. Horizontal scaling is intentionally constrained at bot gateway level.",
+    "bottlenecks": [
+      {
+        "title": "Private room service monolith on hot voice path",
+        "description": "voiceStateUpdate and interaction handling funnel through a large module with substantial branching and DB/Discord API calls.",
+        "where": [
+          "api/src/voice/privateRoomService.js",
+          "api/src/discordClient.js"
+        ],
+        "impact": "CPU/event-loop pressure and maintenance complexity in high voice churn guilds.",
+        "confidence": 0.92
+      },
+      {
+        "title": "No sharding strategy for large guild/event scale",
+        "description": "Single client instance without shard orchestration.",
+        "where": [
+          "api/src/discordClient.js",
+          "api/src/index.js"
+        ],
+        "impact": "Gateway and cache limits can become bottlenecks as guild/member/event volume grows.",
+        "confidence": 0.95
+      },
+      {
+        "title": "In-memory-only throttles/caches",
+        "description": "Rate limits/cooldowns/resettable runtime state live only in memory.",
+        "where": [
+          "api/src/utils/cache.js",
+          "api/src/application/reactionActions/service.js"
+        ],
+        "impact": "Restart-induced burst windows and poor multi-instance consistency.",
+        "confidence": 0.95
+      },
+      {
+        "title": "Frequent authoritative fetches",
+        "description": "Many commands re-fetch members/bans/channels for correctness.",
+        "where": [
+          "api/src/bot/commands/mute.js",
+          "api/src/bot/commands/ban.js",
+          "api/src/bot/commands/unban.js",
+          "api/src/voice/privateRoomService.js"
+        ],
+        "impact": "Higher Discord REST call volume and latency under command spikes.",
+        "confidence": 0.9
+      }
+    ],
+    "hot_paths": [
+      {
+        "flow": "messageCreate -> moderation.handlePrefix -> verifyPermission -> executeModerationAction",
+        "files": [
+          "api/src/discordClient.js",
+          "api/src/bot/moderation.js",
+          "api/src/bot/services/permissionService.js",
+          "api/src/bot/services/actionExecution.js"
+        ],
+        "notes": "Critical path for all prefix command interactions.",
+        "confidence": 0.97
+      },
+      {
+        "flow": "voiceStateUpdate -> privateRoomService.handleVoiceStateUpdate",
+        "files": [
+          "api/src/discordClient.js",
+          "api/src/voice/privateRoomService.js"
+        ],
+        "notes": "Potentially highest-frequency event path in active voice communities.",
+        "confidence": 0.96
+      },
+      {
+        "flow": "messageReactionAdd/Remove -> reactionActions.handleReactionEvent",
+        "files": [
+          "api/src/discordClient.js",
+          "api/src/application/reactionActions/service.js"
+        ],
+        "notes": "Rule cache quality strongly impacts latency and DB pressure.",
+        "confidence": 0.96
+      }
+    ],
+    "rate_limit_strategy": "Per-user per-action local counters in cache.js plus warning cooldown and abuse threshold actions; reaction engine has per-rule per-user cooldown.",
+    "concurrency_model": "Node async event loop with explicit per-key locks (targets, rooms, channels, bans) and per-guild promise queue for voice operations.",
+    "notes": "The design favors correctness and deterministic moderation outcomes over raw throughput."
+  },
+  "code_quality": {
+    "modularity_score": 66,
+    "maintainability_score": 61,
+    "readability_score": 64,
+    "testability_score": 82,
+    "consistency_score": 67,
+    "strengths": [
+      "Strong test coverage breadth across moderation, reaction, private room, startup, and utility modules.",
+      "Centralized action execution and permission services reduce repeated error-handling boilerplate.",
+      "Static config normalization and validation pipeline is explicit and robust.",
+      "Post-action authoritative verification reduces false success reports.",
+      "Rich operational diagnostics and retry utilities are present for unstable dependencies."
+    ],
+    "weaknesses": [
+      "privateRoomService is very large and handles multiple concerns in one file.",
+      "Moderation command handlers still duplicate substantial preflight/postflight patterns.",
+      "Mojibake/encoding artifacts in user-facing strings reduce clarity and increase test brittleness.",
+      "Dashboard and backend runtime contract appears inconsistent in scanned code.",
+      "Some dead/legacy-like structures remain (for example builtin command names and repository modules without active call paths)."
+    ],
+    "duplication_areas": [
+      {
+        "description": "Repeated moderation command scaffolding around verifyPermission, consumeLimit, executeModerationAction options, and DM notifications",
+        "files": [
+          "api/src/bot/commands/warn.js",
+          "api/src/bot/commands/mute.js",
+          "api/src/bot/commands/unmute.js",
+          "api/src/bot/commands/kick.js",
+          "api/src/bot/commands/jail.js",
+          "api/src/bot/commands/ban.js",
+          "api/src/bot/commands/unban.js"
+        ],
+        "confidence": 0.93
+      },
+      {
+        "description": "Interaction custom-id parsing and guard branches concentrated in one large private room module",
+        "files": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "confidence": 0.92
+      },
+      {
+        "description": "Template text defaults and command-specific variants are duplicated in static catalog structures",
+        "files": [
+          "api/src/application/messages/catalog.js"
+        ],
+        "confidence": 0.86
+      }
+    ],
+    "technical_debt": [
+      {
+        "title": "Monolithic private room domain service",
+        "description": "A single file handles persistence cache, access policy, interaction routing, overwrite sync, lifecycle cleanup and logging.",
+        "priority": "high",
+        "where": [
+          "api/src/voice/privateRoomService.js"
+        ],
+        "recommendation": "Split by bounded context (room repository adapter, policy engine, panel router, overwrite engine, cleanup scheduler) and add module-level contracts.",
+        "confidence": 0.94
+      },
+      {
+        "title": "Dashboard/backend API surface drift",
+        "description": "Frontend expects auth/settings/reaction/embed APIs not visible in scanned backend runtime entrypoint.",
+        "priority": "high",
+        "where": [
+          "dashboard/src/hooks/useDashboardData.js",
+          "dashboard/src/lib/apiClient.js",
+          "api/src/index.js"
+        ],
+        "recommendation": "Consolidate HTTP API implementation in repository or adjust dashboard contracts and docs.",
+        "confidence": 0.9
+      },
+      {
+        "title": "Permission policy/test mismatch currently failing",
+        "description": "Permission tests indicate drift in command gate vs hierarchy behavior expectations.",
+        "priority": "high",
+        "where": [
+          "api/src/bot/services/permissionService.js",
+          "api/test/moderation.permission.service.test.js"
+        ],
+        "recommendation": "Finalize policy intent (native permission-first vs role gate) and update either implementation or tests consistently.",
+        "confidence": 0.95
+      },
+      {
+        "title": "Unused or partially wired modules",
+        "description": "commandRepository exists without observed runtime call sites; builtin command names include vcmute/vcunmute without active command handlers.",
+        "priority": "medium",
+        "where": [
+          "api/src/infrastructure/repositories/commandRepository.js",
+          "api/src/bot/builtinCommands.js",
+          "api/src/bot/moderation.js"
+        ],
+        "recommendation": "Remove dead paths or fully wire/document intended flows.",
+        "confidence": 0.88
+      },
+      {
+        "title": "Encoding and localization consistency issues",
+        "description": "Mixed mojibake and diacritic variants in user-facing strings produce brittle assertions and inconsistent UX.",
+        "priority": "medium",
+        "where": [
+          "api/src/bot/services/actionExecution.js",
+          "api/src/bot/services/moderationDmService.js",
+          "api/src/application/messages/catalog.js",
+          "api/test/messageEncoding.test.js"
+        ],
+        "recommendation": "Normalize UTF-8 string sources, enforce lint/test snapshot rules for localization text.",
+        "confidence": 0.91
+      }
+    ]
+  },
+  "testing": {
+    "automated_tests_present": true,
+    "test_frameworks": [
+      "Node.js built-in test runner (node --test)"
+    ],
+    "coverage_estimate": "Medium-high behavioral coverage for backend core modules and key regressions; no formal coverage percentage report detected.",
+    "critical_untested_areas": [
+      "Full production auth/session HTTP API paths for dashboard (not found in scanned backend runtime surface).",
+      "True multi-process/horizontal-scale behavior for rate limits and locks.",
+      "End-to-end Discord integration under high event volume and real network faults.",
+      "Formal migration rollback/forward compatibility tests beyond startup schema checks."
+    ],
+    "test_files": [
+      "api/test/actionExecution.rate-limit.test.js",
+      "api/test/discordClient.command-precedence.test.js",
+      "api/test/moderation.permission.service.test.js",
+      "api/test/moderation.timeout.command.test.js",
+      "api/test/moderation.ban.command.test.js",
+      "api/test/moderation.unban.command.test.js",
+      "api/test/moderation.partial-failure.test.js",
+      "api/test/moderation.production-hardening.test.js",
+      "api/test/moderation.dm.service.test.js",
+      "api/test/lock.command.policy.test.js",
+      "api/test/reaction.production-hardening.test.js",
+      "api/test/privateRoom.integration.test.js",
+      "api/test/privateRoom.lock.test.js",
+      "api/test/privateRoom.race.test.js",
+      "api/test/penaltyScheduler.integration.test.js",
+      "api/test/startupVoiceAutoJoin.test.js",
+      "api/test/staticConfig.validation.test.js",
+      "api/test/presenceManager.test.js",
+      "api/test/templateService.send.test.js",
+      "api/test/messageEncoding.test.js",
+      "dashboard/test/useDashboardData.test.js",
+      "dashboard/test/moderationSettingsState.test.js",
+      "dashboard/test/latestRequestGate.test.js",
+      "dashboard/test/dashboardVcRemoval.test.js"
+    ]
+  },
+  "deployment_and_ops": {
+    "hosting": [
+      "Generic Node host with external supervisor (pm2/systemd/docker restart policy)",
+      "Railway-oriented deployment guidance exists (in docs, not as runtime config files)"
+    ],
+    "containerization": {
+      "used": false,
+      "details": "No Dockerfile or compose file detected in repository.",
+      "files": []
+    },
+    "ci_cd": {
+      "used": true,
+      "details": "GitHub Actions CI runs secret scan, lint, tests/build, and format checks for api and dashboard on Node 20.",
+      "files": [
+        ".github/workflows/ci.yml",
+        "scripts/secret-scan.js"
+      ]
+    },
+    "release_process": {
+      "detected": "CI-gated branch/pull-request validation; no automated deployment workflow detected in repo.",
+      "notes": "Operations docs instruct using external process supervisors and optional Railway DB setup."
+    },
+    "runtime_requirements": [
+      "Node.js 20.x (CI uses setup-node@v4 node-version:20)",
+      "Discord bot token and target guild static config",
+      "PostgreSQL database reachable with required runtime tables",
+      "Outbound network access to Discord gateway/REST and PostgreSQL",
+      "For dashboard usage, an HTTP API server implementing /api/* endpoints expected by frontend"
+    ],
+    "ops_risks": [
+      "Single-process singleton model limits scaling and creates single point of failure.",
+      "If advisory lock acquisition fails repeatedly, startup blocks until lock becomes available.",
+      "Current API/dashboard contract uncertainty can break operations UI in production.",
+      "No built-in alerting/metrics backend; incident detection depends on log monitoring."
+    ]
+  },
+  "workflows": {
+    "startup_sequence": [
+      "Load env config and initialize logging/diagnostics.",
+      "Validate config and DB URL/fields.",
+      "Run DB ping + idempotent schema migration.",
+      "Create Discord client and instantiate feature services.",
+      "Optionally start health server on PORT.",
+      "Acquire PostgreSQL advisory bot instance lock.",
+      "Login to Discord.",
+      "Validate static guild config against live resources.",
+      "Bootstrap penalty scheduler/private rooms/reaction cache/tag sync.",
+      "Set startup phase completed and continue event loop."
+    ],
+    "command_execution_sequence": [
+      "messageCreate receives content.",
+      "Prefix check and command parse in moderation.handlePrefix.",
+      "Target resolution and context creation.",
+      "verifyPermission applies gates, hierarchy, and rate check.",
+      "check.consumeLimit acquires/consumes execution receipt when needed.",
+      "executeModerationAction primary action runs.",
+      "Side effects (DB logs, scheduler actions, DM notify) run with degraded warning behavior if partial failures.",
+      "Template response emitted to channel/reply."
+    ],
+    "event_processing_sequence": [
+      "Gateway event enters discordClient listener.",
+      "Guild filtering by TARGET_GUILD_ID (if set).",
+      "Feature service handler invoked (reaction/private-room/tag-role/embed interaction).",
+      "Per-feature internal validation/locks/caches applied.",
+      "Result persisted/logged where applicable."
+    ],
+    "database_interaction_sequence": [
+      "database.execute converts ? placeholders to PostgreSQL $n safely.",
+      "Repositories/services run SQL via pooled client.",
+      "Mutating commands frequently verify authoritative state by re-fetching Discord resources and DB records.",
+      "Scheduler and cache bootstrap reload active records at startup."
+    ],
+    "error_recovery_sequence": [
+      "Local handler catches error and logs context.",
+      "Known command errors map to specific template responses.",
+      "Transient operations retry through utility retry wrappers.",
+      "Fatal uncaught errors trigger graceful shutdown and process exit for external restart supervisor."
+    ]
+  },
+  "reverse_engineered_logic": {
+    "core_loop_explanation": "The bot runs an event-driven loop around discord.js Client listeners. Every incoming gateway event is filtered by guild scope, routed to a domain handler, and optionally persisted to PostgreSQL. Moderation commands share a strict pipeline: parse -> permission/hierarchy/rate gate -> execution wrapper -> side effects -> templated response -> optional target DM. Long-lived runtime state is split between durable DB rows (penalties, rules, rooms, logs) and process-local maps (locks, cooldowns, caches). Startup performs schema reconciliation and service bootstrapping; shutdown tears down timers, client, DB, and advisory lock.",
+    "how_a_new_command_is_added": [
+      "Create handler module in api/src/bot/commands/<name>.js exporting run(ctx).",
+      "Register handler in commandHandlers map in api/src/bot/moderation.js.",
+      "Add command metadata/template defaults in api/src/application/messages/catalog.js if custom messaging needed.",
+      "Add action bucket mapping in actionNormalization.js and permission static settings keys if rate/role gates differ.",
+      "Add tests in api/test/moderation.<name>.command.test.js plus permission/partial-failure cases."
+    ],
+    "how_an_event_is_processed": [
+      "Event listener in api/src/discordClient.js receives payload.",
+      "Early guards skip bots, non-guild contexts, or non-target guild IDs.",
+      "Service lookup via injected getter retrieves current service instance.",
+      "Handler executes with try/catch and logs contextual failures without crashing process."
+    ],
+    "how_state_is_read_written": [
+      "Read static immutable config from config/static layer (with optional env JSON override).",
+      "Read/write runtime state through SQL repositories and scheduler/service modules.",
+      "Keep hot caches/locks in memory to reduce DB pressure and serialize mutations.",
+      "Persist key snapshots (channel lock state, private room lock/visibility, jail role snapshots) for recovery after restart."
+    ],
+    "how_failures_propagate": [
+      "Command-level expected errors become specific user templates; unexpected errors become systemError templates and logs.",
+      "Side-effect failures usually downgrade success with warning message rather than hard fail after primary action.",
+      "Startup dependency failures retry with backoff; unrecoverable startup failure exits process.",
+      "Unhandled process errors trigger controlled shutdown and non-zero exit for supervisor restart."
+    ],
+    "how_permissions_are_checked": [
+      "Command enabled flag from authoritative static settings.",
+      "Native Discord actor permission checks (ModerateMembers/KickMembers/BanMembers etc.) or configured role gate.",
+      "Optional safelist bypasses for specific flows (for lock policy cases).",
+      "Actor/target/bot hierarchy and protected target checks through nativeHierarchy and role safety.",
+      "Rate limit check and consume with rollback-aware receipt mechanism."
+    ]
+  },
+  "comparison_ready_snapshot": {
+    "architectural_maturity_tier": "Tier 3/5 (Production-capable single-instance bot with strong safeguards, but limited scale architecture and some contract/debt gaps)",
+    "primary_strengths": [
+      "Robust moderation correctness model (authoritative verify + mutation locks + rollback-aware execution).",
+      "Comprehensive runtime table schema and startup migration hardening.",
+      "Good automated regression test breadth over core behavior.",
+      "Strong static config validation against live Discord resources.",
+      "Operational resilience patterns (startup retries, graceful shutdown, diagnostics)."
+    ],
+    "primary_weaknesses": [
+      "Very large private room service module with high complexity.",
+      "Dashboard/API contract uncertainty in scanned backend surface.",
+      "No sharding/horizontal scalability model beyond singleton lock.",
+      "In-memory-only rate limits/cooldowns/locks for many behaviors.",
+      "Current test suite has 19 failing backend tests (as executed on 2026-04-10)."
+    ],
+    "most_important_gaps_vs_high_quality_bots": [
+      "Distributed state/lock/rate-limit layer for safe multi-instance operation.",
+      "Clear, documented, versioned control-plane HTTP API with auth and RBAC.",
+      "Smaller bounded-context modules replacing giant orchestration files.",
+      "First-class observability stack (metrics/tracing/alerts) beyond logs.",
+      "Formalized deployment manifests and reproducible release automation."
+    ],
+    "estimated_stage": "Late MVP / early production-hardening stage",
+    "one_paragraph_assessment": "This codebase has many production-minded choices for correctness (state verification, retries, mutation locks, schema migration safety) and unusually strong behavior tests for a Discord bot project. Its main structural constraints are scalability and maintainability: it intentionally runs as a singleton, keeps critical throttles in memory, and concentrates private-room complexity in a monolith. The dashboard appears to target a broader API surface than what is visible in the scanned backend runtime entrypoint, which is the biggest operational clarity risk."
+  },
+  "unknowns_and_assumptions": [
+    {
+      "topic": "Backend HTTP API implementation for dashboard endpoints",
+      "status": "unclear",
+      "notes": "Dashboard requests many /api/* routes, but scanned api/src runtime entrypoint only exposes a plain health listener. It is unknown whether API server code exists outside scanned paths or in another service/repo.",
+      "confidence": 0.43
+    },
+    {
+      "topic": "Production hosting target",
+      "status": "unclear",
+      "notes": "Railway and external supervisor guidance exists in docs, but no deployment manifest confirms actual platform.",
+      "confidence": 0.55
+    },
+    {
+      "topic": "Real-world guild scale and event volume",
+      "status": "unknown",
+      "notes": "No production traffic metrics or shard strategy metadata present in repo.",
+      "confidence": 0.25
+    },
+    {
+      "topic": "Whether vcmute/vcunmute commands are intentionally removed or temporarily disconnected",
+      "status": "unclear",
+      "notes": "Names appear in builtin command list/templates/action maps, but no active command handlers were found in moderation dispatcher.",
+      "confidence": 0.86
+    },
+    {
+      "topic": "Current intent of failing backend tests",
+      "status": "unclear",
+      "notes": "19 failing tests suggest ongoing policy refactor/drift; unclear whether tests or code are source of truth.",
+      "confidence": 0.93
+    },
+    {
+      "topic": "Security posture of runtime secrets outside tracked files",
+      "status": "unknown",
+      "notes": "Git ignores .env files; repository scanner checks tracked files. Runtime secret handling depends on deployment process not fully represented in repo.",
+      "confidence": 0.58
+    }
+  ],
+  "evidence_index": [
+    {
+      "file": "api/src/index.js",
+      "symbols": [
+        "main",
+        "acquireBotInstanceLock",
+        "shutdown",
+        "waitForStartupGate"
+      ],
+      "reason_relevant": "Defines startup, singleton locking, service bootstrapping, and shutdown semantics.",
+      "important_findings": [
+        "Uses PostgreSQL advisory lock BOT_INSTANCE_LOCK_NAME for singleton behavior.",
+        "Runs migrations and static config validation before fully ready.",
+        "Only built-in HTTP listener is plain health endpoint on PORT."
+      ]
+    },
+    {
+      "file": "api/src/discordClient.js",
+      "symbols": [
+        "createDiscordClient",
+        "client.on('messageCreate')",
+        "client.on('interactionCreate')",
+        "onReady"
+      ],
+      "reason_relevant": "Central event wiring and flow dispatch.",
+      "important_findings": [
+        "Prefix commands are prioritized before custom commands.",
+        "Interaction routing splits embed builder and private room service.",
+        "TARGET_GUILD_ID scope filters most events."
+      ]
+    },
+    {
+      "file": "api/src/bot/moderation.js",
+      "symbols": [
+        "handlePrefix",
+        "commandHandlers",
+        "verifyPermission wrapper"
+      ],
+      "reason_relevant": "Primary command parser and dispatcher.",
+      "important_findings": [
+        "Static command map drives prefix command execution.",
+        "Template sender used for standardized command responses.",
+        "Target resolution has unresolved-ID mode for ban command path."
+      ]
+    },
+    {
+      "file": "api/src/bot/services/permissionService.js",
+      "symbols": [
+        "createPermissionService",
+        "verifyPermission",
+        "evaluateSharedRateLimit",
+        "evaluateExecutionRequirements"
+      ],
+      "reason_relevant": "Authorization, hierarchy, abuse/rate controls.",
+      "important_findings": [
+        "Combines enabled gates, native permissions, optional role checks, hierarchy checks, and bot capability checks.",
+        "Implements unauthorized reply throttling and abuse counter.",
+        "Produces rollback-capable limit consumption receipts."
+      ]
+    },
+    {
+      "file": "api/src/bot/services/actionExecution.js",
+      "symbols": [
+        "executeModerationAction",
+        "waitForTargetMutationLock"
+      ],
+      "reason_relevant": "Core command execution and failure semantics.",
+      "important_findings": [
+        "Centralized primary action error mapping and side-effect degradation behavior.",
+        "Per-target mutation lock with timeout.",
+        "Commit/rollback handling for consumed rate-limit receipts."
+      ]
+    },
+    {
+      "file": "api/src/bot/commands/mute.js",
+      "symbols": [
+        "run",
+        "rollbackTimeout"
+      ],
+      "reason_relevant": "Most complex moderation flow, showing correctness strategy.",
+      "important_findings": [
+        "Uses authoritative timeout verification with retries.",
+        "If voice disconnect fails after timeout, attempts rollback and reports specific failure template.",
+        "Integrates required bot MoveMembers preflight for voice targets."
+      ]
+    },
+    {
+      "file": "api/src/bot/commands/ban.js",
+      "symbols": [
+        "run"
+      ],
+      "reason_relevant": "Ban correctness and mutation locking behavior.",
+      "important_findings": [
+        "Uses guildBanState authoritative checks and mutation lock.",
+        "Success depends on verified ban presence, not just API call completion."
+      ]
+    },
+    {
+      "file": "api/src/bot/commands/unban.js",
+      "symbols": [
+        "run"
+      ],
+      "reason_relevant": "Unban correctness and stale cache invalidation.",
+      "important_findings": [
+        "Uses authoritative absence verification and cache eviction.",
+        "Handles unknown-ban Discord errors as notApplied path."
+      ]
+    },
+    {
+      "file": "api/src/bot/penaltyScheduler.js",
+      "symbols": [
+        "bootstrap",
+        "schedulePenalty",
+        "executePenalty",
+        "reconcileActivePenalties"
+      ],
+      "reason_relevant": "Time-based deferred action model.",
+      "important_findings": [
+        "DB-backed schedule with interval reconciliation.",
+        "Uses row re-read before revoke to avoid stale timer actions.",
+        "Supports jail role snapshot restore via timed_penalty_role_snapshots."
+      ]
+    },
+    {
+      "file": "api/src/application/reactionActions/service.js",
+      "symbols": [
+        "createReactionActionService",
+        "handleReactionEvent",
+        "processRule",
+        "executeAction"
+      ],
+      "reason_relevant": "Reaction automation flow and constraints.",
+      "important_findings": [
+        "In-memory rule cache + miss cache + cooldown map.",
+        "Only-once guard persisted in DB table.",
+        "Supports role mutations, DM/reply, channel links, internal command, grouped reaction cleanup."
+      ]
+    },
+    {
+      "file": "api/src/voice/privateRoomService.js",
+      "symbols": [
+        "createPrivateRoomService",
+        "handleVoiceStateUpdate",
+        "handleInteraction",
+        "bootstrap",
+        "syncRoomAccessOverwrites"
+      ],
+      "reason_relevant": "Largest and most complex subsystem.",
+      "important_findings": [
+        "Manages room lifecycle, panel UI, lock/visibility snapshots, permit/reject lists, and cleanup.",
+        "Uses multiple lock sets for room/owner/whitelist mutation serialization.",
+        "Persists room state and logs to PostgreSQL."
+      ]
+    },
+    {
+      "file": "api/src/voice/voiceManager.js",
+      "symbols": [
+        "connectToChannel",
+        "disconnect",
+        "runGuildOperation",
+        "verifyConnectedChannel"
+      ],
+      "reason_relevant": "Voice connection reliability and queueing model.",
+      "important_findings": [
+        "Per-guild operation queue serializes connection operations.",
+        "Connect success requires state or authoritative member-voice verification.",
+        "Reconnect handling attempts recovery before destroying connection."
+      ]
+    },
+    {
+      "file": "api/src/features/tagRole.js",
+      "symbols": [
+        "createTagRoleFeature",
+        "syncTagRole",
+        "syncGuild",
+        "isTagRoleSyncExemptUser"
+      ],
+      "reason_relevant": "Identity-driven role automation and policy exceptions.",
+      "important_findings": [
+        "Uses primaryGuild identity flags to decide role membership.",
+        "Contains hardcoded exempt user IDs.",
+        "Per-member lock and rerun queue reduce race conditions."
+      ]
+    },
+    {
+      "file": "api/src/database.js",
+      "symbols": [
+        "toPgConnectionConfig",
+        "convertQuestionPlaceholders",
+        "execute"
+      ],
+      "reason_relevant": "DB connectivity and SQL abstraction details.",
+      "important_findings": [
+        "Question-mark placeholders converted to PostgreSQL $n placeholders with quote/comment awareness.",
+        "SSL mode sets rejectUnauthorized=false when enabled.",
+        "Exposes pool-level query and connection abstractions."
+      ]
+    },
+    {
+      "file": "api/src/postgresSchema.js",
+      "symbols": [
+        "ensurePostgresStartupSchema",
+        "archiveLegacyTable",
+        "dropRetiredTables"
+      ],
+      "reason_relevant": "Runtime schema ownership and migration semantics.",
+      "important_findings": [
+        "Creates all runtime tables idempotently at startup.",
+        "Archives legacy config tables and drops retired runtime tables.",
+        "Adds unique constraints/indexes for active penalty and audit lookup behavior."
+      ]
+    },
+    {
+      "file": "api/src/config/static/server.js",
+      "symbols": [
+        "STATIC_SERVER_CONFIG",
+        "DEFAULT_STATIC_SETTINGS"
+      ],
+      "reason_relevant": "Defines static policy and role/channel IDs.",
+      "important_findings": [
+        "Static per-guild settings include moderation gates, role bindings, and private VC settings.",
+        "Defaults and bot presence are immutable object literals."
+      ]
+    },
+    {
+      "file": "api/src/config/static/index.js",
+      "symbols": [
+        "buildStaticServerConfig",
+        "normalizeStaticSettings",
+        "getStaticGuildSettings",
+        "buildAuthoritativeSettings"
+      ],
+      "reason_relevant": "Config normalization and runtime access model.",
+      "important_findings": [
+        "Supports STATIC_SERVER_CONFIG_JSON override.",
+        "buildAuthoritativeSettings overlays runtime dynamic settings under static keys, preserving static authority for controlled keys."
+      ]
+    },
+    {
+      "file": "api/src/bootstrap/validateStaticConfig.js",
+      "symbols": [
+        "validateStaticConfig",
+        "validateGuildStaticConfig"
+      ],
+      "reason_relevant": "Prevents startup with invalid guild role/channel/emoji bindings.",
+      "important_findings": [
+        "Checks duplicate bindings and missing resources.",
+        "Validates enabled feature required settings and channel type constraints.",
+        "Treats some startup voice issues as warnings not hard errors."
+      ]
+    },
+    {
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbols": [
+        "useDashboardData",
+        "loadGuildData",
+        "saveReactionRule",
+        "sendEmbed"
+      ],
+      "reason_relevant": "Defines operational UI API contract and data flow assumptions.",
+      "important_findings": [
+        "Expects auth/session, guild resources, settings, reaction-rules, bot-presence, embed send, health endpoints.",
+        "Client-side validations for reaction rule payload before API submit."
+      ]
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "symbols": [
+        "secret-scan job",
+        "api job",
+        "dashboard job"
+      ],
+      "reason_relevant": "CI/CD and quality gates.",
+      "important_findings": [
+        "Runs secret scan, lint, tests/build, format checks.",
+        "Node version pinned to 20 for CI jobs."
+      ]
+    },
+    {
+      "file": "api/test/moderation.permission.service.test.js",
+      "symbols": [
+        "permission behavior assertions"
+      ],
+      "reason_relevant": "Current reliability and policy drift signal.",
+      "important_findings": [
+        "Many failing assertions indicate ongoing divergence between expected and actual permission gate/hierarchy behavior."
+      ]
+    },
+    {
+      "file": "api/test/messageEncoding.test.js",
+      "symbols": [
+        "catalog defaults utf8 assertions"
+      ],
+      "reason_relevant": "Text encoding consistency signal.",
+      "important_findings": [
+        "Current failing test indicates default catalog text expectation drift/encoding normalization changes."
+      ]
+    }
+  ],
+  "final_assessment": {
+    "what_this_bot_is": "A production-oriented Discord moderation and automation backend with static policy control, PostgreSQL durability, strict action verification, and extensive domain-specific test coverage.",
+    "what_it_is_not": "It is not a horizontally-scaled/sharded distributed bot platform, and in the scanned state it is not a clearly complete full-stack control-plane API implementation for the bundled dashboard.",
+    "top_5_strengths": [
+      "Authoritative post-action verification for critical moderation actions (mute/ban/unban).",
+      "Strong startup hardening: config validation, schema migrations, retry/backoff, singleton lock.",
+      "Deep feature set beyond moderation: reaction rules, private rooms, tag role sync, voice startup connect.",
+      "Comprehensive behavior tests across many edge cases and race conditions.",
+      "Well-defined static config normalization and validation pipeline."
+    ],
+    "top_5_issues": [
+      "Dashboard to backend API contract appears incomplete or split across missing code.",
+      "privateRoomService complexity is very high and concentrated in one large file.",
+      "No sharding/distributed state model for high scale.",
+      "Critical throttles/locks are process-local in memory.",
+      "Backend test suite currently has 19 failures, many around permission/ban/encoding drift."
+    ],
+    "top_5_refactor_priorities": [
+      "Decompose privateRoomService into bounded modules with narrower responsibilities.",
+      "Standardize moderation command scaffold into reusable declarative command specs.",
+      "Resolve permissionService policy drift and stabilize with contract tests.",
+      "Consolidate/verify dashboard HTTP API implementation and auth model in repository.",
+      "Normalize localization/encoding strings and enforce UTF-8 consistency checks."
+    ],
+    "top_5_scaling_priorities": [
+      "Introduce shard/distributed gateway strategy if guild/event scale requires it.",
+      "Move rate-limit/cooldown state to shared store for multi-instance safety.",
+      "Profile and optimize voiceStateUpdate/private-room hot path.",
+      "Add query timeouts and structured DB performance telemetry.",
+      "Reduce repetitive authoritative fetches with short-lived validated caches where safe."
+    ],
+    "top_5_security_priorities": [
+      "Fix PostgreSQL TLS verification to reject invalid certs by default.",
+      "Document and enforce a complete authenticated API boundary for dashboard operations.",
+      "Move hardcoded policy exceptions (tag role exemptions) into auditable config.",
+      "Harden health endpoint exposure through network controls.",
+      "Expand secret scanning and runtime secret hygiene policy beyond tracked source files."
+    ],
+    "executive_summary": "The bot backend is technically mature for single-instance operation and correctness-sensitive moderation, with robust startup resilience and strong regression tests. Its main risks are architectural: concentrated complexity in private room logic, process-local state that limits safe horizontal scaling, and ambiguity around the dashboard's expected HTTP API surface. Addressing these areas would significantly improve maintainability, security confidence, and growth capacity."
+  }
+}

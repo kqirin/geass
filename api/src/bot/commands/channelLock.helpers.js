@@ -36,12 +36,12 @@ async function waitChannelMutationLock(channelId, context = {}) {
 
   const startedAt = Date.now();
   while (CHANNEL_MUTATION_LOCKS.has(key)) {
-    if (Date.now() - startedAt >= CHANNEL_LOCK_MUTATION_LOCK_TIMEOUT_MS) {
+    if (Date.now() - startedAt >= CHANNEL_MUTATION_LOCK_TIMEOUT_MS) {
       const err = new Error('channel_lock_mutation_timeout');
       err.code = 'CHANNEL_LOCK_MUTATION_TIMEOUT';
       logError('channel_lock_mutation_timeout', err, {
         channelId: key,
-        timeoutMs: CHANNEL_LOCK_MUTATION_LOCK_TIMEOUT_MS,
+        timeoutMs: CHANNEL_MUTATION_LOCK_TIMEOUT_MS,
         waitedMs: Date.now() - startedAt,
         context,
       });

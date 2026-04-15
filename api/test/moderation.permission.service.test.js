@@ -177,7 +177,9 @@ async function runPermissionCheck({
 }
 
 test('actor target ve bot native hierarchy uygunsa moderation izni verilir', async () => {
-  const actor = createMember('900000000000010001', [createRole(CMD_MUTE_ROLE, 80)]);
+  const actor = createMember('900000000000010001', [createRole(CMD_MUTE_ROLE, 80)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000010002', [createRole('930000000000010001', 20)]);
   const bot = createMember(BOT_ID, [createRole('940000000000010001', 120)], {
     isBot: true,
@@ -202,7 +204,9 @@ test('actor target ve bot native hierarchy uygunsa moderation izni verilir', asy
 });
 
 test('actor ile target esit highest role position ise hierarchy reddi gelir', async () => {
-  const actor = createMember('900000000000020001', [createRole(CMD_MUTE_ROLE, 40)]);
+  const actor = createMember('900000000000020001', [createRole(CMD_MUTE_ROLE, 40)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000020002', [createRole('930000000000020001', 40)]);
   const bot = createMember(BOT_ID, [createRole('940000000000020001', 120)], {
     isBot: true,
@@ -226,7 +230,9 @@ test('actor ile target esit highest role position ise hierarchy reddi gelir', as
 });
 
 test('actor targettan dusukse native hierarchy reddi gelir', async () => {
-  const actor = createMember('900000000000030001', [createRole(CMD_MUTE_ROLE, 20)]);
+  const actor = createMember('900000000000030001', [createRole(CMD_MUTE_ROLE, 20)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000030002', [createRole('930000000000030001', 50)]);
   const bot = createMember(BOT_ID, [createRole('940000000000030001', 120)], {
     isBot: true,
@@ -248,7 +254,9 @@ test('actor targettan dusukse native hierarchy reddi gelir', async () => {
 });
 
 test('target sunucu sahibi ise actor yuksek olsa bile reddedilir', async () => {
-  const actor = createMember('900000000000040001', [createRole(CMD_MUTE_ROLE, 80)]);
+  const actor = createMember('900000000000040001', [createRole(CMD_MUTE_ROLE, 80)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember(OWNER_ID, [createRole('930000000000040001', 5)]);
   const bot = createMember(BOT_ID, [createRole('940000000000040001', 120)], {
     isBot: true,
@@ -270,7 +278,9 @@ test('target sunucu sahibi ise actor yuksek olsa bile reddedilir', async () => {
 });
 
 test('actor sunucu sahibi ise hierarchy override alir ama command role gate yine korunur', async () => {
-  const actor = createMember(OWNER_ID, [createRole(CMD_MUTE_ROLE, 10)]);
+  const actor = createMember(OWNER_ID, [createRole(CMD_MUTE_ROLE, 10)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000050002', [createRole('930000000000050001', 999)]);
   const bot = createMember(BOT_ID, [createRole('940000000000050001', 1200)], {
     isBot: true,
@@ -292,7 +302,9 @@ test('actor sunucu sahibi ise hierarchy override alir ama command role gate yine
 });
 
 test('actor yeterli olsa bile bot moderatable degilse bot hierarchy reddi gelir', async () => {
-  const actor = createMember('900000000000060001', [createRole(CMD_MUTE_ROLE, 80)]);
+  const actor = createMember('900000000000060001', [createRole(CMD_MUTE_ROLE, 80)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000060002', [createRole('930000000000060001', 20)], {
     moderatable: false,
   });
@@ -317,7 +329,9 @@ test('actor yeterli olsa bile bot moderatable degilse bot hierarchy reddi gelir'
 });
 
 test('command role varsa bile native hierarchy yetersizse hedefte islem reddedilir', async () => {
-  const actor = createMember('900000000000070001', [createRole(CMD_MUTE_ROLE, 15)]);
+  const actor = createMember('900000000000070001', [createRole(CMD_MUTE_ROLE, 15)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000070002', [createRole('930000000000070001', 30)]);
   const bot = createMember(BOT_ID, [createRole('940000000000070001', 100)], {
     isBot: true,
@@ -339,7 +353,9 @@ test('command role varsa bile native hierarchy yetersizse hedefte islem reddedil
 });
 
 test('target cachede yoksa authoritative fetch ile resolve edilir', async () => {
-  const actor = createMember('900000000000080001', [createRole(CMD_MUTE_ROLE, 80)]);
+  const actor = createMember('900000000000080001', [createRole(CMD_MUTE_ROLE, 80)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const fetchedTarget = createMember('900000000000080002', [createRole('930000000000080001', 10)]);
   const bot = createMember(BOT_ID, [createRole('940000000000080001', 120)], {
     isBot: true,
@@ -364,7 +380,9 @@ test('target cachede yoksa authoritative fetch ile resolve edilir', async () => 
 });
 
 test('timeout native moderatable reddi admin hedefte dedicated reasonCode ile doner', async () => {
-  const actor = createMember('900000000000090001', [createRole(CMD_MUTE_ROLE, 90)]);
+  const actor = createMember('900000000000090001', [createRole(CMD_MUTE_ROLE, 90)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000090002', [createRole('930000000000090001', 10)], {
     isAdmin: true,
     moderatable: false,
@@ -396,7 +414,9 @@ test('kick ve ban native kickable bannable durumlariyla uyumlu fail-closed calis
   const actor = createMember('900000000000100001', [
     createRole(CMD_KICK_ROLE, 90),
     createRole(CMD_BAN_ROLE, 90),
-  ]);
+  ], {
+    permissionNames: ['KickMembers', 'BanMembers'],
+  });
   const kickTarget = createMember('900000000000100002', [createRole('930000000000100001', 10)], {
     kickable: false,
   });
@@ -443,7 +463,9 @@ test('kick ve ban native kickable bannable durumlariyla uyumlu fail-closed calis
 
 test('audit log native hierarchy alanlarini dolu ve actorLevelsiz uretir', async () => {
   const auditEvents = [];
-  const actor = createMember('900000000000110001', [createRole(CMD_MUTE_ROLE, 20)]);
+  const actor = createMember('900000000000110001', [createRole(CMD_MUTE_ROLE, 20)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000110002', [createRole('930000000000110001', 40)]);
   const bot = createMember(BOT_ID, [createRole('940000000000110001', 120)], {
     isBot: true,
@@ -485,7 +507,9 @@ test('audit log native hierarchy alanlarini dolu ve actorLevelsiz uretir', async
 
 test('native snapshot no-role hedefte null authority yerine zero-position alanlari verir', async () => {
   const auditEvents = [];
-  const actor = createMember('900000000000120001', [createRole(CMD_MUTE_ROLE, 0)]);
+  const actor = createMember('900000000000120001', [createRole(CMD_MUTE_ROLE, 0)], {
+    permissionNames: ['ModerateMembers'],
+  });
   const target = createMember('900000000000120002', []);
   const bot = createMember(BOT_ID, [createRole('940000000000120001', 120)], {
     isBot: true,

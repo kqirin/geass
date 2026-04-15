@@ -15,6 +15,7 @@ const { createBotPresenceManager } = require('./bot/presenceManager');
 const { validateConfig } = require('./bootstrap/validateConfig');
 const { validateStaticConfig } = require('./bootstrap/validateStaticConfig');
 const { getTagRoleConfig } = require('./config/static');
+const { createControlPlaneRequestHandler } = require('./controlPlane/server');
 const { withRetry, isTransientError } = require('./utils/retry');
 const {
   isDiagModeEnabled,
@@ -223,11 +224,17 @@ async function main() {
   const healthPort = String(process.env.PORT || '').trim();
   let healthServer = null;
   if (healthPort) {
-    healthServer = http.createServer((_req, res) => {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.end('ok');
+    const controlPlaneHandler = createControlPlaneRequestHandler({
+      enabled: config.controlPlane.enabled === true,
+      config,
+      getStartupPhase: () => startupPhase,
+      getClientReady: () => {
+        if (typeof client?.isReady !== 'function') return false;
+        return client.isReady() === true;
+      },
+      startedAtMs: Date.now(),
     });
+    healthServer = http.createServer(controlPlaneHandler);
     await new Promise((resolve, reject) => {
       const onError = (err) => {
         healthServer.off('listening', onListening);
@@ -242,6 +249,9 @@ async function main() {
       healthServer.listen(Number(healthPort));
     });
     logSystem(`Health listener: ${healthPort} portunda hazir.`, 'INFO');
+    if (config.controlPlane.enabled === true) {
+      logSystem('Control-plane API foundation etkin (read-only)', 'INFO');
+    }
   }
 
   setStartupPhase('bot_instance_lock_acquire', logSystem);

@@ -1,5 +1,10 @@
 const os = require('node:os');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  BOT_STATUS_DETAIL_MODE_COMPACT,
+  BOT_STATUS_DETAIL_MODE_LEGACY,
+  resolveStatusCommandRuntimeMode,
+} = require('../../controlPlane/botSettingsRepository');
 
 const STATUS_EMBED_COLOR = 0x4b5563;
 const ERROR_EMBED_COLOR = 0x7f1d1d;
@@ -130,20 +135,44 @@ function createBaseEmbed(message, { color, title, description }) {
   return embed;
 }
 
-function buildStatusEmbed(message, metrics) {
-  const guildName = String(message?.guild?.name || 'Sunucu').trim() || 'Sunucu';
-  const description = [
+function buildStatusDescription(metrics, detailMode = BOT_STATUS_DETAIL_MODE_LEGACY) {
+  if (detailMode === BOT_STATUS_DETAIL_MODE_COMPACT) {
+    return [
+      `Ping: ${metrics.ping}`,
+      `Uptime: ${metrics.uptime}`,
+    ].join('\n');
+  }
+
+  return [
     `RAM Kullan\u0131m\u0131: ${metrics.memoryUsage}`,
     `CPU Kullan\u0131m\u0131: ${metrics.cpuUsage}`,
     `Ping: ${metrics.ping}`,
     `Uptime: ${metrics.uptime}`,
   ].join('\n');
+}
+
+function buildStatusEmbed(message, metrics, { detailMode = BOT_STATUS_DETAIL_MODE_LEGACY } = {}) {
+  const guildName = String(message?.guild?.name || 'Sunucu').trim() || 'Sunucu';
+  const description = internals.buildStatusDescription(metrics, detailMode);
 
   return createBaseEmbed(message, {
     color: STATUS_EMBED_COLOR,
     title: `${guildName} \u2022 Bot Durum`,
     description,
   });
+}
+
+async function resolveStatusDetailMode(ctx = {}) {
+  const explicitDetailMode = String(ctx?.statusDetailMode || '').trim().toLowerCase();
+  if (explicitDetailMode === BOT_STATUS_DETAIL_MODE_COMPACT) {
+    return BOT_STATUS_DETAIL_MODE_COMPACT;
+  }
+  if (explicitDetailMode === BOT_STATUS_DETAIL_MODE_LEGACY) {
+    return BOT_STATUS_DETAIL_MODE_LEGACY;
+  }
+
+  const guildId = String(ctx?.message?.guild?.id || '').trim();
+  return resolveStatusCommandRuntimeMode({ guildId });
 }
 
 function buildErrorEmbed(message, title, description) {
@@ -235,7 +264,8 @@ async function run(ctx) {
 
   try {
     const metrics = await internals.collectStatusMetrics(message);
-    const embed = internals.buildStatusEmbed(message, metrics);
+    const detailMode = await internals.resolveStatusDetailMode(ctx);
+    const embed = internals.buildStatusEmbed(message, metrics, { detailMode });
     await internals.sendTemporaryEmbed(message, embed, STATUS_MESSAGE_TTL_MS);
   } catch {
     await internals.sendTemporaryError(message, 'Durum bilgisi al\u0131n\u0131rken bir hata olu\u015ftu.');
@@ -255,7 +285,9 @@ const internals = {
   resolveUptimeMs,
   formatUptime,
   resolveThumbnailUrl,
+  buildStatusDescription,
   buildStatusEmbed,
+  resolveStatusDetailMode,
   buildErrorEmbed,
   scheduleMessageDelete,
   sendTemporaryEmbed,

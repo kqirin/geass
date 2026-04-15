@@ -14,7 +14,6 @@ const DEFAULT_PRIVATE_ROOM_PANEL_EMOJIS = Object.freeze({
 const DEFAULT_STATIC_SETTINGS = Object.freeze({
   prefix: '.',
   log_enabled: true,
-  log_role: null,
   log_safe_list: '',
   log_limit: 25,
   warn_enabled: true,
@@ -78,7 +77,6 @@ const STATIC_SERVER_CONFIG = Object.freeze({
         ...DEFAULT_STATIC_SETTINGS,
         prefix: '.',
         log_enabled: true,
-        log_role: '1474628280920444948',
         log_safe_list: '',
         log_limit: 25,
         warn_enabled: true,

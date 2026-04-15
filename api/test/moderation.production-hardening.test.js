@@ -5,14 +5,32 @@ const banCommand = require('../src/bot/commands/ban');
 const logCommand = require('../src/bot/commands/log');
 const { resolveTarget } = require('../src/bot/moderation.utils');
 
-test('ban command fails closed when target member cannot be resolved', async () => {
+test('ban command supports ID-only path when target member cannot be resolved', async () => {
   const sentTemplates = [];
+  const verifyCalls = [];
+  const banCalls = [];
+  let banned = false;
 
   await banCommand.run({
     message: {
       guild: {
+        bans: {
+          cache: new Map(),
+          fetch: async () => {
+            if (banned) {
+              return {
+                user: { id: '123456789012345678', username: 'target' },
+              };
+            }
+            return null;
+          },
+        },
         members: {
           fetch: async () => null,
+          ban: async (id) => {
+            banCalls.push(id);
+            banned = true;
+          },
         },
       },
       client: { user: { id: 'bot-1' } },
@@ -26,18 +44,47 @@ test('ban command fails closed when target member cannot be resolved', async () 
     sendTemplate: async (key) => {
       sentTemplates.push(key);
     },
-    verifyPermission: async () => {
-      throw new Error('verifyPermission should not run for unresolved ban target');
+    verifyPermission: async (...args) => {
+      verifyCalls.push(args);
+      return {
+        success: true,
+        consumeLimit: async () => ({
+          commit: async () => {},
+          rollback: async () => {},
+        }),
+      };
     },
   });
 
-  assert.deepEqual(sentTemplates, ['userNotFound']);
+  assert.equal(verifyCalls.length, 1);
+  assert.deepEqual(verifyCalls[0], [
+    'ban',
+    null,
+    {
+      targetId: '123456789012345678',
+      execution: { requiredBotPermissions: ['BanMembers'] },
+    },
+  ]);
+  assert.deepEqual(banCalls, ['123456789012345678']);
+  assert.deepEqual(sentTemplates, ['success']);
 });
 
-test('ban command aborts when target state changes before action execution', async () => {
+test('ban command can proceed with authoritative ID path when target leaves between checks', async () => {
   const sentTemplates = [];
+  const banCalls = [];
+  let banned = false;
   const guild = {
-    bans: { fetch: async () => null },
+    bans: {
+      cache: new Map(),
+      fetch: async () => {
+        if (banned) {
+          return {
+            user: { id: '123456789012345678', username: 'target' },
+          };
+        }
+        return null;
+      },
+    },
     members: {
       fetchCalls: 0,
       async fetch() {
@@ -52,8 +99,9 @@ test('ban command aborts when target state changes before action execution', asy
         }
         return null;
       },
-      async ban() {
-        throw new Error('guild.members.ban should not execute after stale recheck');
+      async ban(id) {
+        banCalls.push(id);
+        banned = true;
       },
     },
   };
@@ -81,7 +129,8 @@ test('ban command aborts when target state changes before action execution', asy
     }),
   });
 
-  assert.deepEqual(sentTemplates, ['operationNotAllowed']);
+  assert.deepEqual(banCalls, ['123456789012345678']);
+  assert.deepEqual(sentTemplates, ['success']);
 });
 
 test('resolveTarget marks ambiguous member search instead of picking the first fuzzy result', async () => {

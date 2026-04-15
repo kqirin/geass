@@ -327,7 +327,7 @@ test('prefix mute keeps success response when case log creation fails and omits 
 
     assert.equal(handled, true);
     const successReply = replies.find((payload) => Array.isArray(payload.embeds) && payload.embeds.length > 0);
-    const warningReply = replies.find((payload) => String(payload?.content || '').match(/log kaydi/i));
+    const warningReply = replies.find((payload) => String(payload?.content || '').match(/log kayd[ıi]/i));
 
     assert.ok(successReply);
     const { text } = getRenderedEmbedText(successReply);

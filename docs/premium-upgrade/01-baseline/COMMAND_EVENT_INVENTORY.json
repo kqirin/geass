@@ -1,0 +1,635 @@
+{
+  "prefix_commands": [
+    {
+      "name": "log",
+      "file": "api/src/bot/commands/log.js",
+      "symbol": "run",
+      "purpose": "Show moderation case history with button-based pagination.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "warn",
+      "file": "api/src/bot/commands/warn.js",
+      "symbol": "run",
+      "purpose": "Register warning case and send success/error templates.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "mute",
+      "file": "api/src/bot/commands/mute.js",
+      "symbol": "run",
+      "purpose": "Apply Discord native communication timeout with authoritative verification and voice disconnect safeguards.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "unmute",
+      "file": "api/src/bot/commands/unmute.js",
+      "symbol": "run",
+      "purpose": "Clear native timeout with authoritative verification.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "kick",
+      "file": "api/src/bot/commands/kick.js",
+      "symbol": "run",
+      "purpose": "Kick target member and write moderation case log.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "jail",
+      "file": "api/src/bot/commands/jail.js",
+      "symbol": "run",
+      "purpose": "Apply jail role, snapshot prior roles, and optionally schedule timed release.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "unjail",
+      "file": "api/src/bot/commands/unjail.js",
+      "symbol": "run",
+      "purpose": "Restore pre-jail role snapshot and cancel active jail penalty.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "ban",
+      "file": "api/src/bot/commands/ban.js",
+      "symbol": "run",
+      "purpose": "Ban user by mention/member/id with authoritative post-action ban verification.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "unban",
+      "file": "api/src/bot/commands/unban.js",
+      "symbol": "run",
+      "purpose": "Remove guild ban with authoritative absent-check and cache eviction.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "yardim",
+      "file": "api/src/bot/commands/yardim.js",
+      "symbol": "run",
+      "purpose": "Render command help embed.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    },
+    {
+      "name": "yardım",
+      "file": "api/src/bot/moderation.js",
+      "symbol": "commandHandlers['yardım']",
+      "purpose": "Turkish alias mapping to the same help command handler.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    },
+    {
+      "name": "embed",
+      "file": "api/src/bot/commands/embed.js",
+      "symbol": "run",
+      "purpose": "Start modal/button embed builder flow and send final embed to target text channel.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "lock",
+      "file": "api/src/bot/commands/lock.js",
+      "symbol": "run",
+      "purpose": "Lock current text channel by denying @everyone SendMessages and neutralizing allows.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "unlock",
+      "file": "api/src/bot/commands/unlock.js",
+      "symbol": "run",
+      "purpose": "Restore channel send-message overwrite snapshot or fallback-unlock path.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "durum",
+      "file": "api/src/bot/commands/durum.js",
+      "symbol": "run",
+      "purpose": "Show short-lived status embed (CPU, RAM, ping, uptime) to admins.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    },
+    {
+      "name": "custom command lookup",
+      "file": "api/src/discordClient.js",
+      "symbol": "cache.getCustomCommand",
+      "purpose": "Fallback response path after builtin moderation command handling.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "vcmute / vcunmute",
+      "file": "api/src/bot/builtinCommands.js",
+      "symbol": "BUILTIN_COMMAND_NAMES",
+      "purpose": "Declared as builtin/template names but no runtime handler in moderation command map.",
+      "current_status": "partial",
+      "migration_sensitivity": "high"
+    }
+  ],
+  "slash_commands": [],
+  "interactions": [
+    {
+      "name": "embed builder button",
+      "file": "api/src/bot/commands/embed.js",
+      "symbol": "BTN_OPEN (em_btn_open:<token>)",
+      "purpose": "Open modal for embed payload entry.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "embed builder modal submit",
+      "file": "api/src/bot/commands/embed.js",
+      "symbol": "MOD_ID (em_mod_submit:<token>)",
+      "purpose": "Validate payload and send embed to target text channel.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "private room button interactions",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "handleButtonInteraction (pvr:*)",
+      "purpose": "Owner controls: lock/unlock, hide/show, allow/remove lists, transfer, rename, limit, delete.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room user select interactions",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "handleUserSelectInteraction (pvru:*)",
+      "purpose": "Permit/reject member sync and ownership transfer selection.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room role select interactions",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "handleRoleSelectInteraction (pvrr:*)",
+      "purpose": "Permit/reject role sync.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room modal interactions",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "handleModalInteraction (pvrm:rename / pvrm:limit)",
+      "purpose": "Rename room and set user-limit.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room legacy string select",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "handleStringSelectInteraction (pvrs:*)",
+      "purpose": "Legacy menu path returning deprecation notice.",
+      "current_status": "partial",
+      "migration_sensitivity": "low"
+    },
+    {
+      "name": "log command button collector",
+      "file": "api/src/bot/commands/log.js",
+      "symbol": "view_logs_<userId>, prev_page, next_page",
+      "purpose": "Ephemeral moderation-log viewer pagination.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    }
+  ],
+  "gateway_events": [
+    {
+      "name": "messageCreate",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('messageCreate')",
+      "purpose": "Entry for prefix moderation and custom command reply flow.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "messageReactionAdd",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('messageReactionAdd')",
+      "purpose": "Forward ADD reaction events to reaction action service.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "messageReactionRemove",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('messageReactionRemove')",
+      "purpose": "Forward REMOVE reaction events to reaction action service.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "guildMemberAdd",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('guildMemberAdd')",
+      "purpose": "Trigger tag-role sync on member join.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "guildMemberUpdate",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('guildMemberUpdate')",
+      "purpose": "Trigger tag-role sync on member update.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "userUpdate",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('userUpdate')",
+      "purpose": "Cross-guild tag-role sync when user profile/primary guild changes.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "voiceStateUpdate",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('voiceStateUpdate')",
+      "purpose": "Drive private room create/access/activity logic.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "interactionCreate",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('interactionCreate')",
+      "purpose": "Route interactions to embed command or private room service.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "ready / clientReady",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.once('clientReady'), client.once('ready')",
+      "purpose": "One-time bootstrap path: cache warmup, presence apply, startup voice auto-join.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "error / warn",
+      "file": "api/src/discordClient.js",
+      "symbol": "client.on('error'), client.on('warn')",
+      "purpose": "Diagnostic event tracing.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    }
+  ],
+  "schedulers_jobs": [
+    {
+      "name": "timed penalty reconcile interval",
+      "file": "api/src/bot/penaltyScheduler.js",
+      "symbol": "reconcileTimer (setInterval)",
+      "purpose": "Periodically reload and schedule active timed penalties from DB.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "timed penalty revoke timeouts",
+      "file": "api/src/bot/penaltyScheduler.js",
+      "symbol": "timers Map + setTimeout(scheduleRow)",
+      "purpose": "Execute penalty revocation at revoke_at timestamps.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room inactivity cleanup",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "cleanupTimer (setInterval)",
+      "purpose": "Delete empty rooms inactive for >= 3 days.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "bot presence deferred apply",
+      "file": "api/src/bot/presenceManager.js",
+      "symbol": "pendingTimer (setTimeout)",
+      "purpose": "Throttle frequent presence updates and apply queued change.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "startup voice auto-join run",
+      "file": "api/src/voice/startupVoiceAutoJoiner.js",
+      "symbol": "createStartupVoiceAutoJoiner().run",
+      "purpose": "One-shot post-ready voice connect attempts for configured startup channels.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "diagnostic listener leak watchers",
+      "file": "api/src/diagnostics.js",
+      "symbol": "createListenerLeakWatcher (setInterval)",
+      "purpose": "Periodic listener count anomaly warnings in DIAG mode.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    }
+  ],
+  "caches_locks": [
+    {
+      "name": "bot instance advisory lock",
+      "file": "api/src/index.js",
+      "symbol": "pg_try_advisory_lock / pg_advisory_unlock",
+      "purpose": "Ensure only one active bot gateway process per lock key.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "custom command cache",
+      "file": "api/src/utils/cache.js",
+      "symbol": "customCommandsCache (Map)",
+      "purpose": "In-memory guild command response lookup.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "moderation rate-limit state",
+      "file": "api/src/utils/cache.js",
+      "symbol": "moderationRateLimitState (Map)",
+      "purpose": "In-memory rolling action/abuse counters per guild-user-action key.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "permission service transient caches",
+      "file": "api/src/bot/services/permissionService.js",
+      "symbol": "limitWarnCooldown / abuseCounter / unauthorizedSpam / executionLocks",
+      "purpose": "Prevent spam, enforce rate-limit warnings, and serialize execution receipt mutations.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "target moderation mutation lock",
+      "file": "api/src/bot/services/actionExecution.js",
+      "symbol": "TARGET_MUTATION_LOCKS (Set)",
+      "purpose": "Serialize concurrent moderation actions per mutation key.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "guild ban mutation lock + cache coherence",
+      "file": "api/src/bot/services/guildBanState.js",
+      "symbol": "guildBanMutationLocks (Map)",
+      "purpose": "Serialize ban/unban operations and maintain authoritative guild ban cache behavior.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "penalty scheduler runtime state",
+      "file": "api/src/bot/penaltyScheduler.js",
+      "symbol": "timers (Map), executingPenaltyIds (Set)",
+      "purpose": "Avoid duplicate timed revoke execution and track scheduled jobs.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "reaction rules cache + cooldown + miss cache",
+      "file": "api/src/application/reactionActions/service.js",
+      "symbol": "ruleCache / ruleMissCache / cooldownMap",
+      "purpose": "Reduce DB fetch load and enforce per-rule cooldown windows.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "channel lock snapshots and mutation lock",
+      "file": "api/src/bot/commands/channelLock.helpers.js",
+      "symbol": "CHANNEL_LOCK_SNAPSHOTS / CHANNEL_MUTATION_LOCKS",
+      "purpose": "Persist/restore send-message overwrite state and serialize channel lock operations.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private room runtime caches and locks",
+      "file": "api/src/voice/privateRoomService.js",
+      "symbol": "roomsById / roomIdByChannel / roomWhitelistLock / roomOwnerLock / lockOverwriteStateByRoom",
+      "purpose": "Track room state, serialize ownership/list changes, and enforce access behavior.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "voice manager operation queue and connection state",
+      "file": "api/src/voice/voiceManager.js",
+      "symbol": "stateByGuild / activeConnectionByGuild / operationQueueByGuild / queueDepthByGuild",
+      "purpose": "Serialize voice connect/disconnect operations and keep authoritative channel state.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    }
+  ],
+  "db_backed_durable_state": [
+    {
+      "name": "mod_logs",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE mod_logs",
+      "purpose": "Moderation case history used by log command and caseId generation.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "timed_penalties",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE timed_penalties",
+      "purpose": "Durable timed penalty schedule with active uniqueness per guild/user/action.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "timed_penalty_role_snapshots",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE timed_penalty_role_snapshots",
+      "purpose": "Jail pre-role snapshots used for restore.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "reaction_rules",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE reaction_rules",
+      "purpose": "Rule definitions for reaction automation engine.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "reaction_rule_logs",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE reaction_rule_logs",
+      "purpose": "Execution audit trail for reaction rule processing.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "reaction_rule_only_once_executions",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE reaction_rule_only_once_executions",
+      "purpose": "Concurrency/once-only guard state for rule executions.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private_voice_rooms",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE private_voice_rooms",
+      "purpose": "Durable private room ownership/access/snapshot state.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "private_voice_room_logs",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE private_voice_room_logs",
+      "purpose": "Private room action audit log.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "text_channel_lock_snapshots",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE text_channel_lock_snapshots",
+      "purpose": "Persist send-message overwrite snapshots for lock/unlock restore.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "custom_commands",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE custom_commands",
+      "purpose": "Guild custom command storage, mirrored into RAM cache.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "custom_command_audit",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "CREATE TABLE custom_command_audit",
+      "purpose": "Audit trail for custom command changes.",
+      "current_status": "active",
+      "migration_sensitivity": "medium"
+    },
+    {
+      "name": "legacy config archives",
+      "file": "api/src/postgresSchema.js",
+      "symbol": "archiveLegacyTable(settings, bot_presence_settings)",
+      "purpose": "Migrate legacy config tables to archive names and remove live runtime dependency.",
+      "current_status": "partial",
+      "migration_sensitivity": "medium"
+    }
+  ],
+  "external_integrations": [
+    {
+      "name": "Discord Gateway + REST",
+      "file": "api/src/discordClient.js",
+      "symbol": "discord.js Client + guild/member/ban/reaction APIs",
+      "purpose": "Primary bot event and action integration surface.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "Discord Voice transport",
+      "file": "api/src/voice/voiceManager.js",
+      "symbol": "@discordjs/voice joinVoiceChannel / entersState",
+      "purpose": "Voice connection management and startup auto-join.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "PostgreSQL",
+      "file": "api/src/database.js",
+      "symbol": "pg Pool",
+      "purpose": "Durable storage and startup schema migration backend.",
+      "current_status": "active",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "HTTP health probe",
+      "file": "api/src/index.js",
+      "symbol": "node:http createServer",
+      "purpose": "Liveness endpoint (`ok`) on configured `PORT`.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    },
+    {
+      "name": "Environment loader",
+      "file": "api/src/config.js",
+      "symbol": "dotenv.config",
+      "purpose": "Load runtime configuration from environment variables.",
+      "current_status": "active",
+      "migration_sensitivity": "low"
+    }
+  ],
+  "dashboard_required_api_surface": [
+    {
+      "name": "auth session",
+      "file": "dashboard/src/App.jsx",
+      "symbol": "GET /api/auth/session",
+      "purpose": "Route guard and initial dashboard boot.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "auth logout",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "POST /api/auth/logout",
+      "purpose": "Terminate dashboard session.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "health",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "GET /api/health",
+      "purpose": "Populate system health card/polling.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "bot presence read",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "GET /api/bot-presence?guildId=<id>",
+      "purpose": "Load bot presence settings and metadata.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "guild metadata",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "GET /api/guilds/:id/roles, /channels, /emojis",
+      "purpose": "Populate moderation/reaction editor selectors.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "settings read",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "GET /api/settings/:id",
+      "purpose": "Load moderation settings payload consumed by dashboard state extractor.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "reaction rules CRUD + health + dry-run test",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "GET/POST/PUT/DELETE /api/reaction-rules, GET /api/reaction-rules/health, POST /api/reaction-rules/:id/test",
+      "purpose": "Configure and validate reaction automation rules.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    },
+    {
+      "name": "embed send",
+      "file": "dashboard/src/hooks/useDashboardData.js",
+      "symbol": "POST /api/embed/send",
+      "purpose": "Send dashboard-defined embed payload to Discord channel.",
+      "current_status": "unclear",
+      "migration_sensitivity": "high"
+    }
+  ]
+}

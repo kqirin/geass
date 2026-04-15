@@ -23,6 +23,7 @@ const HIERARCHY_CHECK_COMMANDS = new Set([
 ]);
 
 const MODERATION_NATIVE_ACTOR_PERMISSIONS = Object.freeze({
+  log: 'ModerateMembers',
   warn: 'ModerateMembers',
   mute: 'ModerateMembers',
   kick: 'KickMembers',

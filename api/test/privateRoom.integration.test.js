@@ -507,7 +507,6 @@ test('private room integration: create/persist/lock/whitelist/non-owner guard', 
       'İzin verilecek rolleri seç'
     );
 
-    const roomChannel = fixture.channelsMap.get(String(roomChannelId));
     const transferInteraction = createInteraction({
       guild: fixture.guild,
       clientUserId: client.user.id,

@@ -190,7 +190,7 @@ test('unban keeps success semantics when log write fails after Discord action', 
 
     assert.equal(calls.templates.length, 1);
     assert.equal(calls.templates[0].templateKey, 'success');
-    assert.match(String(calls.warningReplies[0]?.content || ''), /log kaydi/i);
+    assert.match(String(calls.warningReplies[0]?.content || ''), /log kayd[ıi]/i);
   } finally {
     command.restore();
   }

@@ -137,7 +137,7 @@ function createContext({
   };
 }
 
-test('.ban ID-only hedefte member bulunamiyorsa fail-closed davranir', async () => {
+test('.ban ID-only hedefte member bulunamasa da authoritative ID yolu ile ilerler', async () => {
   const logCalls = [];
   const command = loadBanCommand(async (...args) => {
     logCalls.push(args);
@@ -153,13 +153,21 @@ test('.ban ID-only hedefte member bulunamiyorsa fail-closed davranir', async () 
 
     await command.run(ctx);
 
-    assert.equal(calls.fetchMember.length, 1);
+    assert.equal(calls.fetchMember.length, 2);
     assert.equal(calls.fetchMember[0], '1447015808344784956');
-    assert.equal(calls.verifyPermission.length, 0);
-    assert.equal(calls.consumeLimit.length, 0);
-    assert.equal(calls.ban.length, 0);
-    assert.equal(calls.templates[0].templateKey, 'userNotFound');
-    assert.equal(logCalls.length, 0);
+    assert.deepEqual(calls.verifyPermission[0], [
+      'ban',
+      null,
+      {
+        targetId: '1447015808344784956',
+        execution: { requiredBotPermissions: ['BanMembers'] },
+      },
+    ]);
+    assert.equal(calls.consumeLimit.length, 1);
+    assert.equal(calls.ban.length, 1);
+    assert.equal(calls.ban[0].id, '1447015808344784956');
+    assert.equal(calls.templates[0].templateKey, 'success');
+    assert.equal(logCalls.length, 1);
   } finally {
     command.restore();
   }
@@ -187,7 +195,10 @@ test('.ban resolve edilen member varken hierarchy/bannable kontrol yolunu korur'
     assert.deepEqual(calls.verifyPermission[0], [
       'ban',
       fetchedMember,
-      { execution: { requireTargetMember: true, requireTargetBannable: true } },
+      {
+        targetId: '1447015808344784956',
+        execution: { requireTargetMember: true, requireTargetBannable: true },
+      },
     ]);
     assert.deepEqual(calls.fetchBan, [
       { user: '1447015808344784956', force: true, cache: false },

@@ -1,7 +1,6 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+import { getAuthLoginUrl } from '../lib/apiClient.js';
 
 const Login = () => {
   const [isExiting, setIsExiting] = useState(false);
@@ -9,7 +8,7 @@ const Login = () => {
   const handleLogin = () => {
     setIsExiting(true);
     setTimeout(() => {
-      window.location.href = `${API_BASE}/api/auth/login`;
+      window.location.href = getAuthLoginUrl();
     }, 600);
   };
 

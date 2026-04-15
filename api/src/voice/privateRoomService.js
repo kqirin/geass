@@ -26,12 +26,6 @@ const WHITELIST_LOCK_TIMEOUT_MS = Math.max(
   Number(process.env.PRIVATE_ROOM_LOCK_TIMEOUT_MS || DEFAULT_WHITELIST_LOCK_TIMEOUT_MS)
 );
 
-const EMOJI_SPEAKER = '\uD83D\uDD0A';
-const EMOJI_LOCK = '\uD83D\uDD12';
-const EMOJI_UNLOCK = '\uD83D\uDD13';
-const EMOJI_OK = '\u2705';
-const EMOJI_FAIL = '\u274C';
-const EMOJI_WARN = '\u26A0\uFE0F';
 const CONNECT_PERMISSION = 'Connect';
 const VIEW_CHANNEL_PERMISSION = 'ViewChannel';
 const OVERWRITE_CONNECT_ALLOW = 'allow';
@@ -324,10 +318,6 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
     );
   }
 
-  function canEnterLockedRoom(room, userId, roleIds = []) {
-    return resolveRoomAccessDecision(room, { userId, roleIds }).allowed;
-  }
-
   async function disconnectMember(member, reason = 'Ozel oda erisim iznin yok') {
     try {
       if (!member?.voice?.channelId) return;
@@ -415,7 +405,7 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
     };
   }
 
-  function panelEmbed(room, guild, channel) {
+  function panelEmbed(room, guild, _channel) {
     const permitSubjects = [
       ...getPermitMemberIds(room).map((id) => `<@${id}>`),
       ...getPermitRoleIds(room).map((id) => `<@&${id}>`),
@@ -573,7 +563,7 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
 
   async function deleteRoom(room, reason = 'cleanup') {
     if (!room) return;
-    const { guild, channel, guildStatus, channelStatus } = await resolveRoomChannel(room, {
+    const { channel, guildStatus, channelStatus } = await resolveRoomChannel(room, {
       action: 'delete_room',
       reason,
     });
@@ -1794,20 +1784,15 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
       };
       const nextRoom = normalizeRoomAccessLists(await buildNextRoom(baseRoom));
 
-      let syncResult = null;
-      try {
-        syncResult = await syncRoomAccessOverwrites(
-          {
-            ...nextRoom,
-            lockSnapshot: cloneLockSnapshot(previousRoom.lockSnapshot),
-            captureLockSnapshot:
-              !previousRoom.lockSnapshot && roomNeedsManagedAccess(nextRoom) ? true : false,
-          },
-          { persistSnapshot: false }
-        );
-      } catch (err) {
-        throw err;
-      }
+      const syncResult = await syncRoomAccessOverwrites(
+        {
+          ...nextRoom,
+          lockSnapshot: cloneLockSnapshot(previousRoom.lockSnapshot),
+          captureLockSnapshot:
+            !previousRoom.lockSnapshot && roomNeedsManagedAccess(nextRoom) ? true : false,
+        },
+        { persistSnapshot: false }
+      );
 
       const updated = await privateVoiceRepository
         .updateRoom(baseRoom.id, {
@@ -1901,54 +1886,6 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
     }
 
     return { room: activeRoom || baseRoom, added, exists, ignoredOwner, failed: added.length > 0 && !activeRoom };
-  }
-
-  async function removeWhitelistMembers(room, actorId, userIds, source = 'select_remove') {
-    const baseRoom = normalizeRoomAccessLists(
-      (getRoomByIdCached(room.id) || (await hydrateRoomFromToken(room.guildId, room.id))) || room
-    );
-    const current = new Set(getPermitMemberIds(baseRoom));
-    const removed = [];
-    const missing = [];
-    const ignoredOwner = [];
-
-    for (const userId of uniqIds(userIds)) {
-      if (userId === baseRoom.ownerId) {
-        ignoredOwner.push(userId);
-        continue;
-      }
-      if (!current.has(userId)) {
-        missing.push(userId);
-        continue;
-      }
-      current.delete(userId);
-      removed.push(userId);
-    }
-
-    let activeRoom = baseRoom;
-    if (removed.length > 0) {
-      activeRoom = await commitRoomAccessMutation(
-        baseRoom,
-        actorId,
-        {
-          action: 'permit_member_remove',
-          source,
-          actorId,
-        },
-        async (roomState) => ({
-          ...roomState,
-          permitMemberIds: [...current],
-        }),
-        removed.map((targetUserId) => ({
-          ownerId: actorId,
-          actionType: 'WHITELIST_REMOVE',
-          targetUserId,
-          metadata: { source },
-        }))
-      );
-    }
-
-    return { room: activeRoom || baseRoom, removed, missing, ignoredOwner, failed: removed.length > 0 && !activeRoom };
   }
 
   function getWhitelistWithoutOwner(room) {
@@ -3144,7 +3081,7 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
     }
   }
 
-  async function handleMessageCreate(message) {
+  async function handleMessageCreate(_message) {
     return false;
   }
 
@@ -3156,7 +3093,7 @@ function createPrivateRoomService({ client, logSystem = () => { }, logError = ()
 
     let loaded = 0;
     for (const room of rooms) {
-      const { guild, channel, guildStatus, channelStatus } = await resolveRoomChannel(room, {
+      const { channel, guildStatus, channelStatus } = await resolveRoomChannel(room, {
         action: 'bootstrap',
       });
       if (guildStatus === 'missing' || channelStatus === 'missing') {

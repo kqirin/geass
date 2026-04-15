@@ -9,7 +9,6 @@ const { config } = require('../../config');
 const STATIC_SETTINGS_KEYS = Object.freeze([
   'prefix',
   'log_enabled',
-  'log_role',
   'log_safe_list',
   'log_limit',
   'warn_enabled',

@@ -1,545 +1,607 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { apiClient, extractApiError, extractRequestId } from '../lib/apiClient.js';
+import {
+  getAuthGuilds,
+  getAuthLoginUrl,
+  getAuthMe,
+  getAuthPlan,
+  getAuthStatus,
+  getDashboardContextFeatures,
+  getDashboardPreferences,
+  getProtectedOverview,
+  getStatusCommandSettings,
+  normalizeApiError,
+  postAuthLogout,
+  putDashboardPreferences,
+  putStatusCommandSettings,
+} from '../lib/apiClient.js';
 import { createLatestRequestGate } from '../lib/latestRequestGate.js';
-import { normalizeOptionalHttpUrl } from '../components/Dashboard/embed/urlValidation.js';
-import { extractModerationSettingsPayload } from './moderationSettingsState.js';
 
-export const STATIC_SETTINGS_DEFAULT_META = {
-  readOnly: true,
-  source: 'config',
-};
-
-export const BOT_PRESENCE_DEFAULT_SETTINGS = {
-  enabled: true,
-  type: 'CUSTOM',
-  text: 'All Hail Lelouch!',
-};
-
-export const BOT_PRESENCE_DEFAULT_META = {
-  maxTextLength: 128,
-  allowedTypes: ['CUSTOM', 'PLAYING', 'LISTENING', 'WATCHING', 'COMPETING'],
-  scope: 'global',
-  readOnly: true,
-  source: 'config',
-};
-
-export const BOT_PRESENCE_LOAD_STATES = {
-  IDLE: 'idle',
+export const DASHBOARD_VIEW_STATES = Object.freeze({
   LOADING: 'loading',
+  UNAUTHENTICATED: 'unauthenticated',
+  AUTH_UNAVAILABLE: 'auth_unavailable',
+  NO_ACCESS: 'no_access',
   READY: 'ready',
   ERROR: 'error',
-};
+});
 
-export function isBotPresenceReady(loadState) {
-  return String(loadState?.status || '') === BOT_PRESENCE_LOAD_STATES.READY;
+export const DEFAULT_DASHBOARD_PREFERENCES = Object.freeze({
+  defaultView: 'overview',
+  compactMode: false,
+  dismissedNoticeIds: [],
+  advancedLayoutMode: null,
+});
+
+export const DEFAULT_STATUS_COMMAND_DETAIL_MODE = 'legacy';
+
+function toNormalizedList(rawValue) {
+  if (!Array.isArray(rawValue)) return [];
+  const unique = new Set();
+  const normalized = [];
+  for (const entry of rawValue) {
+    const value = String(entry || '').trim();
+    if (!value) continue;
+    if (unique.has(value)) continue;
+    unique.add(value);
+    normalized.push(value);
+  }
+  return normalized;
 }
 
-export function resolveInitialGuildId(singleGuildId = '', guilds = []) {
-  const configuredSingleGuildId = String(singleGuildId || '').trim();
-  const list = Array.isArray(guilds) ? guilds : [];
+export function parseDismissedNoticeIdsInput(value = '') {
+  if (typeof value !== 'string') return [];
+  return toNormalizedList(
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  );
+}
 
-  if (configuredSingleGuildId) {
-    if (list.length === 0) return configuredSingleGuildId;
-    const hasConfiguredGuild = list.some(
-      (guild) => String(guild?.id || '').trim() === configuredSingleGuildId
+export function formatDismissedNoticeIdsInput(ids = []) {
+  return toNormalizedList(ids).join(', ');
+}
+
+export function pickInitialGuildId(guilds = [], preferredGuildId = '') {
+  const normalizedGuilds = Array.isArray(guilds) ? guilds : [];
+  const normalizedPreferredGuildId = String(preferredGuildId || '').trim();
+
+  if (normalizedPreferredGuildId) {
+    const preferredMatch = normalizedGuilds.find(
+      (guild) => String(guild?.id || '').trim() === normalizedPreferredGuildId
     );
-    return hasConfiguredGuild ? configuredSingleGuildId : String(list[0]?.id || '').trim();
+    if (preferredMatch) return normalizedPreferredGuildId;
   }
 
-  return String(list[0]?.id || '').trim();
+  const operatorGuild = normalizedGuilds.find((guild) => Boolean(guild?.isOperator));
+  if (operatorGuild?.id) return String(operatorGuild.id);
+
+  const firstGuildId = String(normalizedGuilds[0]?.id || '').trim();
+  return firstGuildId || '';
 }
 
-export function shouldShowGuildSelector(singleGuildId = '', guilds = []) {
-  return !String(singleGuildId || '').trim() && Array.isArray(guilds) && guilds.length > 1;
+export function deriveViewStateFromError(errorMeta) {
+  if (!errorMeta || typeof errorMeta !== 'object') return DASHBOARD_VIEW_STATES.ERROR;
+  if (errorMeta.isAuthUnavailable) return DASHBOARD_VIEW_STATES.AUTH_UNAVAILABLE;
+  if (errorMeta.isUnauthenticated) return DASHBOARD_VIEW_STATES.UNAUTHENTICATED;
+  if (errorMeta.isNoAccess) return DASHBOARD_VIEW_STATES.NO_ACCESS;
+  return DASHBOARD_VIEW_STATES.ERROR;
 }
 
-export function createInitialReactionForm(guildId = '') {
+export async function bootstrapDashboardAuthSession({
+  preferredGuildId = '',
+  client,
+} = {}) {
+  const authStatus = await getAuthStatus(client);
+  const auth = authStatus?.auth && typeof authStatus.auth === 'object' ? authStatus.auth : {};
+
+  if (!auth.enabled || !auth.configured) {
+    return {
+      viewState: DASHBOARD_VIEW_STATES.AUTH_UNAVAILABLE,
+      authenticated: false,
+      authStatus,
+      principal: null,
+      session: null,
+      guilds: [],
+      guildId: '',
+    };
+  }
+
+  if (!auth.authenticated) {
+    return {
+      viewState: DASHBOARD_VIEW_STATES.UNAUTHENTICATED,
+      authenticated: false,
+      authStatus,
+      principal: null,
+      session: null,
+      guilds: [],
+      guildId: '',
+    };
+  }
+
+  const [mePayload, guildPayload] = await Promise.all([getAuthMe(client), getAuthGuilds(client)]);
+  const guilds = Array.isArray(guildPayload?.guilds) ? guildPayload.guilds : [];
+  const guildId = pickInitialGuildId(guilds, preferredGuildId);
+
   return {
-    id: null,
-    guildId: String(guildId || '').trim(),
-    channelId: '',
-    messageId: '',
-    emojiType: 'unicode',
-    emojiName: '✅',
-    emojiId: '',
-    triggerMode: 'TOGGLE',
-    enabled: true,
-    cooldownSeconds: 5,
-    onlyOnce: false,
-    groupKey: '',
-    allowedRoles: [],
-    excludedRoles: [],
-    actions: [{ type: 'ROLE_ADD', payload: { roleId: '' } }],
+    viewState: DASHBOARD_VIEW_STATES.LOADING,
+    authenticated: true,
+    authStatus,
+    principal: mePayload?.principal || authStatus?.principal || null,
+    session: mePayload?.session || authStatus?.session || null,
+    guilds,
+    guildId,
+  };
+}
+
+export async function loadProtectedDashboardSnapshot({ guildId = null, client } = {}) {
+  const planPayload = await getAuthPlan({ guildId, client });
+  const resolvedGuildId =
+    String(planPayload?.access?.targetGuildId || guildId || '').trim() || null;
+
+  const [featuresPayload, overviewPayload, preferencesPayload, statusCommandPayload] =
+    await Promise.all([
+      getDashboardContextFeatures({ guildId: resolvedGuildId, client }),
+      getProtectedOverview({ guildId: resolvedGuildId, client }),
+      getDashboardPreferences({ guildId: resolvedGuildId, client }),
+      getStatusCommandSettings({ guildId: resolvedGuildId, client }),
+    ]);
+
+  return {
+    guildId: resolvedGuildId,
+    planPayload,
+    featuresPayload,
+    overviewPayload,
+    preferencesPayload,
+    statusCommandPayload,
+  };
+}
+
+function toDefaultPreferences(rawPreferences = {}) {
+  return {
+    defaultView: String(rawPreferences?.defaultView || DEFAULT_DASHBOARD_PREFERENCES.defaultView),
+    compactMode:
+      typeof rawPreferences?.compactMode === 'boolean'
+        ? rawPreferences.compactMode
+        : DEFAULT_DASHBOARD_PREFERENCES.compactMode,
+    dismissedNoticeIds: toNormalizedList(rawPreferences?.dismissedNoticeIds),
+    advancedLayoutMode:
+      rawPreferences?.advancedLayoutMode === null || typeof rawPreferences?.advancedLayoutMode === 'string'
+        ? rawPreferences?.advancedLayoutMode || null
+        : null,
+  };
+}
+
+function toStatusCommandDetailMode(rawStatusSettings = {}) {
+  const effectiveDetailMode = String(rawStatusSettings?.effective?.detailMode || '').trim().toLowerCase();
+  if (effectiveDetailMode === 'compact') return 'compact';
+
+  const rawDetailMode = String(rawStatusSettings?.settings?.detailMode || '').trim().toLowerCase();
+  if (rawDetailMode === 'compact') return 'compact';
+
+  return DEFAULT_STATUS_COMMAND_DETAIL_MODE;
+}
+
+function normalizeCapabilitySummary(rawSummary = {}) {
+  return {
+    totalCapabilities: Number(rawSummary?.totalCapabilities || 0),
+    allowedCapabilities: Number(rawSummary?.allowedCapabilities || 0),
+    deniedCapabilities: Number(rawSummary?.deniedCapabilities || 0),
+    activeCapabilities: Number(rawSummary?.activeCapabilities || 0),
   };
 }
 
 export function useDashboardData({ navigate }) {
-  const [activeTab, setActiveTab] = useState('reactionActions');
+  const [viewState, setViewState] = useState(DASHBOARD_VIEW_STATES.LOADING);
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
-  const activeGuildRef = useRef('');
-  const guildDataGateRef = useRef(createLatestRequestGate());
-  const botPresenceGateRef = useRef(createLatestRequestGate());
-  const reactionDataGateRef = useRef(createLatestRequestGate());
+  const bootstrapGateRef = useRef(createLatestRequestGate());
+  const protectedDataGateRef = useRef(createLatestRequestGate());
 
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authStatus, setAuthStatus] = useState(null);
+  const [principal, setPrincipal] = useState(null);
+  const [session, setSession] = useState(null);
   const [guilds, setGuilds] = useState([]);
   const [guildId, setGuildId] = useState('');
-  const [systemHealth, setSystemHealth] = useState({
-    ok: true,
-    checks: { db: true, discord: true },
-    features: {},
-  });
-  const [roles, setRoles] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [modSettings, setModSettings] = useState({});
-  const [settingsMeta, setSettingsMeta] = useState({ ...STATIC_SETTINGS_DEFAULT_META });
-  const [botPresenceSettings, setBotPresenceSettings] = useState({ ...BOT_PRESENCE_DEFAULT_SETTINGS });
-  const [botPresenceMeta, setBotPresenceMeta] = useState({ ...BOT_PRESENCE_DEFAULT_META });
-  const [botPresenceLoadState, setBotPresenceLoadState] = useState({
-    status: BOT_PRESENCE_LOAD_STATES.IDLE,
-    error: null,
-  });
-  const [reactionRules, setReactionRules] = useState([]);
-  const [reactionHealth, setReactionHealth] = useState({ ok: true, issues: [], ruleIssues: [] });
-  const [emojis, setEmojis] = useState([]);
-  const [reactionForm, setReactionForm] = useState(() => createInitialReactionForm());
 
-  const [embedData, setEmbedData] = useState({
-    channelId: '',
-    content: '',
-    title: '',
-    titleUrl: '',
-    description: '',
-    color: '#5865F2',
-    image: '',
-  });
+  const [plan, setPlan] = useState(null);
+  const [capabilities, setCapabilities] = useState({});
+  const [capabilitySummary, setCapabilitySummary] = useState(
+    normalizeCapabilitySummary({})
+  );
+  const [overview, setOverview] = useState(null);
+  const [preferences, setPreferences] = useState({ ...DEFAULT_DASHBOARD_PREFERENCES });
+  const [preferencesPlan, setPreferencesPlan] = useState(null);
+  const [preferencesCapabilities, setPreferencesCapabilities] = useState(null);
+  const [statusCommandSettings, setStatusCommandSettings] = useState(null);
+
+  const [preferencesDraft, setPreferencesDraft] = useState({ ...DEFAULT_DASHBOARD_PREFERENCES });
+  const [dismissedNoticeIdsInput, setDismissedNoticeIdsInput] = useState('');
+  const [statusCommandDetailModeDraft, setStatusCommandDetailModeDraft] = useState(
+    DEFAULT_STATUS_COMMAND_DETAIL_MODE
+  );
+
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isProtectedLoading, setIsProtectedLoading] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [protectedError, setProtectedError] = useState(null);
+  const [preferencesSaveState, setPreferencesSaveState] = useState('idle');
+  const [preferencesSaveMessage, setPreferencesSaveMessage] = useState('');
+  const [statusCommandSaveState, setStatusCommandSaveState] = useState('idle');
+  const [statusCommandSaveMessage, setStatusCommandSaveMessage] = useState('');
 
   const metaEnv = typeof import.meta !== 'undefined' && import.meta?.env ? import.meta.env : {};
-  const singleGuildId = metaEnv.VITE_SINGLE_GUILD_ID || metaEnv.VITE_GUILD_ID || '';
+  const preferredGuildId = metaEnv.VITE_SINGLE_GUILD_ID || metaEnv.VITE_GUILD_ID || '';
 
-  const showToast = useCallback((text, type = 'ok', duration = 2200) => {
+  const showToast = useCallback((text, type = 'ok', duration = 2400) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ type, text });
+    setToast({ type, text: String(text || '') });
     toastTimerRef.current = setTimeout(() => setToast(null), duration);
   }, []);
 
-  const loadBotPresence = useCallback(async (targetGuildId) => {
-    const resolvedGuildId = String(targetGuildId || '').trim();
-    if (!resolvedGuildId) return;
-    const request = botPresenceGateRef.current.begin(resolvedGuildId);
-    setBotPresenceLoadState({
-      status: BOT_PRESENCE_LOAD_STATES.LOADING,
-      error: null,
-    });
+  const resetProtectedData = useCallback(() => {
+    setPlan(null);
+    setCapabilities({});
+    setCapabilitySummary(normalizeCapabilitySummary({}));
+    setOverview(null);
+    setPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES });
+    setPreferencesDraft({ ...DEFAULT_DASHBOARD_PREFERENCES });
+    setDismissedNoticeIdsInput('');
+    setPreferencesPlan(null);
+    setPreferencesCapabilities(null);
+    setStatusCommandSettings(null);
+    setStatusCommandDetailModeDraft(DEFAULT_STATUS_COMMAND_DETAIL_MODE);
+    setProtectedError(null);
+    setPreferencesSaveState('idle');
+    setPreferencesSaveMessage('');
+    setStatusCommandSaveState('idle');
+    setStatusCommandSaveMessage('');
+  }, []);
+
+  const applyProtectedSnapshot = useCallback((snapshot = {}) => {
+    setPlan(snapshot?.planPayload?.plan || null);
+    setCapabilities(snapshot?.featuresPayload?.capabilities || {});
+    setCapabilitySummary(normalizeCapabilitySummary(snapshot?.featuresPayload?.capabilitySummary));
+    setOverview(snapshot?.overviewPayload || null);
+
+    const normalizedPreferences = toDefaultPreferences(
+      snapshot?.preferencesPayload?.preferences || {}
+    );
+    setPreferences(normalizedPreferences);
+    setPreferencesDraft(normalizedPreferences);
+    setDismissedNoticeIdsInput(formatDismissedNoticeIdsInput(normalizedPreferences.dismissedNoticeIds));
+    setPreferencesPlan(snapshot?.preferencesPayload?.plan || null);
+    setPreferencesCapabilities(snapshot?.preferencesPayload?.capabilities || null);
+
+    setStatusCommandSettings(snapshot?.statusCommandPayload || null);
+    setStatusCommandDetailModeDraft(
+      toStatusCommandDetailMode(snapshot?.statusCommandPayload || {})
+    );
+  }, []);
+
+  const runAuthBootstrap = useCallback(async () => {
+    const request = bootstrapGateRef.current.begin('auth-bootstrap');
+    setIsAuthLoading(true);
+    setAuthError(null);
+    setProtectedError(null);
+    setViewState(DASHBOARD_VIEW_STATES.LOADING);
+
     try {
-      const res = await apiClient.get('/api/bot-presence', {
-        params: { guildId: resolvedGuildId },
+      const sessionSnapshot = await bootstrapDashboardAuthSession({
+        preferredGuildId,
       });
-      if (!request.isCurrent() || activeGuildRef.current !== resolvedGuildId) return;
-      const nextSettings = res.data?.settings || BOT_PRESENCE_DEFAULT_SETTINGS;
-      const nextMeta = res.data?.meta || BOT_PRESENCE_DEFAULT_META;
-      setBotPresenceSettings({ ...BOT_PRESENCE_DEFAULT_SETTINGS, ...nextSettings });
-      setBotPresenceMeta({ ...BOT_PRESENCE_DEFAULT_META, ...nextMeta });
-      setBotPresenceLoadState({
-        status: BOT_PRESENCE_LOAD_STATES.READY,
-        error: null,
-      });
-    } catch (e) {
-      if (!request.isCurrent() || activeGuildRef.current !== resolvedGuildId) return;
-      const msg = extractApiError(e, 'Bot durumu yuklenemedi');
-      const reqId = extractRequestId(e);
-      const detailed = reqId ? `${msg} (#${reqId})` : msg;
-      setBotPresenceLoadState({
-        status: BOT_PRESENCE_LOAD_STATES.ERROR,
-        error: detailed,
-      });
-      showToast(detailed, 'err', 4200);
+      if (!request.isCurrent()) return;
+
+      setAuthStatus(sessionSnapshot.authStatus || null);
+      setPrincipal(sessionSnapshot.principal || null);
+      setSession(sessionSnapshot.session || null);
+      setGuilds(Array.isArray(sessionSnapshot.guilds) ? sessionSnapshot.guilds : []);
+      setAuthenticated(Boolean(sessionSnapshot.authenticated));
+      resetProtectedData();
+
+      const resolvedGuildId = String(sessionSnapshot.guildId || '').trim();
+      setGuildId(resolvedGuildId);
+
+      if (sessionSnapshot.viewState !== DASHBOARD_VIEW_STATES.LOADING) {
+        setViewState(sessionSnapshot.viewState);
+      } else if (!resolvedGuildId) {
+        setViewState(DASHBOARD_VIEW_STATES.NO_ACCESS);
+      }
+    } catch (error) {
+      if (!request.isCurrent()) return;
+      const normalizedError = normalizeApiError(error, 'Auth status yuklenemedi');
+      setAuthError(normalizedError);
+      setAuthenticated(false);
+      resetProtectedData();
+      setGuilds([]);
+      setGuildId('');
+      setViewState(deriveViewStateFromError(normalizedError));
+    } finally {
+      if (request.isCurrent()) {
+        setIsAuthLoading(false);
+      }
     }
-  }, [showToast]);
+  }, [preferredGuildId, resetProtectedData]);
+
+  const loadProtectedData = useCallback(
+    async (targetGuildId) => {
+      const normalizedGuildId = String(targetGuildId || '').trim();
+      if (!normalizedGuildId) {
+        setViewState(DASHBOARD_VIEW_STATES.NO_ACCESS);
+        return;
+      }
+
+      const request = protectedDataGateRef.current.begin(normalizedGuildId);
+      setIsProtectedLoading(true);
+      setProtectedError(null);
+      setViewState(DASHBOARD_VIEW_STATES.LOADING);
+
+      try {
+        const snapshot = await loadProtectedDashboardSnapshot({
+          guildId: normalizedGuildId,
+        });
+        if (!request.isCurrent()) return;
+
+        const resolvedGuildId = String(snapshot?.guildId || normalizedGuildId).trim();
+        if (resolvedGuildId && resolvedGuildId !== normalizedGuildId) {
+          setGuildId(resolvedGuildId);
+        }
+
+        applyProtectedSnapshot(snapshot);
+        setViewState(DASHBOARD_VIEW_STATES.READY);
+      } catch (error) {
+        if (!request.isCurrent()) return;
+        const normalizedError = normalizeApiError(
+          error,
+          'Korumali dashboard verisi yuklenemedi'
+        );
+        setProtectedError(normalizedError);
+        setViewState(deriveViewStateFromError(normalizedError));
+      } finally {
+        if (request.isCurrent()) {
+          setIsProtectedLoading(false);
+        }
+      }
+    },
+    [applyProtectedSnapshot]
+  );
 
   useEffect(() => {
-    document.title = 'GEASS';
+    document.title = 'GEASS Dashboard';
+    void runAuthBootstrap();
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
-  }, []);
+  }, [runAuthBootstrap]);
 
   useEffect(() => {
-    const loadSession = async () => {
-      try {
-        const res = await apiClient.get('/api/auth/session');
-        const list = res.data?.guilds || [];
-        setGuilds(list);
+    if (!authenticated) return;
+    void loadProtectedData(guildId);
+  }, [authenticated, guildId, loadProtectedData]);
 
-        const initialGuildId = resolveInitialGuildId(singleGuildId, list);
-        activeGuildRef.current = initialGuildId;
-        guildDataGateRef.current.switchKey(initialGuildId);
-        botPresenceGateRef.current.switchKey(initialGuildId);
-        reactionDataGateRef.current.switchKey(initialGuildId);
-        setGuildId(initialGuildId);
-        await loadBotPresence(initialGuildId);
-      } catch {
-        navigate('/');
-      }
+  const refreshProtectedData = useCallback(async () => {
+    if (!authenticated) return;
+    await loadProtectedData(guildId);
+  }, [authenticated, guildId, loadProtectedData]);
+
+  const savePreferences = useCallback(async () => {
+    if (!authenticated || !guildId) return;
+
+    const dismissedNoticeIds = parseDismissedNoticeIdsInput(dismissedNoticeIdsInput);
+    const advancedAvailable = Boolean(
+      preferencesCapabilities?.advancedDashboardPreferences?.available
+    );
+    const payload = {
+      defaultView: preferencesDraft.defaultView || DEFAULT_DASHBOARD_PREFERENCES.defaultView,
+      compactMode: Boolean(preferencesDraft.compactMode),
+      dismissedNoticeIds,
+      advancedLayoutMode: advancedAvailable
+        ? preferencesDraft.advancedLayoutMode || null
+        : null,
     };
 
-    loadSession();
-  }, [navigate, singleGuildId, loadBotPresence]);
-
-  const canSelectGuild = useMemo(
-    () => shouldShowGuildSelector(singleGuildId, guilds),
-    [singleGuildId, guilds]
-  );
-  const singleGuildMode = useMemo(
-    () => Boolean(String(singleGuildId || '').trim()) || guilds.length <= 1,
-    [singleGuildId, guilds.length]
-  );
-  const activeGuildName = useMemo(
-    () => guilds.find((guild) => String(guild?.id || '') === String(guildId || ''))?.name || guilds[0]?.name || 'Sunucu',
-    [guilds, guildId]
-  );
-
-  const loadSystemHealth = useCallback(async () => {
-    try {
-      const res = await apiClient.get('/api/health');
-      setSystemHealth(res.data || { ok: false, checks: { db: false, discord: false }, features: {} });
-    } catch {
-      setSystemHealth({ ok: false, checks: { db: false, discord: false }, features: {} });
-    }
-  }, []);
-
-  const loadGuildData = useCallback(
-    async (id) => {
-      if (!id) return;
-      const request = guildDataGateRef.current.begin(id);
-      try {
-        const [rolesRes, channelsRes, settingsRes] = await Promise.all([
-          apiClient.get(`/api/guilds/${id}/roles`),
-          apiClient.get(`/api/guilds/${id}/channels`),
-          apiClient.get(`/api/settings/${id}`),
-        ]);
-        if (!request.isCurrent() || activeGuildRef.current !== id) return;
-
-        setRoles(rolesRes.data || []);
-        setChannels(channelsRes.data || []);
-        const emojiRes = await apiClient.get(`/api/guilds/${id}/emojis`);
-        if (!request.isCurrent() || activeGuildRef.current !== id) return;
-        setEmojis(emojiRes.data || []);
-
-        setModSettings(extractModerationSettingsPayload(settingsRes.data));
-        setSettingsMeta({
-          ...STATIC_SETTINGS_DEFAULT_META,
-          ...(settingsRes.data?.meta || {}),
-        });
-        const [ruleRes, healthRes] = await Promise.all([
-          apiClient.get('/api/reaction-rules', { params: { guildId: id } }),
-          apiClient.get('/api/reaction-rules/health', { params: { guildId: id } }),
-        ]);
-        if (!request.isCurrent() || activeGuildRef.current !== id) return;
-        setReactionRules(ruleRes.data || []);
-        setReactionHealth(healthRes.data || { ok: true, issues: [], ruleIssues: [] });
-        setReactionForm((prev) => ({ ...prev, guildId: id }));
-        await loadSystemHealth();
-      } catch (e) {
-        const msg = extractApiError(e, 'Güncellenemedi');
-        if (!request.isCurrent() || activeGuildRef.current !== id) return;
-        const reqId = extractRequestId(e);
-        showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 3600);
-      }
-    },
-    [showToast, loadSystemHealth]
-  );
-
-  useEffect(() => {
-    if (!guildId) return;
-    activeGuildRef.current = guildId;
-    guildDataGateRef.current.switchKey(guildId);
-    botPresenceGateRef.current.switchKey(guildId);
-    reactionDataGateRef.current.switchKey(guildId);
-    loadGuildData(guildId);
-    loadBotPresence(guildId);
-  }, [guildId, loadGuildData, loadBotPresence]);
-
-  useEffect(() => {
-    let active = true;
-
-    const pollHealth = () => {
-      if (!active) return;
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      loadSystemHealth();
-    };
-
-    const handleVisibilityChange = () => {
-      if (!active) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        loadSystemHealth();
-      }
-    };
-
-    pollHealth();
-    const timer = setInterval(pollHealth, 60_000);
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-
-    return () => {
-      active = false;
-      clearInterval(timer);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
-    };
-  }, [loadSystemHealth]);
-
-  const sendEmbed = useCallback(async () => {
-    if (!guildId || !embedData.channelId) return;
-    const titleUrlCheck = normalizeOptionalHttpUrl(embedData.titleUrl);
-    if (!titleUrlCheck.ok) {
-      showToast(titleUrlCheck.error, 'err', 3200);
-      return;
-    }
+    setPreferencesSaveState('saving');
+    setPreferencesSaveMessage('');
 
     try {
-      await apiClient.post('/api/embed/send', {
+      const response = await putDashboardPreferences({
         guildId,
-        channelId: embedData.channelId,
-        title: embedData.title,
-        embedTitleUrl: titleUrlCheck.value,
-        description: embedData.description,
-        color: embedData.color,
-        imageUrl: embedData.image,
-        content: embedData.content,
+        preferences: payload,
       });
-      showToast('Gönderildi', 'ok', 1500);
-    } catch (e) {
-      showToast(extractApiError(e, 'Gönderilemedi'), 'err', 3000);
+
+      const nextPreferences = toDefaultPreferences(response?.preferences || payload);
+      setPreferences(nextPreferences);
+      setPreferencesDraft(nextPreferences);
+      setDismissedNoticeIdsInput(formatDismissedNoticeIdsInput(nextPreferences.dismissedNoticeIds));
+      setPreferencesPlan(response?.plan || null);
+      setPreferencesCapabilities(response?.capabilities || null);
+      setPreferencesSaveState('success');
+      setPreferencesSaveMessage('Tercihler kaydedildi');
+      showToast('Tercihler kaydedildi', 'ok');
+    } catch (error) {
+      const normalizedError = normalizeApiError(
+        error,
+        'Tercihler kaydedilemedi'
+      );
+      setPreferencesSaveState('error');
+      setPreferencesSaveMessage(normalizedError.message);
+      showToast(normalizedError.message, 'err', 3600);
+
+      const nextViewState = deriveViewStateFromError(normalizedError);
+      if (nextViewState !== DASHBOARD_VIEW_STATES.ERROR) {
+        setViewState(nextViewState);
+      }
     }
-  }, [guildId, embedData, showToast]);
+  }, [
+    authenticated,
+    dismissedNoticeIdsInput,
+    guildId,
+    preferencesCapabilities?.advancedDashboardPreferences?.available,
+    preferencesDraft,
+    showToast,
+  ]);
+
+  const saveStatusCommandSettings = useCallback(async () => {
+    if (!authenticated || !guildId) return;
+
+    const detailMode =
+      statusCommandDetailModeDraft === 'compact'
+        ? 'compact'
+        : DEFAULT_STATUS_COMMAND_DETAIL_MODE;
+    setStatusCommandSaveState('saving');
+    setStatusCommandSaveMessage('');
+
+    try {
+      const response = await putStatusCommandSettings({
+        guildId,
+        detailMode,
+      });
+      setStatusCommandSettings(response || null);
+      setStatusCommandDetailModeDraft(toStatusCommandDetailMode(response || {}));
+      setStatusCommandSaveState('success');
+      setStatusCommandSaveMessage('Durum komutu ayari kaydedildi');
+      showToast('Durum komutu ayari kaydedildi', 'ok');
+    } catch (error) {
+      const normalizedError = normalizeApiError(
+        error,
+        'Durum komutu ayari kaydedilemedi'
+      );
+      setStatusCommandSaveState('error');
+      setStatusCommandSaveMessage(normalizedError.message);
+      showToast(normalizedError.message, 'err', 3600);
+
+      const nextViewState = deriveViewStateFromError(normalizedError);
+      if (nextViewState !== DASHBOARD_VIEW_STATES.ERROR) {
+        setViewState(nextViewState);
+      }
+    }
+  }, [authenticated, guildId, showToast, statusCommandDetailModeDraft]);
+
+  const login = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.location.href = getAuthLoginUrl();
+  }, []);
 
   const logout = useCallback(async () => {
     try {
-      await apiClient.post('/api/auth/logout', {});
+      await postAuthLogout();
     } catch {}
-    navigate('/');
-  }, [navigate]);
-
-  const loadReactionData = useCallback(async (id) => {
-    if (!id) return;
-    const request = reactionDataGateRef.current.begin(id);
-    const [ruleRes, healthRes, emojiRes] = await Promise.all([
-      apiClient.get('/api/reaction-rules', { params: { guildId: id } }),
-      apiClient.get('/api/reaction-rules/health', { params: { guildId: id } }),
-      apiClient.get(`/api/guilds/${id}/emojis`),
-    ]);
-    if (!request.isCurrent() || activeGuildRef.current !== id) return;
-    setReactionRules(ruleRes.data || []);
-    setReactionHealth(healthRes.data || { ok: true, issues: [], ruleIssues: [] });
-    setEmojis(emojiRes.data || []);
-  }, []);
-
-  const resetReactionForm = useCallback(() => {
-    setReactionForm(createInitialReactionForm(guildId));
-  }, [guildId]);
-
-  const editReactionRule = useCallback((rule) => {
-    setReactionForm({
-      id: rule.id,
-      guildId: rule.guildId,
-      channelId: rule.channelId,
-      messageId: rule.messageId,
-      emojiType: rule.emojiType || 'unicode',
-      emojiName: rule.emojiName || '',
-      emojiId: rule.emojiId || '',
-      triggerMode: rule.triggerMode || 'TOGGLE',
-      enabled: Boolean(rule.enabled),
-      cooldownSeconds: Number(rule.cooldownSeconds || 0),
-      onlyOnce: Boolean(rule.onlyOnce),
-      groupKey: rule.groupKey || '',
-      allowedRoles: Array.isArray(rule.allowedRoles) ? rule.allowedRoles : [],
-      excludedRoles: Array.isArray(rule.excludedRoles) ? rule.excludedRoles : [],
-      actions:
-        Array.isArray(rule.actions) && rule.actions.length > 0
-          ? rule.actions
-          : [{ type: 'ROLE_ADD', payload: { roleId: '' } }],
-    });
-  }, []);
-
-  const saveReactionRule = useCallback(async () => {
-    if (!guildId) return;
-    const payload = { ...reactionForm, guildId };
-    const isSnowflake = (value) => /^\d{5,32}$/.test(String(value || '').trim());
-
-    if (!isSnowflake(payload.channelId)) {
-      showToast('Kanal seçimi geçersiz', 'err', 3200);
-      return;
+    setAuthenticated(false);
+    setViewState(DASHBOARD_VIEW_STATES.UNAUTHENTICATED);
+    resetProtectedData();
+    if (typeof navigate === 'function') {
+      navigate('/');
     }
-    if (!isSnowflake(payload.messageId)) {
-      showToast('Mesaj ID geçersiz', 'err', 3200);
-      return;
-    }
-    if (payload.emojiType === 'custom' && !isSnowflake(payload.emojiId)) {
-      showToast('Custom emoji seçimi geçersiz', 'err', 3200);
-      return;
-    }
-    if (payload.emojiType === 'unicode' && !String(payload.emojiName || '').trim()) {
-      showToast('Unicode emoji boş olamaz', 'err', 3200);
-      return;
-    }
-    if (!Array.isArray(payload.actions) || payload.actions.length === 0) {
-      showToast('En az bir aksiyon gerekli', 'err', 3200);
-      return;
-    }
+  }, [navigate, resetProtectedData]);
 
-    for (const action of payload.actions) {
-      if (!action?.type) {
-        showToast('Aksiyon tipi eksik', 'err', 3200);
-        return;
-      }
-      if (
-        (action.type === 'ROLE_ADD' || action.type === 'ROLE_REMOVE') &&
-        !isSnowflake(action?.payload?.roleId)
-      ) {
-        showToast('Rol aksiyonu için rol seçilmeli', 'err', 3200);
-        return;
-      }
-      if (
-        (action.type === 'DM_SEND' || action.type === 'REPLY') &&
-        !String(action?.payload?.text || '').trim()
-      ) {
-        showToast('Mesaj aksiyonu boş olamaz', 'err', 3200);
-        return;
-      }
-      if (action.type === 'CHANNEL_LINK' && !isSnowflake(action?.payload?.channelId)) {
-        showToast('Kanal link aksiyonu için kanal seçilmeli', 'err', 3200);
-        return;
-      }
-      if (
-        action.type === 'RUN_INTERNAL_COMMAND' &&
-        String(action?.payload?.command || '').trim().toLowerCase() !== 'partner-bilgi'
-      ) {
-        showToast('Ic komut whitelist disi', 'err', 3200);
-        return;
-      }
-    }
-
-    try {
-      let warning = null;
-      if (reactionForm.id) {
-        const res = await apiClient.put(`/api/reaction-rules/${reactionForm.id}`, payload);
-        warning = res?.data?.warning || null;
-      } else {
-        const res = await apiClient.post('/api/reaction-rules', payload);
-        warning = res?.data?.warning || null;
-      }
-      await loadReactionData(guildId);
-      showToast(
-        warning ? `Kural kaydedildi, not: ${warning}` : 'Tepki kuralı kaydedildi',
-        warning ? 'err' : 'ok',
-        warning ? 3600 : 1800
-      );
-      resetReactionForm();
-    } catch (e) {
-      const msg = extractApiError(e, 'Tepki kuralı kaydedilemedi');
-      const reqId = extractRequestId(e);
-      showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-    }
-  }, [guildId, reactionForm, loadReactionData, showToast, resetReactionForm]);
-
-  const deleteReactionRule = useCallback(
-    async (ruleId) => {
-      if (!guildId || !ruleId) return;
-      try {
-        const res = await apiClient.delete(`/api/reaction-rules/${ruleId}`);
-        await loadReactionData(guildId);
-        const warning = res?.data?.warning || null;
-        showToast(
-          warning ? `Kural silindi, not: ${warning}` : 'Kural silindi',
-          warning ? 'err' : 'ok',
-          warning ? 3600 : 1500
-        );
-      } catch (e) {
-        const msg = extractApiError(e, 'Kural silinemedi');
-        const reqId = extractRequestId(e);
-        showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-      }
-    },
-    [guildId, loadReactionData, showToast]
+  const singleGuildMode = useMemo(
+    () => guilds.length <= 1 || Boolean(String(preferredGuildId || '').trim()),
+    [guilds.length, preferredGuildId]
   );
+  const canSelectGuild = useMemo(() => guilds.length > 1, [guilds.length]);
+  const activeGuildName = useMemo(() => {
+    const byId = guilds.find((guild) => String(guild?.id || '') === String(guildId || ''));
+    return byId?.name || guilds[0]?.name || 'Guild';
+  }, [guildId, guilds]);
 
-  const toggleReactionRuleEnabled = useCallback(
-    async (rule) => {
-      if (!rule?.id || !guildId) return;
-      try {
-        await apiClient.put(`/api/reaction-rules/${rule.id}`, {
-          ...rule,
-          guildId,
-          enabled: !Boolean(rule.enabled),
-        });
-        await loadReactionData(guildId);
-      } catch (e) {
-        const msg = extractApiError(e, 'Durum değiştirilemedi');
-        const reqId = extractRequestId(e);
-        showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-      }
-    },
-    [guildId, loadReactionData, showToast]
-  );
+  const authenticatedUserSummary = useMemo(() => {
+    if (!principal) return null;
+    return {
+      id: String(principal.id || ''),
+      username: String(principal.username || ''),
+      displayName: String(principal.displayName || principal.username || ''),
+      avatarUrl: String(principal.avatarUrl || '') || null,
+      guildCount: Number(principal.guildCount || 0),
+      operatorGuildCount: Number(principal.operatorGuildCount || 0),
+    };
+  }, [principal]);
 
-  const testReactionRule = useCallback(
-    async (ruleId) => {
-      if (!ruleId) return;
-      try {
-        const res = await apiClient.post(`/api/reaction-rules/${ruleId}/test`, {});
-        const manageable = res?.data?.requesterCheck?.manageable;
-        if (manageable === false) {
-          showToast('Test: Bot bu hesapta rol işlemi yapamıyor (rol hiyerarşisi)', 'err', 4200);
-        } else {
-          showToast('Kural testi tamamlandı (dry-run)', 'ok', 1800);
-        }
-        await loadReactionData(guildId);
-      } catch (e) {
-        const msg = extractApiError(e, 'Test başarısız');
-        const reqId = extractRequestId(e);
-        showToast(reqId ? `${msg} (#${reqId})` : msg, 'err', 4200);
-      }
-    },
-    [guildId, loadReactionData, showToast]
-  );
+  const advancedPreferencesCapability = useMemo(() => {
+    const fromPreferences = preferencesCapabilities?.advancedDashboardPreferences;
+    if (fromPreferences && typeof fromPreferences === 'object') {
+      return {
+        available: Boolean(fromPreferences.available),
+        reasonCode:
+          fromPreferences.reasonCode === undefined || fromPreferences.reasonCode === null
+            ? null
+            : String(fromPreferences.reasonCode || '') || null,
+        requiredPlan: String(fromPreferences.requiredPlan || 'pro'),
+      };
+    }
+    const fromFeatureContext = capabilities?.advanced_dashboard_preferences;
+    if (fromFeatureContext && typeof fromFeatureContext === 'object') {
+      return {
+        available: Boolean(fromFeatureContext.allowed),
+        reasonCode:
+          fromFeatureContext.reasonCode === undefined || fromFeatureContext.reasonCode === null
+            ? null
+            : String(fromFeatureContext.reasonCode || '') || null,
+        requiredPlan: String(fromFeatureContext.requiredPlan || 'pro'),
+      };
+    }
+    return {
+      available: false,
+      reasonCode: null,
+      requiredPlan: 'pro',
+    };
+  }, [capabilities?.advanced_dashboard_preferences, preferencesCapabilities?.advancedDashboardPreferences]);
+
+  const effectivePlan = useMemo(() => {
+    if (plan && typeof plan === 'object') return plan;
+    if (overview?.plan && typeof overview.plan === 'object') return overview.plan;
+    if (preferencesPlan && typeof preferencesPlan === 'object') return preferencesPlan;
+    return {
+      status: 'unresolved',
+      tier: null,
+      source: 'unresolved',
+      reasonCode: null,
+    };
+  }, [overview?.plan, plan, preferencesPlan]);
 
   return {
-    showToast,
-    activeTab,
-    setActiveTab,
+    viewState,
+    isAuthLoading,
+    isProtectedLoading,
+    authStatus,
+    authError,
+    protectedError,
     toast,
+    showToast,
+    login,
+    logout,
+    refreshAuth: runAuthBootstrap,
+    refreshProtectedData,
+
     guilds,
     guildId,
     setGuildId,
-    activeGuildName,
-    singleGuildMode,
-    systemHealth,
-    roles,
-    channels,
-    modSettings,
-    settingsMeta,
-    botPresenceSettings,
-    botPresenceMeta,
-    botPresenceLoadState,
-    reactionRules,
-    reactionHealth,
-    emojis,
-    reactionForm,
-    setReactionForm,
-    embedData,
-    setEmbedData,
     canSelectGuild,
-    loadReactionData,
-    saveReactionRule,
-    deleteReactionRule,
-    toggleReactionRuleEnabled,
-    editReactionRule,
-    resetReactionForm,
-    testReactionRule,
-    sendEmbed,
-    logout,
+    singleGuildMode,
+    activeGuildName,
+
+    authenticatedUserSummary,
+    session,
+    effectivePlan,
+    capabilities,
+    capabilitySummary,
+    advancedPreferencesCapability,
+    overview,
+
+    preferences,
+    preferencesDraft,
+    setPreferencesDraft,
+    dismissedNoticeIdsInput,
+    setDismissedNoticeIdsInput,
+    preferencesSaveState,
+    preferencesSaveMessage,
+    savePreferences,
+
+    statusCommandSettings,
+    statusCommandDetailModeDraft,
+    setStatusCommandDetailModeDraft,
+    statusCommandSaveState,
+    statusCommandSaveMessage,
+    saveStatusCommandSettings,
   };
 }
