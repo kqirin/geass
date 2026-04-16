@@ -17,10 +17,12 @@ export default class AppErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#0b0b14] text-white flex items-center justify-center p-6">
-          <div className="max-w-xl w-full bg-white/5 border border-white/10 rounded-3xl p-8">
-            <h1 className="text-2xl font-black uppercase">Beklenmeyen UI Hatası</h1>
-            <p className="text-sm text-gray-300 mt-3">Sayfayı yenileyin. Sorun devam ederse logları kontrol edin.</p>
+        <div className="flex min-h-screen items-center justify-center bg-[#0b0b14] p-6 text-white">
+          <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-8">
+            <h1 className="text-2xl font-black">Beklenmeyen UI Hatası</h1>
+            <p className="mt-3 text-sm text-gray-300">
+              Sayfayı yenileyin. Sorun devam ederse logları kontrol edin.
+            </p>
           </div>
         </div>
       );
@@ -29,4 +31,3 @@ export default class AppErrorBoundary extends Component {
     return this.props.children;
   }
 }
-

@@ -46,7 +46,7 @@ function RootAuthRouteGate() {
         setRouteDecision({
           routeState: ROOT_AUTH_ROUTE_STATES.SAFE_LOGIN,
           reasonCode: 'auth_status_unavailable',
-          message: String(error?.message || 'Auth status yuklenemedi'),
+          message: String(error?.message || 'Auth status yüklenemedi'),
         });
       }
     }

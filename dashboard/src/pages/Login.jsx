@@ -17,37 +17,42 @@ const Login = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f1a] text-white selection:bg-purple-500/30 overflow-hidden font-sans relative">
+    <div className="relative min-h-screen overflow-hidden bg-[#0f0f1a] font-sans text-white selection:bg-cyan-500/25">
       <div className="fixed inset-0 z-0">
         <div
-          className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 blur-[150px] rounded-full transition-transform duration-1000 ${
+          className={`absolute left-[-10%] top-[-10%] h-[50%] w-[50%] rounded-full bg-cyan-500/10 blur-[150px] transition-transform duration-1000 ${
             isExiting ? 'scale-150 opacity-20' : 'scale-100 opacity-100'
           }`}
         />
         <div
-          className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full transition-transform duration-1000 ${
+          className={`absolute bottom-[-10%] right-[-10%] h-[50%] w-[50%] rounded-full bg-indigo-500/10 blur-[150px] transition-transform duration-1000 ${
             isExiting ? 'scale-150 opacity-20' : 'scale-100 opacity-100'
           }`}
         />
       </div>
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center px-6">
-        <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
-          <div className="text-4xl font-black italic uppercase tracking-widest">GEASS</div>
-          <div className="text-gray-400 mt-3">Discord ile giris yap ve paneli yonet.</div>
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-6">
+        <div className="w-full max-w-xl rounded-[2.2rem] border border-white/10 bg-white/5 p-10 shadow-2xl shadow-black/30">
+          <div className="text-4xl font-black tracking-tight text-white">GEASS</div>
+          <div className="mt-2 text-sm text-white/70">
+            Discord hesabınla güvenli şekilde giriş yap, paneli yönetmeye devam et.
+          </div>
           {isCheckingAuth ? (
-            <div className="text-xs text-gray-400 mt-2">Mevcut oturum kontrol ediliyor...</div>
+            <div className="mt-3 text-xs text-gray-400">Mevcut oturum kontrol ediliyor...</div>
           ) : null}
           {!isCheckingAuth && authNotice ? (
-            <div className="text-xs text-amber-300 mt-2">{authNotice}</div>
+            <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              {authNotice}
+            </div>
           ) : null}
 
           <button
             onClick={handleLogin}
             disabled={isCheckingAuth}
-            className="mt-10 w-full px-6 py-4 rounded-2xl bg-purple-600/30 border border-purple-500/30 hover:bg-purple-600/40 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="mt-10 flex w-full items-center justify-center gap-3 rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-6 py-4 text-sm font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isCheckingAuth ? 'OTURUM KONTROL EDILIYOR' : 'GIRIS YAP'} <ChevronRight size={18} />
+            {isCheckingAuth ? 'Oturum Kontrol Ediliyor' : 'Discord ile Giriş Yap'}{' '}
+            <ChevronRight size={18} />
           </button>
         </div>
       </div>

@@ -9,19 +9,20 @@ export default function DashboardHeader({
   onLogin,
   isAuthenticated = true,
 }) {
-  const actionLabel = isAuthenticated ? 'CIKIS' : 'GIRIS';
+  const actionLabel = isAuthenticated ? 'Çıkış' : 'Giriş';
   const actionHandler = isAuthenticated ? onLogout : onLogin;
 
   return (
-    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
+    <div className="flex flex-col gap-5 rounded-[1.8rem] border border-white/10 bg-[#131322]/85 px-5 py-5 shadow-2xl shadow-black/20 md:flex-row md:items-center md:justify-between md:px-7">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
         <div>
-          <div className="text-3xl font-black italic tracking-tight">GEASS</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">
+          <div className="text-3xl font-black tracking-tight text-white">GEASS</div>
+          <div className="mt-1 text-xs text-white/60">Discord Bot Kontrol Paneli</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-gray-400">
             <span>{activeGuildName || 'Sunucu'}</span>
             {singleGuildMode ? (
               <span className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-cyan-100">
-                Single Guild
+                Tek Sunucu Modu
               </span>
             ) : null}
           </div>
@@ -31,7 +32,7 @@ export default function DashboardHeader({
           <select
             value={guildId}
             onChange={(e) => onGuildChange(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-widest outline-none hover:bg-white/10 transition-all"
+            className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] outline-none transition-all hover:bg-white/10"
           >
             {guilds.map((g) => (
               <option key={g.id} value={g.id}>
@@ -44,7 +45,7 @@ export default function DashboardHeader({
 
       <button
         onClick={actionHandler}
-        className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-3"
+        className="flex items-center gap-3 rounded-2xl border border-cyan-400/30 bg-cyan-500/15 px-6 py-3 text-xs font-bold tracking-[0.16em] text-cyan-100 transition-all hover:bg-cyan-500/25"
       >
         {actionLabel}
       </button>

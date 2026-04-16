@@ -376,7 +376,7 @@ export function useDashboardData({ navigate }) {
       }
     } catch (error) {
       if (!request.isCurrent()) return;
-      const normalizedError = normalizeApiError(error, 'Auth status yuklenemedi');
+      const normalizedError = normalizeApiError(error, 'Auth status yüklenemedi');
       setAuthError(normalizedError);
       if (normalizedError.isUnauthenticated) {
         clearStoredDashboardAuthToken();
@@ -423,7 +423,7 @@ export function useDashboardData({ navigate }) {
         if (!request.isCurrent()) return;
         const normalizedError = normalizeApiError(
           error,
-          'Korumali dashboard verisi yuklenemedi'
+          'Korumalı panel verisi yüklenemedi'
         );
         setProtectedError(normalizedError);
         setViewState(deriveViewStateFromError(normalizedError));
@@ -437,7 +437,7 @@ export function useDashboardData({ navigate }) {
   );
 
   useEffect(() => {
-    document.title = 'GEASS Dashboard';
+    document.title = 'GEASS Panel';
     void runAuthBootstrap();
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -529,12 +529,12 @@ export function useDashboardData({ navigate }) {
       setStatusCommandSettings(response || null);
       setStatusCommandDetailModeDraft(toStatusCommandDetailMode(response || {}));
       setStatusCommandSaveState('success');
-      setStatusCommandSaveMessage('Durum komutu ayari kaydedildi');
-      showToast('Durum komutu ayari kaydedildi', 'ok');
+      setStatusCommandSaveMessage('Durum komutu ayarı kaydedildi');
+      showToast('Durum komutu ayarı kaydedildi', 'ok');
     } catch (error) {
       const normalizedError = normalizeApiError(
         error,
-        'Durum komutu ayari kaydedilemedi'
+        'Durum komutu ayarı kaydedilemedi'
       );
       setStatusCommandSaveState('error');
       setStatusCommandSaveMessage(normalizedError.message);
@@ -572,7 +572,7 @@ export function useDashboardData({ navigate }) {
   const canSelectGuild = useMemo(() => guilds.length > 1, [guilds.length]);
   const activeGuildName = useMemo(() => {
     const byId = guilds.find((guild) => String(guild?.id || '') === String(guildId || ''));
-    return byId?.name || guilds[0]?.name || 'Guild';
+    return byId?.name || guilds[0]?.name || 'Sunucu';
   }, [guildId, guilds]);
 
   const authenticatedUserSummary = useMemo(() => {

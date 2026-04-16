@@ -1,10 +1,13 @@
 function HealthBadge({ label, ok }) {
   return (
     <span
-      className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
-        ok ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200'
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+        ok
+          ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100'
+          : 'border-rose-400/35 bg-rose-500/15 text-rose-100'
       }`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${ok ? 'bg-emerald-300' : 'bg-rose-300'}`} />
       {label}: {ok ? 'OK' : 'HATA'}
     </span>
   );
@@ -24,19 +27,19 @@ export default function SystemHealthCard({ overview, viewState }) {
   const startupPhase = String(runtime?.startupPhase || 'unknown_phase');
 
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <span className="text-[10px] font-black uppercase tracking-widest text-white/70">
-        Control Plane
+    <div className="mt-6 flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-white/10 bg-[#121221]/90 px-4 py-3 shadow-xl shadow-black/20">
+      <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/65">
+        Sistem Sağlığı
       </span>
-      <span className="rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider bg-white/10 text-white/90">
-        Startup: {startupPhase}
+      <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80">
+        STARTUP: {startupPhase}
       </span>
-      <HealthBadge label="Gateway" ok={gatewayReady} />
-      <HealthBadge label="Auth" ok={authEnabled && authConfigured} />
-      <HealthBadge label="Mutable Routes" ok={mutableRoutesEnabled} />
+      <HealthBadge label="GATEWAY" ok={gatewayReady} />
+      <HealthBadge label="AUTH" ok={authEnabled && authConfigured} />
+      <HealthBadge label="MUTABLE ROUTES" ok={mutableRoutesEnabled} />
       {runtime ? null : (
-        <span className="rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider bg-white/10 text-gray-300">
-          Durum: {viewState === 'loading' ? 'Yukleniyor' : 'Veri yok'}
+        <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-300">
+          DURUM: {viewState === 'loading' ? 'YUKLENIYOR' : 'VERI YOK'}
         </span>
       )}
     </div>

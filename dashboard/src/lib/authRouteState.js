@@ -16,7 +16,7 @@ export const ROOT_AUTH_ROUTE_STATES = Object.freeze({
 
 export function deriveRootAuthRouteState({ authStatus = null, error = null } = {}) {
   if (error) {
-    const normalizedError = normalizeApiError(error, 'Auth status yuklenemedi');
+    const normalizedError = normalizeApiError(error, 'Auth status yüklenemedi');
     return {
       routeState: ROOT_AUTH_ROUTE_STATES.SAFE_LOGIN,
       reasonCode: normalizedError.reasonCode || normalizedError.code || 'auth_status_unavailable',
@@ -57,8 +57,8 @@ export function toRootAuthNotice(routeDecision = {}) {
   if (routeDecision?.routeState !== ROOT_AUTH_ROUTE_STATES.SAFE_LOGIN) return '';
   if (routeDecision.message) return routeDecision.message;
   return routeDecision.reasonCode
-    ? `Auth gecici olarak kullanilamiyor (${routeDecision.reasonCode}).`
-    : 'Auth gecici olarak kullanilamiyor.';
+    ? `Kimlik doğrulama geçici olarak kullanılamıyor (${routeDecision.reasonCode}).`
+    : 'Kimlik doğrulama geçici olarak kullanılamıyor.';
 }
 
 export function readLoginCodeFromLocation(locationRef = null) {
@@ -183,7 +183,7 @@ export async function resolveRootAuthRouteDecision({
       typeof getAuthStatusFn === 'function' ? await getAuthStatusFn() : null;
     return deriveRootAuthRouteState({ authStatus });
   } catch (error) {
-    const normalizedError = normalizeApiError(error, 'Auth status yuklenemedi');
+    const normalizedError = normalizeApiError(error, 'Auth status yüklenemedi');
     if (
       normalizedError?.isUnauthenticated &&
       typeof clearAuthTokenFn === 'function'
