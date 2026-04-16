@@ -39,11 +39,35 @@ function nowMs() {
   return Date.now();
 }
 
+function toAccessToken(rawValue = null) {
+  if (rawValue === null || rawValue === undefined) return null;
+
+  if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+    if (!Object.prototype.hasOwnProperty.call(rawValue, 'accessToken')) {
+      return null;
+    }
+    return toAccessToken(rawValue.accessToken);
+  }
+
+  if (typeof rawValue === 'string') {
+    const trimmedRawValue = rawValue.trim();
+    if (!trimmedRawValue) return null;
+
+    try {
+      return toAccessToken(JSON.parse(trimmedRawValue));
+    } catch {
+      return trimmedRawValue;
+    }
+  }
+
+  return null;
+}
+
 function toStoredTokenRecord(rawValue = null) {
   if (!rawValue) return null;
 
   if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
-    const accessToken = String(rawValue.accessToken || '').trim();
+    const accessToken = toAccessToken(rawValue.accessToken);
     if (!accessToken) return null;
     const expiresAt =
       rawValue.expiresAt === null || rawValue.expiresAt === undefined
@@ -59,11 +83,24 @@ function toStoredTokenRecord(rawValue = null) {
     };
   }
 
+  if (typeof rawValue !== 'string') {
+    return null;
+  }
+
+  const trimmedRawValue = rawValue.trim();
+  if (!trimmedRawValue) return null;
+
   try {
-    const parsed = JSON.parse(String(rawValue || ''));
+    const parsed = JSON.parse(trimmedRawValue);
     return toStoredTokenRecord(parsed);
   } catch {
-    return null;
+    const accessToken = toAccessToken(trimmedRawValue);
+    if (!accessToken) return null;
+    return {
+      accessToken,
+      expiresAt: null,
+      principal: null,
+    };
   }
 }
 
