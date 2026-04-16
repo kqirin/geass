@@ -1,0 +1,195 @@
+{
+  "currentWorkingDashboardControls": [
+    {
+      "key": "commands.durum.enabled",
+      "endpoint": "PUT /api/dashboard/protected/bot-settings/commands"
+    },
+    {
+      "key": "commands.durum.detailMode",
+      "endpoint": "PUT /api/dashboard/protected/bot-settings/commands"
+    },
+    {
+      "key": "preferences.defaultView",
+      "endpoint": "PUT /api/dashboard/protected/preferences"
+    },
+    {
+      "key": "preferences.compactMode",
+      "endpoint": "PUT /api/dashboard/protected/preferences"
+    },
+    {
+      "key": "preferences.dismissedNoticeIds",
+      "endpoint": "PUT /api/dashboard/protected/preferences"
+    },
+    {
+      "key": "preferences.advancedLayoutMode",
+      "endpoint": "PUT /api/dashboard/protected/preferences"
+    },
+    {
+      "key": "guildSelection",
+      "endpoint": "GET /api/auth/guilds + scoped protected endpoints"
+    }
+  ],
+  "detectedCommands": [
+    {
+      "name": "log",
+      "aliases": []
+    },
+    {
+      "name": "warn",
+      "aliases": []
+    },
+    {
+      "name": "mute",
+      "aliases": []
+    },
+    {
+      "name": "unmute",
+      "aliases": []
+    },
+    {
+      "name": "kick",
+      "aliases": []
+    },
+    {
+      "name": "jail",
+      "aliases": []
+    },
+    {
+      "name": "unjail",
+      "aliases": []
+    },
+    {
+      "name": "ban",
+      "aliases": []
+    },
+    {
+      "name": "unban",
+      "aliases": []
+    },
+    {
+      "name": "lock",
+      "aliases": []
+    },
+    {
+      "name": "unlock",
+      "aliases": []
+    },
+    {
+      "name": "embed",
+      "aliases": []
+    },
+    {
+      "name": "durum",
+      "aliases": []
+    },
+    {
+      "name": "yardim",
+      "aliases": [
+        "yardım"
+      ]
+    }
+  ],
+  "detectedServices": [
+    "prefix_command_dispatch",
+    "moderation_permission_and_rate_limit",
+    "moderation_action_execution_pipeline",
+    "native_timeout_service",
+    "guild_ban_state_verification",
+    "timed_penalty_scheduler",
+    "channel_lock_snapshot_system",
+    "private_room_voice_system",
+    "startup_voice_auto_join",
+    "reaction_action_engine",
+    "tag_role_sync",
+    "bot_presence_manager",
+    "custom_commands_subsystem",
+    "static_config_and_validation",
+    "control_plane_auth_and_guild_scope",
+    "dashboard_route_and_mutation_pipeline"
+  ],
+  "recommendedPages": [
+    {
+      "id": "setup-readiness",
+      "title": "Setup Readiness"
+    },
+    {
+      "id": "command-management",
+      "title": "Command Management"
+    },
+    {
+      "id": "startup-voice",
+      "title": "Startup Voice"
+    },
+    {
+      "id": "private-rooms",
+      "title": "Private Rooms"
+    },
+    {
+      "id": "logs-and-audit",
+      "title": "Logs and Audit"
+    },
+    {
+      "id": "moderation-settings",
+      "title": "Moderation Settings"
+    },
+    {
+      "id": "role-reactions",
+      "title": "Role and Reactions"
+    },
+    {
+      "id": "tag-role",
+      "title": "Tag Role"
+    },
+    {
+      "id": "premium-controls",
+      "title": "Premium and Capabilities"
+    }
+  ],
+  "safeNowControls": [
+    "read_only_setup_readiness_checks",
+    "read_only_command_catalog",
+    "read_only_command_policy_view",
+    "read_only_startup_voice_status",
+    "read_only_private_room_overview",
+    "read_only_logs_pages",
+    "premium_capability_matrix_rendering"
+  ],
+  "readOnlyFirstControls": [
+    "moderation_policy_ui_for_destructive_commands",
+    "reaction_rule_inventory_and_health",
+    "tag_role_status_page",
+    "startup_voice_settings_editor",
+    "private_room_settings_editor"
+  ],
+  "needsGuardrailsControls": [
+    "write_moderation_policy_fields",
+    "write_staff_hierarchy_and_hard_protected_lists",
+    "reaction_rule_crud",
+    "write_prefix",
+    "write_lock_policy_and_role",
+    "write_private_room_core_bindings"
+  ],
+  "riskyDeferredControls": [
+    "dashboard_execute_ban_kick_mute_jail_actions",
+    "bulk_moderation_actions",
+    "arbitrary_channel_overwrite_mutations",
+    "env_or_secret_management_from_dashboard"
+  ],
+  "recommendedNextStep": {
+    "title": "Read-only Setup Readiness endpoint and dashboard section",
+    "reason": "Highest immediate value with lowest operational risk and no runtime behavior changes.",
+    "scope": [
+      "Add GET /api/dashboard/protected/setup-readiness",
+      "Expose missing/invalid static config references and readiness summary",
+      "Render readiness cards in dashboard UI"
+    ],
+    "endpoints": [
+      "GET /api/dashboard/protected/setup-readiness"
+    ],
+    "tests": [
+      "protected_route_auth_and_guild_scope_test",
+      "setup_readiness_payload_contract_test",
+      "dashboard_setup_readiness_render_test"
+    ]
+  }
+}
