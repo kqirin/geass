@@ -161,6 +161,54 @@ test('authenticated bootstrap resolves guild selection and principal summary', a
   assert.equal(snapshot.session.id, 's-1');
 });
 
+test('authenticated bootstrap supports top-level authenticated auth-status shape', async () => {
+  const { client } = createMockClient({
+    getMap: {
+      '/api/auth/status': {
+        ok: true,
+        data: {
+          authenticated: true,
+          principal: {
+            id: 'u-top',
+            username: 'top-user',
+            displayName: 'Top User',
+          },
+          session: {
+            id: 's-top',
+          },
+        },
+      },
+      '/api/auth/me': {
+        ok: true,
+        data: {
+          principal: {
+            id: 'u-top',
+            username: 'top-user',
+            displayName: 'Top User',
+          },
+          session: {
+            id: 's-top',
+          },
+        },
+      },
+      '/api/auth/guilds': {
+        ok: true,
+        data: {
+          guilds: [{ id: 'g-top', name: 'Top Guild', isOperator: true }],
+        },
+      },
+    },
+  });
+
+  const snapshot = await bootstrapDashboardAuthSession({ client });
+
+  assert.equal(snapshot.viewState, DASHBOARD_VIEW_STATES.LOADING);
+  assert.equal(snapshot.authenticated, true);
+  assert.equal(snapshot.guildId, 'g-top');
+  assert.equal(snapshot.principal.id, 'u-top');
+  assert.equal(snapshot.session.id, 's-top');
+});
+
 test('protected snapshot loads overview, plan, capabilities, preferences, and status-command settings', async () => {
   const { client, calls } = createMockClient({
     getMap: {

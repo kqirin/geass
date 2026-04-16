@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { getAuthLoginUrl } from '../lib/apiClient.js';
 
-const Login = () => {
+const Login = ({
+  isCheckingAuth = false,
+  authNotice = '',
+}) => {
   const [isExiting, setIsExiting] = useState(false);
 
   const handleLogin = () => {
+    if (isCheckingAuth) return;
     setIsExiting(true);
     setTimeout(() => {
       window.location.href = getAuthLoginUrl();
@@ -31,12 +35,19 @@ const Login = () => {
         <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
           <div className="text-4xl font-black italic uppercase tracking-widest">GEASS</div>
           <div className="text-gray-400 mt-3">Discord ile giris yap ve paneli yonet.</div>
+          {isCheckingAuth ? (
+            <div className="text-xs text-gray-400 mt-2">Mevcut oturum kontrol ediliyor...</div>
+          ) : null}
+          {!isCheckingAuth && authNotice ? (
+            <div className="text-xs text-amber-300 mt-2">{authNotice}</div>
+          ) : null}
 
           <button
             onClick={handleLogin}
-            className="mt-10 w-full px-6 py-4 rounded-2xl bg-purple-600/30 border border-purple-500/30 hover:bg-purple-600/40 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-3"
+            disabled={isCheckingAuth}
+            className="mt-10 w-full px-6 py-4 rounded-2xl bg-purple-600/30 border border-purple-500/30 hover:bg-purple-600/40 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            GIRIS YAP <ChevronRight size={18} />
+            {isCheckingAuth ? 'OTURUM KONTROL EDILIYOR' : 'GIRIS YAP'} <ChevronRight size={18} />
           </button>
         </div>
       </div>

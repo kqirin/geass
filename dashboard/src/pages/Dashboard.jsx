@@ -97,7 +97,11 @@ export default function Dashboard() {
 
   const isAuthenticated = Boolean(authenticatedUserSummary?.id);
   const authUnavailableDetail =
-    authStatus?.auth?.reasonCode || authError?.reasonCode || protectedError?.reasonCode || 'auth_not_configured';
+    authStatus?.auth?.reasonCode ||
+    authStatus?.reasonCode ||
+    authError?.reasonCode ||
+    protectedError?.reasonCode ||
+    'auth_not_configured';
   const noAccessDetail =
     protectedError?.reasonCode || authError?.reasonCode || 'guild_scope_unresolved';
   const advancedCapabilityText = advancedPreferencesCapability.available

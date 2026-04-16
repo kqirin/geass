@@ -88,11 +88,73 @@ export function deriveViewStateFromError(errorMeta) {
   return DASHBOARD_VIEW_STATES.ERROR;
 }
 
+export function normalizeAuthStatusSnapshot(rawStatus = {}) {
+  const status =
+    rawStatus && typeof rawStatus === 'object' && !Array.isArray(rawStatus)
+      ? rawStatus
+      : {};
+  const rawAuth =
+    status?.auth && typeof status.auth === 'object' && !Array.isArray(status.auth)
+      ? status.auth
+      : {};
+
+  const enabled =
+    typeof rawAuth.enabled === 'boolean'
+      ? rawAuth.enabled
+      : typeof status.enabled === 'boolean'
+        ? status.enabled
+        : true;
+  const configured =
+    typeof rawAuth.configured === 'boolean'
+      ? rawAuth.configured
+      : typeof status.configured === 'boolean'
+        ? status.configured
+        : true;
+  const authenticated =
+    typeof rawAuth.authenticated === 'boolean'
+      ? rawAuth.authenticated
+      : typeof status.authenticated === 'boolean'
+        ? status.authenticated
+        : false;
+
+  const reasonCodeFromAuth =
+    rawAuth.reasonCode === undefined || rawAuth.reasonCode === null
+      ? null
+      : String(rawAuth.reasonCode || '').trim() || null;
+  const reasonCodeFromStatus =
+    status.reasonCode === undefined || status.reasonCode === null
+      ? null
+      : String(status.reasonCode || '').trim() || null;
+  const reasonCode =
+    reasonCodeFromAuth ||
+    reasonCodeFromStatus ||
+    (!enabled ? 'auth_disabled' : !configured ? 'auth_not_configured' : null);
+
+  const principal =
+    status?.principal && typeof status.principal === 'object' ? status.principal : null;
+  const session =
+    status?.session && typeof status.session === 'object' ? status.session : null;
+
+  return {
+    ...status,
+    auth: {
+      ...rawAuth,
+      enabled,
+      configured,
+      authenticated,
+      reasonCode,
+    },
+    authenticated,
+    principal,
+    session,
+  };
+}
+
 export async function bootstrapDashboardAuthSession({
   preferredGuildId = '',
   client,
 } = {}) {
-  const authStatus = await getAuthStatus(client);
+  const authStatus = normalizeAuthStatusSnapshot(await getAuthStatus(client));
   const auth = authStatus?.auth && typeof authStatus.auth === 'object' ? authStatus.auth : {};
 
   if (!auth.enabled || !auth.configured) {

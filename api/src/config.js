@@ -99,11 +99,13 @@ const controlPlaneOauthStateTtlMs = toNumber(process.env.CONTROL_PLANE_OAUTH_STA
   max: 60 * 60 * 1000,
 });
 const controlPlaneAuthCookieSameSite = toSameSite(
-  process.env.CONTROL_PLANE_AUTH_COOKIE_SAMESITE,
+  process.env.CONTROL_PLANE_AUTH_COOKIE_SAMESITE ??
+    process.env.CONTROL_PLANE_COOKIE_SAMESITE,
   'Lax'
 );
 const controlPlaneAuthCookieSecureFromEnv = toBoolean(
-  process.env.CONTROL_PLANE_AUTH_COOKIE_SECURE,
+  process.env.CONTROL_PLANE_AUTH_COOKIE_SECURE ??
+    process.env.CONTROL_PLANE_COOKIE_SECURE,
   nodeEnv === 'production'
 );
 const controlPlaneAuthCookieSecure =

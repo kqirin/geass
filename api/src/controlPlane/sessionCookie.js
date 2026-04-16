@@ -26,6 +26,16 @@ function timingSafeEqualString(left, right) {
   }
 }
 
+function normalizeSameSite(value, fallback = 'Lax') {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (normalized === 'strict') return 'Strict';
+  if (normalized === 'none') return 'None';
+  if (normalized === 'lax') return 'Lax';
+  return fallback;
+}
+
 function createSessionCookieManager({
   cookieName = 'cp_session',
   secret = '',
@@ -37,7 +47,7 @@ function createSessionCookieManager({
   const normalizedCookieName = String(cookieName || 'cp_session').trim() || 'cp_session';
   const normalizedSecret = String(secret || '');
   const normalizedPath = String(path || '/').trim() || '/';
-  const normalizedSameSite = String(sameSite || 'Lax').trim() || 'Lax';
+  const normalizedSameSite = normalizeSameSite(sameSite, 'Lax');
   const defaultMaxAgeSec = Number.isFinite(Number(maxAgeSec)) && Number(maxAgeSec) > 0 ? Number(maxAgeSec) : 8 * 60 * 60;
   const secureFlag = Boolean(secure);
 

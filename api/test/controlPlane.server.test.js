@@ -1456,6 +1456,154 @@ test('configured auth supports login callback session resolution me and logout',
   }
 });
 
+test('production callback and logout set cross-site compatible session cookie attributes', async () => {
+  const oauthFetchCalls = [];
+  const mockFetch = async (url, options = {}) => {
+    const normalizedUrl = String(url || '');
+    oauthFetchCalls.push({
+      url: normalizedUrl,
+      method: String(options?.method || 'GET').toUpperCase(),
+    });
+
+    if (normalizedUrl.endsWith('/api/oauth2/token')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          access_token: 'discord-access-token-production',
+          token_type: 'Bearer',
+          scope: 'identify guilds',
+        }),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/api/users/@me')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: '223456789012345678',
+          username: 'prod-auth-user',
+          global_name: 'Prod Auth User',
+          avatar: 'prod-avatar',
+        }),
+      };
+    }
+
+    if (normalizedUrl.endsWith('/api/users/@me/guilds')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [],
+      };
+    }
+
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    };
+  };
+
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: {
+        nodeEnv: 'production',
+        controlPlane: {
+          enabled: true,
+          auth: {
+            enabled: true,
+            configured: true,
+            sessionSecret: 'abcdef0123456789abcdef0123456789',
+            sessionCookieName: 'cp_session',
+            sessionTtlMs: 15 * 60 * 1000,
+            oauthStateTtlMs: 10 * 60 * 1000,
+            cookieSecure: true,
+            cookieSameSite: 'None',
+            postLoginRedirectUri: 'https://geass-dashboard.pages.dev',
+            dashboardAllowedOrigins: ['https://geass-dashboard.pages.dev'],
+          },
+        },
+        oauth: {
+          singleGuildId: '',
+          clientId: 'oauth-client-id',
+          clientSecret: 'oauth-client-secret',
+          redirectUri: 'https://geass-production.up.railway.app/api/auth/callback',
+        },
+        discord: { token: '', targetGuildId: '', startupVoiceChannelId: '' },
+        db: {},
+        cache: {},
+        rateLimit: {},
+      },
+      getConfiguredStaticGuildIdsFn: () => [],
+      authFoundationOptions: {
+        fetchImpl: mockFetch,
+      },
+    })
+  );
+
+  try {
+    const login = await request({ port: server.port, path: '/api/auth/login' });
+    assert.equal(login.statusCode, 302);
+    const state = new URL(String(login.headers.location || '')).searchParams.get('state');
+    assert.ok(state);
+
+    const callback = await request({
+      port: server.port,
+      path: `/api/auth/callback?code=oauth-prod-code&state=${encodeURIComponent(state)}`,
+    });
+    assert.equal(callback.statusCode, 302);
+    assert.equal(String(callback.headers.location || ''), 'https://geass-dashboard.pages.dev');
+
+    const sessionSetCookie = firstSetCookieHeader(callback.headers);
+    assert.match(sessionSetCookie, /^cp_session=/);
+    assert.match(sessionSetCookie, /HttpOnly/);
+    assert.match(sessionSetCookie, /Secure/);
+    assert.match(sessionSetCookie, /SameSite=None/);
+    assert.match(sessionSetCookie, /Path=\//);
+    const sessionCookiePair = toCookiePair(sessionSetCookie);
+    assert.ok(sessionCookiePair);
+
+    const authStatusAfter = await request({
+      port: server.port,
+      path: '/api/auth/status',
+      headers: {
+        Cookie: sessionCookiePair,
+      },
+    });
+    assert.equal(authStatusAfter.statusCode, 200);
+    const authStatusAfterJson = parseJsonBody(authStatusAfter);
+    assert.equal(authStatusAfterJson.ok, true);
+    assert.equal(authStatusAfterJson.data.auth.authenticated, true);
+
+    const logout = await request({
+      port: server.port,
+      path: '/api/auth/logout',
+      method: 'POST',
+      headers: {
+        Cookie: sessionCookiePair,
+      },
+    });
+    assert.equal(logout.statusCode, 200);
+    const logoutJson = parseJsonBody(logout);
+    assert.equal(logoutJson.ok, true);
+    assert.equal(logoutJson.data.loggedOut, true);
+
+    const clearCookie = firstSetCookieHeader(logout.headers);
+    assert.match(clearCookie, /^cp_session=/);
+    assert.match(clearCookie, /HttpOnly/);
+    assert.match(clearCookie, /Secure/);
+    assert.match(clearCookie, /SameSite=None/);
+    assert.match(clearCookie, /Path=\//);
+    assert.match(clearCookie, /Max-Age=0/);
+
+    assert.equal(oauthFetchCalls.length, 3);
+  } finally {
+    await server.close();
+  }
+});
+
 test('guild access endpoints fail closed for no-access users and allow authenticated guild operators', async () => {
   const oauthFetchCalls = [];
   const mutationAuditEntries = [];

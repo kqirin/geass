@@ -192,12 +192,33 @@ test('dashboard allowed origin env parsing supports alias list, commas, and quot
   );
 });
 
-test('SameSite=None enforces secure cookie mode for session safety', async () => {
+test('SameSite env parsing normalizes None casing and enforces secure cookie mode', async () => {
+  for (const rawSameSiteValue of ['None', 'none', 'NONE']) {
+    await withEnvOverrides(
+      {
+        NODE_ENV: 'development',
+        CONTROL_PLANE_AUTH_COOKIE_SAMESITE: rawSameSiteValue,
+        CONTROL_PLANE_COOKIE_SAMESITE: undefined,
+        CONTROL_PLANE_AUTH_COOKIE_SECURE: '0',
+        CONTROL_PLANE_COOKIE_SECURE: undefined,
+      },
+      async () => {
+        const { config } = require(configPath);
+        assert.equal(config.controlPlane.auth.cookieSameSite, 'None');
+        assert.equal(config.controlPlane.auth.cookieSecure, true);
+      }
+    );
+  }
+});
+
+test('legacy SameSite env alias supports lowercase none for cross-site cookies', async () => {
   await withEnvOverrides(
     {
       NODE_ENV: 'development',
-      CONTROL_PLANE_AUTH_COOKIE_SAMESITE: 'None',
+      CONTROL_PLANE_AUTH_COOKIE_SAMESITE: undefined,
+      CONTROL_PLANE_COOKIE_SAMESITE: 'none',
       CONTROL_PLANE_AUTH_COOKIE_SECURE: '0',
+      CONTROL_PLANE_COOKIE_SECURE: undefined,
     },
     async () => {
       const { config } = require(configPath);
