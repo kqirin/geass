@@ -35,15 +35,6 @@ const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type, Authorization';
 const HEALTH_PATH = '/health';
 const DASHBOARD_PATH_PREFIX = '/dashboard';
 const STATIC_ALLOWED_METHODS = new Set(['GET', 'HEAD']);
-const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
-  '/api/auth/status',
-  '/api/auth/me',
-  '/api/auth/guilds',
-  '/api/auth/logout',
-  '/api/auth/login',
-  '/api/auth/callback',
-  '/api/auth/exchange',
-]);
 const STATIC_CONTENT_TYPES = Object.freeze({
   '.css': 'text/css; charset=utf-8',
   '.gif': 'image/gif',
@@ -109,9 +100,14 @@ function isDashboardApiPath(path) {
   return normalized === '/api/dashboard' || normalized.startsWith('/api/dashboard/');
 }
 
+function isAuthApiPath(path) {
+  const normalized = normalizeRequestPath(path);
+  return normalized === '/api/auth' || normalized.startsWith('/api/auth/');
+}
+
 function isControlPlaneCorsPath(path) {
   const normalized = normalizeRequestPath(path);
-  return isDashboardApiPath(normalized) || CONTROL_PLANE_CORS_AUTH_PATHS.has(normalized);
+  return isDashboardApiPath(normalized) || isAuthApiPath(normalized);
 }
 
 function normalizeHeaderValue(value) {

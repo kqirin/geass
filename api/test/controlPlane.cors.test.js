@@ -407,6 +407,84 @@ test('OPTIONS /api/auth/guilds returns CORS headers for allowed dashboard origin
   }
 });
 
+test('OPTIONS /api/auth/plan?guildId=test returns CORS headers for allowed dashboard origin', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: createEnabledControlPlaneServerConfig({
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
+      }),
+    })
+  );
+
+  try {
+    const response = await request({
+      port: server.port,
+      path: '/api/auth/plan?guildId=test',
+      method: 'OPTIONS',
+      headers: {
+        Origin: DASHBOARD_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Authorization, Content-Type',
+      },
+    });
+
+    assert.equal(response.statusCode, 204);
+    assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
+    assert.equal(response.headers['access-control-allow-credentials'], 'true');
+    assert.equal(
+      response.headers['access-control-allow-methods'],
+      'GET,POST,PUT,OPTIONS'
+    );
+    assert.equal(
+      response.headers['access-control-allow-headers'],
+      'Content-Type, Authorization'
+    );
+    assert.match(String(response.headers.vary || ''), /Origin/i);
+  } finally {
+    await server.close();
+  }
+});
+
+test('OPTIONS /api/dashboard/protected/overview returns CORS headers for allowed dashboard origin', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: createEnabledControlPlaneServerConfig({
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
+      }),
+    })
+  );
+
+  try {
+    const response = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/overview',
+      method: 'OPTIONS',
+      headers: {
+        Origin: DASHBOARD_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Authorization, Content-Type',
+      },
+    });
+
+    assert.equal(response.statusCode, 204);
+    assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
+    assert.equal(response.headers['access-control-allow-credentials'], 'true');
+    assert.equal(
+      response.headers['access-control-allow-methods'],
+      'GET,POST,PUT,OPTIONS'
+    );
+    assert.equal(
+      response.headers['access-control-allow-headers'],
+      'Content-Type, Authorization'
+    );
+    assert.match(String(response.headers.vary || ''), /Origin/i);
+  } finally {
+    await server.close();
+  }
+});
+
 test('allowed preflight request is accepted with explicit credentials support', async () => {
   const server = await startServer(
     createControlPlaneRequestHandler({
@@ -496,10 +574,22 @@ test('non-auth and non-dashboard api routes do not receive credentialed CORS hea
         Origin: DASHBOARD_ORIGIN,
       },
     });
+    const preflightResponse = await request({
+      port: server.port,
+      path: '/api/meta/runtime',
+      method: 'OPTIONS',
+      headers: {
+        Origin: DASHBOARD_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Authorization, Content-Type',
+      },
+    });
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.headers['access-control-allow-origin'], undefined);
     assert.equal(response.headers['access-control-allow-credentials'], undefined);
+    assert.equal(preflightResponse.headers['access-control-allow-origin'], undefined);
+    assert.equal(preflightResponse.headers['access-control-allow-credentials'], undefined);
   } finally {
     await server.close();
   }
