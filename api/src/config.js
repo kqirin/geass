@@ -1,4 +1,5 @@
 require('dotenv').config({ quiet: true });
+const path = require('node:path');
 
 function toNumber(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
@@ -203,6 +204,14 @@ const controlPlaneDefaultPlan = String(process.env.CONTROL_PLANE_DEFAULT_PLAN ||
 const controlPlaneManualPlanOverrides = parseControlPlanePlanOverrides(
   process.env.CONTROL_PLANE_PLAN_OVERRIDES
 );
+const controlPlaneDashboardStaticEnabled = toBoolean(
+  process.env.SERVE_DASHBOARD_STATIC,
+  false
+);
+const controlPlaneDashboardDistPath = String(
+  process.env.CONTROL_PLANE_DASHBOARD_DIST_DIR ||
+    path.resolve(__dirname, '..', '..', 'dashboard', 'dist')
+).trim();
 const controlPlaneAuthConfigured = Boolean(
   controlPlaneAuthEnabled &&
     oauthClientId &&
@@ -257,6 +266,10 @@ const config = {
   },
   controlPlane: {
     enabled: toBoolean(process.env.ENABLE_CONTROL_PLANE_API, false),
+    dashboardStatic: {
+      enabled: controlPlaneDashboardStaticEnabled,
+      distPath: controlPlaneDashboardDistPath,
+    },
     auth: {
       enabled: controlPlaneAuthEnabled,
       configured: controlPlaneAuthConfigured,

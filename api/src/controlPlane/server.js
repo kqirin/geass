@@ -1,3 +1,6 @@
+const fs = require('node:fs');
+const fsPromises = require('node:fs/promises');
+const path = require('node:path');
 const {
   getConfiguredStaticGuildIds,
   getStaticGuildSettings,
@@ -29,6 +32,8 @@ const { isDirectHttpResponse } = require('./routeHttpResponse');
 
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,OPTIONS';
 const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type';
+const HEALTH_PATH = '/health';
+const STATIC_ALLOWED_METHODS = new Set(['GET', 'HEAD']);
 const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
   '/api/auth/status',
   '/api/auth/me',
@@ -36,6 +41,22 @@ const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/callback',
 ]);
+const STATIC_CONTENT_TYPES = Object.freeze({
+  '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.map': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain; charset=utf-8',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+});
 
 function writeHealthOk(res) {
   res.statusCode = 200;
@@ -219,6 +240,157 @@ function writeRouteResolution(res, resolved) {
   });
 }
 
+function writeNotFound(res) {
+  res.statusCode = 404;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.end('not_found');
+}
+
+function toDashboardStaticRuntime(config = {}) {
+  const enabled = config?.controlPlane?.dashboardStatic?.enabled === true;
+  if (!enabled) {
+    return {
+      enabled: false,
+      distPath: null,
+      indexPath: null,
+    };
+  }
+
+  const rawDistPath = String(config?.controlPlane?.dashboardStatic?.distPath || '').trim();
+  if (!rawDistPath) {
+    return {
+      enabled: false,
+      distPath: null,
+      indexPath: null,
+    };
+  }
+
+  const distPath = path.resolve(rawDistPath);
+  const indexPath = path.join(distPath, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    return {
+      enabled: false,
+      distPath,
+      indexPath,
+    };
+  }
+
+  return {
+    enabled: true,
+    distPath,
+    indexPath,
+  };
+}
+
+function decodeRequestPath(pathname = '/') {
+  try {
+    return decodeURIComponent(String(pathname || '/'));
+  } catch {
+    return String(pathname || '/');
+  }
+}
+
+function resolveDashboardAssetPath({ distPath = null, requestPath = '/' } = {}) {
+  if (!distPath) return null;
+
+  const normalizedPath = normalizeRequestPath(requestPath);
+  const decodedPath = decodeRequestPath(normalizedPath);
+  const relativePath = decodedPath === '/' ? '/index.html' : decodedPath;
+  const candidatePath = path.resolve(distPath, `.${relativePath}`);
+  const rootPath = path.resolve(distPath);
+  const rootPrefix = rootPath.endsWith(path.sep) ? rootPath : `${rootPath}${path.sep}`;
+  if (candidatePath !== rootPath && !candidatePath.startsWith(rootPrefix)) {
+    return null;
+  }
+  return candidatePath;
+}
+
+async function readFileIfRegularFile(filePath = '') {
+  try {
+    const fileStat = await fsPromises.stat(filePath);
+    if (!fileStat.isFile()) return null;
+    return await fsPromises.readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function getContentTypeByFilePath(filePath = '') {
+  const extension = String(path.extname(filePath) || '').toLowerCase();
+  return STATIC_CONTENT_TYPES[extension] || 'application/octet-stream';
+}
+
+function writeStaticFileResponse({
+  res = null,
+  method = 'GET',
+  filePath = '',
+  body = Buffer.alloc(0),
+} = {}) {
+  const normalizedMethod = String(method || 'GET').trim().toUpperCase();
+  const resolvedBody = Buffer.isBuffer(body) ? body : Buffer.from(String(body || ''), 'utf8');
+  res.statusCode = 200;
+  res.setHeader('Content-Type', getContentTypeByFilePath(filePath));
+  res.setHeader('Content-Length', String(resolvedBody.byteLength));
+  if (normalizedMethod === 'HEAD') {
+    res.end('');
+    return;
+  }
+  res.end(resolvedBody);
+}
+
+async function tryServeDashboardStatic({
+  res = null,
+  method = 'GET',
+  requestPath = '/',
+  dashboardStaticRuntime = {},
+} = {}) {
+  if (!dashboardStaticRuntime?.enabled) return false;
+  if (!STATIC_ALLOWED_METHODS.has(String(method || 'GET').toUpperCase())) {
+    return false;
+  }
+
+  const normalizedPath = normalizeRequestPath(requestPath);
+  const requestedAssetPath = resolveDashboardAssetPath({
+    distPath: dashboardStaticRuntime.distPath,
+    requestPath: normalizedPath,
+  });
+
+  if (!requestedAssetPath) {
+    writeNotFound(res);
+    return true;
+  }
+
+  const requestedAssetBody = await readFileIfRegularFile(requestedAssetPath);
+  if (requestedAssetBody) {
+    writeStaticFileResponse({
+      res,
+      method,
+      filePath: requestedAssetPath,
+      body: requestedAssetBody,
+    });
+    return true;
+  }
+
+  const hasFileExtension = Boolean(path.extname(normalizedPath));
+  if (hasFileExtension) {
+    writeNotFound(res);
+    return true;
+  }
+
+  const spaIndexBody = await readFileIfRegularFile(dashboardStaticRuntime.indexPath);
+  if (spaIndexBody) {
+    writeStaticFileResponse({
+      res,
+      method,
+      filePath: dashboardStaticRuntime.indexPath,
+      body: spaIndexBody,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 function createControlPlaneRequestHandler({
   enabled = false,
   config = {},
@@ -339,6 +511,7 @@ function createControlPlaneRequestHandler({
     typeof createRequestContextFn === 'function'
       ? createRequestContextFn
       : createControlPlaneRequestContext;
+  const dashboardStaticRuntime = toDashboardStaticRuntime(config);
 
   async function handleControlPlaneRequest(req, res) {
     if (!enabled) {
@@ -348,14 +521,28 @@ function createControlPlaneRequestHandler({
 
     const method = String(req?.method || 'GET').trim().toUpperCase();
     const request = parseRequestPathAndQuery(req?.url || '/');
-    const path = request.path;
+    const requestPath = request.path;
 
-    if (!isApiPath(path)) {
+    if (requestPath === HEALTH_PATH) {
       writeHealthOk(res);
       return;
     }
 
-    if (applyControlPlaneCors({ req, res, method, path, config })) {
+    if (!isApiPath(requestPath)) {
+      const staticServed = await tryServeDashboardStatic({
+        res,
+        method,
+        requestPath,
+        dashboardStaticRuntime,
+      });
+      if (staticServed) {
+        return;
+      }
+      writeHealthOk(res);
+      return;
+    }
+
+    if (applyControlPlaneCors({ req, res, method, path: requestPath, config })) {
       return;
     }
 
@@ -371,7 +558,7 @@ function createControlPlaneRequestHandler({
         req,
         requestContext,
         method,
-        path,
+        path: requestPath,
       });
       const authContext = attachAuthContext({
         req,
@@ -379,10 +566,10 @@ function createControlPlaneRequestHandler({
         authContext: rawAuthContext,
       });
 
-      const router = isProtectedControlPlanePath(path) ? protectedRouter : publicRouter;
+      const router = isProtectedControlPlanePath(requestPath) ? protectedRouter : publicRouter;
       const resolved = await router.resolve({
         method,
-        path,
+        path: requestPath,
         query: request.query,
         req,
         requestContext,
