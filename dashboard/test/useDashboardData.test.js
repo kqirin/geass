@@ -307,6 +307,61 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
           ],
         },
       },
+      '/api/dashboard/protected/logs/moderation?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          available: true,
+          items: [
+            {
+              id: '100',
+              action: 'warn',
+              targetUserId: 'u-1',
+              moderatorUserId: 'mod-1',
+              reason: 'Test',
+              createdAt: '2026-04-16T10:00:00.000Z',
+              expiresAt: null,
+              status: 'applied',
+            },
+          ],
+          pagination: {
+            limit: 25,
+            nextCursor: null,
+          },
+          reasonCode: null,
+        },
+      },
+      '/api/dashboard/protected/logs/commands?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          available: false,
+          items: [],
+          pagination: {
+            limit: 25,
+            nextCursor: null,
+          },
+          reasonCode: 'command_logs_not_available',
+          explanation: 'Bu log turu icin kayit kaynagi henuz aktif degil.',
+        },
+      },
+      '/api/dashboard/protected/logs/system?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          available: false,
+          items: [],
+          pagination: {
+            limit: 25,
+            nextCursor: null,
+          },
+          reasonCode: 'system_logs_not_available',
+          explanation: 'Bu log turu icin kayit kaynagi henuz aktif degil.',
+        },
+      },
     },
   });
 
@@ -325,9 +380,12 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
   assert.equal(snapshot.setupReadinessPayload.summary.status, 'warning');
   assert.equal(snapshot.setupReadinessPayload.summary.score, 67);
   assert.equal(snapshot.setupReadinessError, null);
+  assert.equal(snapshot.moderationLogsPayload.available, true);
+  assert.equal(snapshot.commandLogsPayload.reasonCode, 'command_logs_not_available');
+  assert.equal(snapshot.systemLogsPayload.reasonCode, 'system_logs_not_available');
   assert.equal(
     calls.filter((entry) => entry.method === 'GET').length,
-    6
+    9
   );
 });
 
@@ -395,6 +453,37 @@ test('protected snapshot keeps core dashboard data when setup-readiness request 
       '/api/dashboard/protected/setup-readiness?guildId=g-pro': {
         __error: createHttpError(500, 'internal_error', 'setup_readiness_unavailable'),
       },
+      '/api/dashboard/protected/logs/moderation?guildId=g-pro': {
+        __error: createHttpError(500, 'internal_error', 'logs_unavailable'),
+      },
+      '/api/dashboard/protected/logs/commands?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          available: false,
+          items: [],
+          pagination: {
+            limit: 25,
+            nextCursor: null,
+          },
+          reasonCode: 'command_logs_not_available',
+        },
+      },
+      '/api/dashboard/protected/logs/system?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          available: false,
+          items: [],
+          pagination: {
+            limit: 25,
+            nextCursor: null,
+          },
+          reasonCode: 'system_logs_not_available',
+        },
+      },
     },
   });
 
@@ -406,6 +495,9 @@ test('protected snapshot keeps core dashboard data when setup-readiness request 
   assert.equal(snapshot.setupReadinessPayload, null);
   assert.equal(typeof snapshot.setupReadinessError, 'object');
   assert.equal(snapshot.setupReadinessError.code, 'internal_error');
+  assert.equal(snapshot.moderationLogsPayload, null);
+  assert.equal(typeof snapshot.moderationLogsError, 'object');
+  assert.equal(snapshot.moderationLogsError.code, 'internal_error');
 });
 
 test('no-access and auth-unavailable errors map to safe dashboard states', async () => {

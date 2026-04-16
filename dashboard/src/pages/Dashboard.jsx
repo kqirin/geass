@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import DashboardHeader from '../components/Dashboard/shell/DashboardHeader';
 import SystemHealthCard from '../components/Dashboard/shell/SystemHealthCard';
 import DashboardToast from '../components/Dashboard/shell/DashboardToast';
 import { DASHBOARD_VIEW_STATES, useDashboardData } from '../hooks/useDashboardData';
+import {
+  DEFAULT_LOGS_UNAVAILABLE_MESSAGE,
+  getUnavailableLogsMessage,
+  resolveLogsCategoryState,
+} from '../lib/logsViewModel.js';
 import {
   getSetupReadinessIssueCategory,
   getSetupReadinessStatusLabel,
@@ -13,28 +18,33 @@ import {
 
 const DEFAULT_VIEW_OPTIONS = ['overview', 'guild', 'features', 'resources', 'protected_overview'];
 const DEFAULT_VIEW_OPTION_LABELS = Object.freeze({
-  overview: 'Genel Bakış',
+  overview: 'Genel BakÄ±ÅŸ',
   guild: 'Sunucu',
-  features: 'Özellikler',
+  features: 'Ã–zellikler',
   resources: 'Kaynaklar',
-  protected_overview: 'Korumalı Genel Bakış',
+  protected_overview: 'KorumalÄ± Genel BakÄ±ÅŸ',
 });
 const DASHBOARD_SECTIONS = Object.freeze([
-  { id: 'overview', label: 'Genel Bakış', subtitle: 'Temel durum ve özet bilgiler' },
+  { id: 'overview', label: 'Genel BakÄ±ÅŸ', subtitle: 'Temel durum ve Ã¶zet bilgiler' },
   { id: 'moderation', label: 'Moderasyon', subtitle: 'Moderasyon kontrol merkezi' },
-  { id: 'auto-moderation', label: 'Oto Moderasyon', subtitle: 'Otomatik güvenlik kuralları' },
-  { id: 'log-system', label: 'Log Sistemi', subtitle: 'Kayıt ve denetim akışları' },
-  { id: 'private-rooms', label: 'Özel Oda Sistemi', subtitle: 'Özel oda yönetimi' },
-  { id: 'role-reactions', label: 'Rol / Tepki Rolleri', subtitle: 'Rol ve tepki akışları' },
+  { id: 'auto-moderation', label: 'Oto Moderasyon', subtitle: 'Otomatik gÃ¼venlik kurallarÄ±' },
+  { id: 'log-system', label: 'Log Sistemi', subtitle: 'KayÄ±t ve denetim akÄ±ÅŸlarÄ±' },
+  { id: 'private-rooms', label: 'Ã–zel Oda Sistemi', subtitle: 'Ã–zel oda yÃ¶netimi' },
+  { id: 'role-reactions', label: 'Rol / Tepki Rolleri', subtitle: 'Rol ve tepki akÄ±ÅŸlarÄ±' },
   { id: 'setup-readiness', label: 'Kurulum Durumu', subtitle: 'Salt-okunur kurulum denetimi' },
-  { id: 'command-settings', label: 'Komut Ayarları', subtitle: 'Komut görünüm ayarları' },
-  { id: 'premium', label: 'Premium', subtitle: 'Paket ve kilitli özellikler' },
-  { id: 'server-settings', label: 'Sunucu Ayarları', subtitle: 'Panel tercihleri' },
+  { id: 'command-settings', label: 'Komut AyarlarÄ±', subtitle: 'Komut gÃ¶rÃ¼nÃ¼m ayarlarÄ±' },
+  { id: 'premium', label: 'Premium', subtitle: 'Paket ve kilitli Ã¶zellikler' },
+  { id: 'server-settings', label: 'Sunucu AyarlarÄ±', subtitle: 'Panel tercihleri' },
+]);
+const LOG_SYSTEM_TABS = Object.freeze([
+  { id: 'moderation', label: 'Moderasyon Loglari' },
+  { id: 'commands', label: 'Komut Loglari' },
+  { id: 'system', label: 'Sistem Olaylari' },
 ]);
 const STATUS_META = Object.freeze({
   active: { label: 'Aktif', className: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100' },
-  off: { label: 'Kapalı', className: 'border-rose-400/35 bg-rose-500/15 text-rose-100' },
-  soon: { label: 'Yakında', className: 'border-amber-400/35 bg-amber-500/15 text-amber-100' },
+  off: { label: 'KapalÄ±', className: 'border-rose-400/35 bg-rose-500/15 text-rose-100' },
+  soon: { label: 'YakÄ±nda', className: 'border-amber-400/35 bg-amber-500/15 text-amber-100' },
   pro: { label: 'Pro', className: 'border-cyan-400/35 bg-cyan-500/15 text-cyan-100' },
 });
 const SETUP_READINESS_STATUS_META = Object.freeze({
@@ -63,51 +73,42 @@ const PLACEHOLDER_SECTIONS = Object.freeze({
     items: [
       {
         title: 'Moderasyon sistemi',
-        desc: 'Ban, kick, mute ve benzeri komut akışları.',
+        desc: 'Ban, kick, mute ve benzeri komut akÄ±ÅŸlarÄ±.',
         status: 'active',
-        placeholder: 'Mevcut moderasyon akışı çalışıyor. Gelişmiş panel yönetimi yakında.',
+        placeholder: 'Mevcut moderasyon akÄ±ÅŸÄ± Ã§alÄ±ÅŸÄ±yor. GeliÅŸmiÅŸ panel yÃ¶netimi yakÄ±nda.',
       },
-      { title: 'Log kanalı', desc: 'Moderasyon log kanalını belirleme.', status: 'soon' },
-      { title: 'Yetkili rol', desc: 'Moderasyon yetki rolünü belirleme.', status: 'soon' },
-      { title: 'Mute rolü', desc: 'Susturma rolü yönetimi.', status: 'soon' },
-      { title: 'Ban/Kick kayıtları', desc: 'Ceza geçmişi görünümü.', status: 'soon' },
+      { title: 'Log kanalÄ±', desc: 'Moderasyon log kanalÄ±nÄ± belirleme.', status: 'soon' },
+      { title: 'Yetkili rol', desc: 'Moderasyon yetki rolÃ¼nÃ¼ belirleme.', status: 'soon' },
+      { title: 'Mute rolÃ¼', desc: 'Susturma rolÃ¼ yÃ¶netimi.', status: 'soon' },
+      { title: 'Ban/Kick kayÄ±tlarÄ±', desc: 'Ceza geÃ§miÅŸi gÃ¶rÃ¼nÃ¼mÃ¼.', status: 'soon' },
     ],
   },
   'auto-moderation': {
     title: 'Oto Moderasyon',
-    subtitle: 'Otomatik koruma kuralları',
+    subtitle: 'Otomatik koruma kurallarÄ±',
     items: [
-      { title: 'Spam koruması', desc: 'Tekrarlayan mesaj algısı.', status: 'soon' },
-      { title: 'Küfür filtresi', desc: 'Kelime bazlı filtreleme.', status: 'pro' },
-      { title: 'Bağlantı engeli', desc: 'Şüpheli link tespiti.', status: 'pro' },
-    ],
-  },
-  'log-system': {
-    title: 'Log Sistemi',
-    subtitle: 'Kayıt ve raporlama görünümü',
-    items: [
-      { title: 'Moderasyon logları', desc: 'Ceza ve aksiyon kayıtları.', status: 'soon' },
-      { title: 'Komut logları', desc: 'Komut kullanım geçmişi.', status: 'soon' },
-      { title: 'Sistem olayları', desc: 'Sunucu olay değişimleri.', status: 'soon' },
+      { title: 'Spam korumasÄ±', desc: 'Tekrarlayan mesaj algÄ±sÄ±.', status: 'soon' },
+      { title: 'KÃ¼fÃ¼r filtresi', desc: 'Kelime bazlÄ± filtreleme.', status: 'pro' },
+      { title: 'BaÄŸlantÄ± engeli', desc: 'ÅÃ¼pheli link tespiti.', status: 'pro' },
     ],
   },
   'private-rooms': {
-    title: 'Özel Oda Sistemi',
-    subtitle: 'Özel oda yönetim ayarları',
+    title: 'Ã–zel Oda Sistemi',
+    subtitle: 'Ã–zel oda yÃ¶netim ayarlarÄ±',
     items: [
-      { title: 'Sistem durumu', desc: 'Özel oda altyapısı aktifliği.', status: 'soon' },
-      { title: 'Oda limiti', desc: 'Sunucu başına oda limiti.', status: 'soon' },
-      { title: 'Sahip transferi', desc: 'Oda sahipliği devri.', status: 'soon' },
-      { title: 'İzin verilen roller', desc: 'Özel oda erişim rolleri.', status: 'soon' },
+      { title: 'Sistem durumu', desc: 'Ã–zel oda altyapÄ±sÄ± aktifliÄŸi.', status: 'soon' },
+      { title: 'Oda limiti', desc: 'Sunucu baÅŸÄ±na oda limiti.', status: 'soon' },
+      { title: 'Sahip transferi', desc: 'Oda sahipliÄŸi devri.', status: 'soon' },
+      { title: 'Ä°zin verilen roller', desc: 'Ã–zel oda eriÅŸim rolleri.', status: 'soon' },
     ],
   },
   'role-reactions': {
     title: 'Rol / Tepki Rolleri',
-    subtitle: 'Rol dağıtım akışları',
+    subtitle: 'Rol daÄŸÄ±tÄ±m akÄ±ÅŸlarÄ±',
     items: [
-      { title: 'Tepki rol sistemi', desc: 'Mesaj tepkisine göre rol verme.', status: 'soon' },
-      { title: 'Kendi rolünü seç', desc: 'Üye bazlı rol seçimi.', status: 'pro' },
-      { title: 'Rol eşleme', desc: 'Tepki-rol eşleşme yönetimi.', status: 'soon' },
+      { title: 'Tepki rol sistemi', desc: 'Mesaj tepkisine gÃ¶re rol verme.', status: 'soon' },
+      { title: 'Kendi rolÃ¼nÃ¼ seÃ§', desc: 'Ãœye bazlÄ± rol seÃ§imi.', status: 'pro' },
+      { title: 'Rol eÅŸleme', desc: 'Tepki-rol eÅŸleÅŸme yÃ¶netimi.', status: 'soon' },
     ],
   },
 });
@@ -115,7 +116,7 @@ const PLACEHOLDER_SECTIONS = Object.freeze({
 function formatPlanTier(rawTier) {
   const t = String(rawTier || '').trim().toLowerCase();
   if (!t) return 'Belirsiz Paket';
-  if (t === 'free') return 'Ücretsiz Paket';
+  if (t === 'free') return 'Ãœcretsiz Paket';
   if (t === 'pro') return 'Pro Paket';
   if (t === 'enterprise') return 'Kurumsal Paket';
   if (t === 'unresolved') return 'Belirsiz Paket';
@@ -124,7 +125,7 @@ function formatPlanTier(rawTier) {
 function formatPlanStatus(rawStatus) {
   const s = String(rawStatus || '').trim().toLowerCase();
   if (!s) return 'Belirsiz';
-  if (s === 'resolved') return 'Hazır';
+  if (s === 'resolved') return 'HazÄ±r';
   if (s === 'unresolved') return 'Belirsiz';
   return s;
 }
@@ -133,7 +134,7 @@ function formatPlanSource(rawSource) {
   if (!s) return 'Belirsiz';
   if (s === 'repository') return 'Depo';
   if (s === 'manual_override') return 'Manuel';
-  if (s === 'default') return 'Varsayılan';
+  if (s === 'default') return 'VarsayÄ±lan';
   if (s === 'unresolved') return 'Belirsiz';
   return s;
 }
@@ -157,6 +158,44 @@ function toSetupReadinessBadge(status = 'warning') {
 }
 function toSetupIssueTone(severity = 'warning') {
   return SETUP_READINESS_ISSUE_META[severity] || SETUP_READINESS_ISSUE_META.warning;
+}
+function formatLogDate(value = null) {
+  const parsedMs = Date.parse(String(value || ''));
+  if (!Number.isFinite(parsedMs)) return '-';
+  return new Date(parsedMs).toLocaleString('tr-TR');
+}
+function toLogHeadline(item = {}) {
+  return (
+    String(item?.action || '').trim() ||
+    String(item?.commandName || '').trim() ||
+    String(item?.eventType || '').trim() ||
+    'Kayit'
+  );
+}
+function toLogSubtext(item = {}) {
+  const targetUserId = String(item?.targetUserId || '').trim();
+  const moderatorUserId = String(item?.moderatorUserId || '').trim();
+  const actorUserId = String(item?.actorUserId || '').trim();
+  const reason = String(item?.reason || '').trim();
+  const reasonCode = String(item?.reasonCode || '').trim();
+  const status = String(item?.status || '').trim();
+
+  if (targetUserId && moderatorUserId) {
+    return `Hedef: ${targetUserId} | Yetkili: ${moderatorUserId}`;
+  }
+  if (actorUserId) {
+    return `Aktor: ${actorUserId}`;
+  }
+  if (reason) {
+    return `Sebep: ${reason}`;
+  }
+  if (reasonCode) {
+    return `Teknik kod: ${reasonCode}`;
+  }
+  if (status) {
+    return `Durum: ${status}`;
+  }
+  return 'Detay kaydi bulunmuyor.';
 }
 
 function StatusBadge({ status = 'soon' }) {
@@ -205,7 +244,7 @@ function EmptyState({ title, description }) {
     </div>
   );
 }
-function PlaceholderItem({ title, desc, status = 'soon', placeholder = 'Bu ayar yakında aktif olacak.' }) {
+function PlaceholderItem({ title, desc, status = 'soon', placeholder = 'Bu ayar yakÄ±nda aktif olacak.' }) {
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f0f1b]/70 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -242,13 +281,14 @@ function Sidebar({ activeSection, setActiveSection, planLabel }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('overview');
+  const [activeLogTab, setActiveLogTab] = useState('moderation');
   const {
     viewState, isAuthLoading, isProtectedLoading, authStatus, authError, protectedError, toast,
     login, logout, refreshAuth, refreshProtectedData, guilds, guildId, setGuildId, canSelectGuild, singleGuildMode,
     activeGuildName, authenticatedUserSummary, session, effectivePlan, capabilities, capabilitySummary,
     advancedPreferencesCapability, overview, preferencesDraft, setPreferencesDraft, dismissedNoticeIdsInput,
     setDismissedNoticeIdsInput, preferencesSaveState, preferencesSaveMessage, savePreferences,
-    setupReadiness, setupReadinessLoadError,
+    setupReadiness, setupReadinessLoadError, logSystem,
     statusCommandSettings, statusCommandEnabledDraft, setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft, setStatusCommandDetailModeDraft,
     statusCommandSaveState, statusCommandSaveMessage, saveStatusCommandSettings,
@@ -257,7 +297,7 @@ export default function Dashboard() {
   const isAuthenticated = Boolean(authenticatedUserSummary?.id);
   const authUnavailableDetail = authStatus?.auth?.reasonCode || authStatus?.reasonCode || authError?.reasonCode || protectedError?.reasonCode || 'auth_not_configured';
   const noAccessDetail = protectedError?.reasonCode || authError?.reasonCode || 'guild_scope_unresolved';
-  const advancedText = advancedPreferencesCapability.available ? 'Premium tercih özelliği kullanılabilir.' : 'Bu özellik Pro pakette kullanılabilir.';
+  const advancedText = advancedPreferencesCapability.available ? 'Premium tercih Ã¶zelliÄŸi kullanÄ±labilir.' : 'Bu Ã¶zellik Pro pakette kullanÄ±labilir.';
   const statusMode = String(
     statusCommandSettings?.effective?.durum?.detailMode ||
       statusCommandSettings?.effective?.detailMode ||
@@ -300,6 +340,26 @@ export default function Dashboard() {
   const setupReadinessIssues = Array.isArray(setupReadiness?.issues)
     ? setupReadiness.issues
     : [];
+  const logCategories = useMemo(
+    () => ({
+      moderation: logSystem?.moderation || { payload: null, error: null },
+      commands: logSystem?.commands || { payload: null, error: null },
+      system: logSystem?.system || { payload: null, error: null },
+    }),
+    [logSystem]
+  );
+  const activeLogCategory = logCategories[activeLogTab] || logCategories.moderation;
+  const activeLogState = resolveLogsCategoryState({
+    payload: activeLogCategory?.payload || null,
+    error: activeLogCategory?.error || null,
+    isLoading: isProtectedLoading,
+  });
+  const activeLogItems = Array.isArray(activeLogCategory?.payload?.items)
+    ? activeLogCategory.payload.items
+    : [];
+  const activeLogUnavailableMessage = getUnavailableLogsMessage(
+    activeLogCategory?.payload || null
+  );
 
   const renderPlaceholderSection = (sectionId) => {
     const section = PLACEHOLDER_SECTIONS[sectionId];
@@ -313,7 +373,7 @@ export default function Dashboard() {
           </div>
         </Card>
         <Card title="Durum">
-          <EmptyState title="Bu ayarlar henüz panelden düzenlenemiyor" description="Bu ayar yakında aktif olacak." />
+          <EmptyState title="Bu ayarlar henÃ¼z panelden dÃ¼zenlenemiyor" description="Bu ayar yakÄ±nda aktif olacak." />
         </Card>
       </div>
     );
@@ -324,25 +384,25 @@ export default function Dashboard() {
     if (activeSection === 'overview') {
       return (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card title="Kullanıcı" subtitle="Kimlik ve oturum bilgisi">
+          <Card title="KullanÄ±cÄ±" subtitle="Kimlik ve oturum bilgisi">
             <div className="text-xl font-black text-white">{authenticatedUserSummary?.displayName || 'Bilinmiyor'}</div>
             <div className="mt-1 text-sm text-gray-400">@{authenticatedUserSummary?.username || 'bilinmiyor'}</div>
             <div className="mt-4 space-y-1 text-xs text-gray-300">
               <div>ID: {authenticatedUserSummary?.id || '-'}</div>
-              <div>Sunucu sayısı: {authenticatedUserSummary?.guildCount || 0}</div>
-              <div>Operatör sunucu: {authenticatedUserSummary?.operatorGuildCount || 0}</div>
-              <div>Oturum: {session?.id ? 'Açık' : 'Bilinmiyor'}</div>
+              <div>Sunucu sayÄ±sÄ±: {authenticatedUserSummary?.guildCount || 0}</div>
+              <div>OperatÃ¶r sunucu: {authenticatedUserSummary?.operatorGuildCount || 0}</div>
+              <div>Oturum: {session?.id ? 'AÃ§Ä±k' : 'Bilinmiyor'}</div>
             </div>
           </Card>
-          <Card title="Sunucu" subtitle="Seçili sunucu özeti">
-            <div className="text-xl font-black text-white">{selectedGuild?.name || activeGuildName || 'Sunucu bulunamadı'}</div>
+          <Card title="Sunucu" subtitle="SeÃ§ili sunucu Ã¶zeti">
+            <div className="text-xl font-black text-white">{selectedGuild?.name || activeGuildName || 'Sunucu bulunamadÄ±'}</div>
             <div className="mt-4 space-y-1 text-xs text-gray-300">
               <div>ID: {selectedGuild?.id || guildId || '-'}</div>
-              <div>Operatör yetkisi: {selectedGuild?.isOperator ? 'Evet' : 'Hayır'}</div>
-              <div>Seçim modu: {canSelectGuild ? 'Çoklu sunucu' : 'Tek sunucu'}</div>
+              <div>OperatÃ¶r yetkisi: {selectedGuild?.isOperator ? 'Evet' : 'HayÄ±r'}</div>
+              <div>SeÃ§im modu: {canSelectGuild ? 'Ã‡oklu sunucu' : 'Tek sunucu'}</div>
             </div>
           </Card>
-          <Card title="Paket" subtitle="Mevcut plan ve erişim seviyesi">
+          <Card title="Paket" subtitle="Mevcut plan ve eriÅŸim seviyesi">
             <div className="flex flex-wrap items-center gap-3">
               <span className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${planTone}`}>{planLabel}</span>
               <StatusBadge status={isProPlan ? 'pro' : 'active'} />
@@ -353,15 +413,128 @@ export default function Dashboard() {
               <div>Teknik kod: {effectivePlan?.reasonCode || '-'}</div>
             </div>
           </Card>
-          <Card title="Özellikler" subtitle="Yetki ve kapasite özeti">
+          <Card title="Ã–zellikler" subtitle="Yetki ve kapasite Ã¶zeti">
             <div className="space-y-1 text-xs text-gray-300">
-              <div>Kullanılabilir: {capabilitySummary.allowedCapabilities} / {capabilitySummary.totalCapabilities}</div>
-              <div>Kısıtlı: {capabilitySummary.deniedCapabilities}</div>
+              <div>KullanÄ±labilir: {capabilitySummary.allowedCapabilities} / {capabilitySummary.totalCapabilities}</div>
+              <div>KÄ±sÄ±tlÄ±: {capabilitySummary.deniedCapabilities}</div>
               <div>Aktif: {capabilitySummary.activeCapabilities}</div>
             </div>
             <div className={`mt-4 rounded-xl border px-3 py-2 text-xs ${advancedPreferencesCapability.available ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>{advancedText}</div>
-            <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-gray-500">Geliştirici: {Object.keys(capabilities || {}).join(', ') || 'kayıt yok'}</div>
+            <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-gray-500">GeliÅŸtirici: {Object.keys(capabilities || {}).join(', ') || 'kayÄ±t yok'}</div>
           </Card>
+        </div>
+      );
+    }
+    if (activeSection === 'log-system') {
+      return (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <div className="xl:col-span-2">
+            <Card title="Log Sistemi" subtitle="Salt-okunur log ve denetim kayitlari">
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {LOG_SYSTEM_TABS.map((tab) => {
+                    const isActive = tab.id === activeLogTab;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveLogTab(tab.id)}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold tracking-wide transition-all ${
+                          isActive
+                            ? 'border-cyan-400/40 bg-cyan-500/20 text-cyan-100'
+                            : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {activeLogState === 'loading' ? (
+                  <EmptyState
+                    title="Log kayitlari yukleniyor"
+                    description="Bu kategori icin son kayitlar getiriliyor."
+                  />
+                ) : null}
+
+                {activeLogState === 'error' ? (
+                  <EmptyState
+                    title="Log kayitlari okunamadi"
+                    description={
+                      activeLogCategory?.error?.message ||
+                      'Log verisi gecici olarak okunamadi.'
+                    }
+                  />
+                ) : null}
+
+                {activeLogState === 'unavailable' ? (
+                  <EmptyState
+                    title="Kaynak aktif degil"
+                    description={
+                      activeLogUnavailableMessage || DEFAULT_LOGS_UNAVAILABLE_MESSAGE
+                    }
+                  />
+                ) : null}
+
+                {activeLogState === 'empty' ? (
+                  <EmptyState
+                    title="Kayit bulunmuyor"
+                    description={'Bu sunucuda hen\u00fcz kay\u0131t bulunmuyor.'}
+                  />
+                ) : null}
+
+                {activeLogState === 'ready' ? (
+                  <div className="space-y-3">
+                    {activeLogItems.map((item, index) => (
+                      <div
+                        key={`${String(item?.id || 'log')}-${index}`}
+                        className="rounded-xl border border-white/10 bg-[#0f0f1b]/70 px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-white">
+                            {toLogHeadline(item)}
+                          </div>
+                          <div className="text-[11px] text-gray-400">
+                            {formatLogDate(item?.createdAt)}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-xs text-gray-300">{toLogSubtext(item)}</div>
+                        <div className="mt-2 text-[11px] text-gray-500">
+                          Kayit ID: {String(item?.id || '-')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
+          <div className="space-y-4">
+            <Card title="Log Durumu">
+              <div className="space-y-2 text-xs text-gray-300">
+                <div>Aktif kategori: {activeLogTab}</div>
+                <div>Durum: {activeLogState}</div>
+                <div>Kayit sayisi: {activeLogItems.length}</div>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={refreshProtectedData}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10"
+                >
+                  Yenile
+                </button>
+              </div>
+            </Card>
+            <DeveloperNote>
+              Gelistirici: GET /api/dashboard/protected/logs/moderation
+            </DeveloperNote>
+            <DeveloperNote>
+              Gelistirici: GET /api/dashboard/protected/logs/commands
+            </DeveloperNote>
+            <DeveloperNote>
+              Gelistirici: GET /api/dashboard/protected/logs/system
+            </DeveloperNote>
+          </div>
         </div>
       );
     }
@@ -565,25 +738,25 @@ export default function Dashboard() {
     if (activeSection === 'premium') {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <Card title="Paketler" subtitle="Mevcut plan görünümü">
+          <Card title="Paketler" subtitle="Mevcut plan gÃ¶rÃ¼nÃ¼mÃ¼">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className={`rounded-xl border p-4 ${isProPlan ? 'border-white/10 bg-white/5' : 'border-amber-400/25 bg-amber-500/10'}`}>
-                <div className="text-sm font-semibold text-white">Ücretsiz Paket</div>
-                <div className="mt-2 text-xs text-gray-300">Temel panel özellikleri ve standart yönetim akışı.</div>
+                <div className="text-sm font-semibold text-white">Ãœcretsiz Paket</div>
+                <div className="mt-2 text-xs text-gray-300">Temel panel Ã¶zellikleri ve standart yÃ¶netim akÄ±ÅŸÄ±.</div>
                 <div className="mt-3"><StatusBadge status={isProPlan ? 'off' : 'active'} /></div>
               </div>
               <div className={`rounded-xl border p-4 ${isProPlan ? 'border-cyan-400/25 bg-cyan-500/10' : 'border-white/10 bg-white/5'}`}>
                 <div className="text-sm font-semibold text-white">Pro Paket</div>
-                <div className="mt-2 text-xs text-gray-300">Gelişmiş otomasyon, premium görünüm ve kilitli özellikler.</div>
+                <div className="mt-2 text-xs text-gray-300">GeliÅŸmiÅŸ otomasyon, premium gÃ¶rÃ¼nÃ¼m ve kilitli Ã¶zellikler.</div>
                 <div className="mt-3"><StatusBadge status={isProPlan ? 'active' : 'pro'} /></div>
               </div>
             </div>
             <div className="mt-4 text-xs text-gray-300">Aktif plan: <span className="font-semibold text-white">{planLabel}</span></div>
           </Card>
-          <Card title="Kilitli Özellikler" subtitle="Pro gerektiren alanlar">
+          <Card title="Kilitli Ã–zellikler" subtitle="Pro gerektiren alanlar">
             <div className="space-y-3">
-              <PlaceholderItem title="Gelişmiş panel tercihleri" desc="Alternatif yerleşim ve premium görünüm modları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
-              <PlaceholderItem title="Akıllı oto moderasyon" desc="Pro seviyesinde güvenlik kuralları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
+              <PlaceholderItem title="GeliÅŸmiÅŸ panel tercihleri" desc="Alternatif yerleÅŸim ve premium gÃ¶rÃ¼nÃ¼m modlarÄ±." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu Ã¶zellik paketinize aÃ§Ä±k.' : 'Bu Ã¶zellik Pro pakette kullanÄ±labilir.'} />
+              <PlaceholderItem title="AkÄ±llÄ± oto moderasyon" desc="Pro seviyesinde gÃ¼venlik kurallarÄ±." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu Ã¶zellik paketinize aÃ§Ä±k.' : 'Bu Ã¶zellik Pro pakette kullanÄ±labilir.'} />
             </div>
           </Card>
         </div>
@@ -593,10 +766,10 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <Card title="Sunucu Ayarları" subtitle="Panel Tercihleri (aktif)">
+            <Card title="Sunucu AyarlarÄ±" subtitle="Panel Tercihleri (aktif)">
               <div className="space-y-4">
                 <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                  Varsayılan Sekme
+                  VarsayÄ±lan Sekme
                   <select value={preferencesDraft.defaultView} onChange={(e) => setPreferencesDraft((p) => ({ ...p, defaultView: e.target.value }))} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none">
                     {DEFAULT_VIEW_OPTIONS.map((entry) => <option key={entry} value={entry}>{formatDefaultViewLabel(entry)}</option>)}
                   </select>
@@ -606,18 +779,18 @@ export default function Dashboard() {
                   Kompakt Mod
                 </label>
                 <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                  Kapatılan Bildirim Kimlikleri (virgülle ayırın)
+                  KapatÄ±lan Bildirim Kimlikleri (virgÃ¼lle ayÄ±rÄ±n)
                   <input value={dismissedNoticeIdsInput} onChange={(e) => setDismissedNoticeIdsInput(e.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none" placeholder="notice-a, notice-b" />
                 </label>
                 <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                  Gelişmiş Yerleşim Modu
+                  GeliÅŸmiÅŸ YerleÅŸim Modu
                   <select value={preferencesDraft.advancedLayoutMode || ''} onChange={(e) => setPreferencesDraft((p) => ({ ...p, advancedLayoutMode: e.target.value || null }))} disabled={!advancedPreferencesCapability.available} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none disabled:opacity-60">
-                    <option value="">Kapalı</option>
+                    <option value="">KapalÄ±</option>
                     <option value="focus">Odak</option>
-                    <option value="split">Bölünmüş</option>
+                    <option value="split">BÃ¶lÃ¼nmÃ¼ÅŸ</option>
                   </select>
                 </label>
-                {!advancedPreferencesCapability.available ? <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">Bu özellik Pro pakette kullanılabilir.</div> : null}
+                {!advancedPreferencesCapability.available ? <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">Bu Ã¶zellik Pro pakette kullanÄ±labilir.</div> : null}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button onClick={savePreferences} disabled={!canSaveSettings || preferencesSaveState === 'saving'} className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60">{preferencesSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</button>
                   <button onClick={refreshProtectedData} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10">Yenile</button>
@@ -629,13 +802,13 @@ export default function Dashboard() {
             <Card title="Kaydetme Durumu">
               <SaveFeedback saveState={preferencesSaveState} message={preferencesSaveMessage} idleText="Sunucu tercihleriniz burada kaydedilir." />
             </Card>
-            <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/preferences</DeveloperNote>
-            <EmptyState title="Ek sunucu ayarları" description="Bu ayar yakında aktif olacak." />
+            <DeveloperNote>GeliÅŸtirici: GET/PUT /api/dashboard/protected/preferences</DeveloperNote>
+            <EmptyState title="Ek sunucu ayarlarÄ±" description="Bu ayar yakÄ±nda aktif olacak." />
           </div>
         </div>
       );
     }
-    return <EmptyState title="Bölüm yüklenemedi" description="Lütfen farklı bir bölüm seçin veya sayfayı yenileyin." />;
+    return <EmptyState title="BÃ¶lÃ¼m yÃ¼klenemedi" description="LÃ¼tfen farklÄ± bir bÃ¶lÃ¼m seÃ§in veya sayfayÄ± yenileyin." />;
   };
 
   return (
@@ -661,30 +834,30 @@ export default function Dashboard() {
         <div className="mt-8 space-y-7">
           {viewState === DASHBOARD_VIEW_STATES.LOADING ? (
             <StateCard
-              title="Panel Hazırlanıyor"
-              description="Oturum ve panel verileri güvenli olarak yükleniyor."
+              title="Panel HazÄ±rlanÄ±yor"
+              description="Oturum ve panel verileri gÃ¼venli olarak yÃ¼kleniyor."
               actionLabel="Yenile"
               onAction={refreshAuth}
-              detail={isAuthLoading ? 'Kimlik doğrulama durumu kontrol ediliyor.' : isProtectedLoading ? 'Korumalı panel verileri getiriliyor.' : 'Bekleniyor...'}
+              detail={isAuthLoading ? 'Kimlik doÄŸrulama durumu kontrol ediliyor.' : isProtectedLoading ? 'KorumalÄ± panel verileri getiriliyor.' : 'Bekleniyor...'}
             />
           ) : null}
           {viewState === DASHBOARD_VIEW_STATES.UNAUTHENTICATED ? (
-            <StateCard title="Oturum Bulunamadı" description="Paneli görmek için Discord hesabınla yeniden giriş yapmalısın." actionLabel="Discord ile Giriş" onAction={login} secondaryActionLabel="Yenile" onSecondaryAction={refreshAuth} detail="Teknik bilgi: GET /api/auth/login" />
+            <StateCard title="Oturum BulunamadÄ±" description="Paneli gÃ¶rmek iÃ§in Discord hesabÄ±nla yeniden giriÅŸ yapmalÄ±sÄ±n." actionLabel="Discord ile GiriÅŸ" onAction={login} secondaryActionLabel="Yenile" onSecondaryAction={refreshAuth} detail="Teknik bilgi: GET /api/auth/login" />
           ) : null}
           {viewState === DASHBOARD_VIEW_STATES.AUTH_UNAVAILABLE ? (
-            <StateCard title="Kimlik Doğrulama Kullanılamıyor" description="Kimlik doğrulama servisi şu anda hazır değil." actionLabel="Yenile" onAction={refreshAuth} detail={`Teknik kod: ${authUnavailableDetail}`} />
+            <StateCard title="Kimlik DoÄŸrulama KullanÄ±lamÄ±yor" description="Kimlik doÄŸrulama servisi ÅŸu anda hazÄ±r deÄŸil." actionLabel="Yenile" onAction={refreshAuth} detail={`Teknik kod: ${authUnavailableDetail}`} />
           ) : null}
           {viewState === DASHBOARD_VIEW_STATES.NO_ACCESS ? (
-            <StateCard title="Sunucu Erişimi Yok" description="Bu sunucu için panel erişimi şu an kullanılamıyor." actionLabel="Veriyi Yenile" onAction={refreshProtectedData} secondaryActionLabel="Oturumu Yenile" onSecondaryAction={refreshAuth} detail={`Teknik kod: ${noAccessDetail}`} />
+            <StateCard title="Sunucu EriÅŸimi Yok" description="Bu sunucu iÃ§in panel eriÅŸimi ÅŸu an kullanÄ±lamÄ±yor." actionLabel="Veriyi Yenile" onAction={refreshProtectedData} secondaryActionLabel="Oturumu Yenile" onSecondaryAction={refreshAuth} detail={`Teknik kod: ${noAccessDetail}`} />
           ) : null}
           {viewState === DASHBOARD_VIEW_STATES.ERROR ? (
-            <StateCard title="Panelde Beklenmeyen Hata" description="Veriler güvenli modda tutuldu. Tekrar deneyebilirsin." actionLabel="Oturumu Yenile" onAction={refreshAuth} secondaryActionLabel="Veriyi Yenile" onSecondaryAction={refreshProtectedData} detail={authError?.message || protectedError?.message || 'unknown_error'} />
+            <StateCard title="Panelde Beklenmeyen Hata" description="Veriler gÃ¼venli modda tutuldu. Tekrar deneyebilirsin." actionLabel="Oturumu Yenile" onAction={refreshAuth} secondaryActionLabel="Veriyi Yenile" onSecondaryAction={refreshProtectedData} detail={authError?.message || protectedError?.message || 'unknown_error'} />
           ) : null}
           {viewState === DASHBOARD_VIEW_STATES.READY ? (
             <div className="space-y-5">
               <div className="space-y-2">
-                <div className="text-3xl font-black tracking-tight text-white">Geass Premium Yönetim Paneli</div>
-                <div className="text-sm text-white/65">Sunucunu tek panelden yönet: moderasyon, komutlar, premium özellikler ve gelecek kontroller tek noktada.</div>
+                <div className="text-3xl font-black tracking-tight text-white">Geass Premium YÃ¶netim Paneli</div>
+                <div className="text-sm text-white/65">Sunucunu tek panelden yÃ¶net: moderasyon, komutlar, premium Ã¶zellikler ve gelecek kontroller tek noktada.</div>
               </div>
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_1fr]">
                 <Sidebar activeSection={activeSection} setActiveSection={setActiveSection} planLabel={planLabel} />
@@ -698,6 +871,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 

@@ -6,6 +6,12 @@ const {
 } = require('./dashboardProviders');
 const { createSetupReadinessProvider } = require('./setupReadinessProvider');
 const {
+  createCommandLogsProvider,
+  createModerationLogsProvider,
+  createMutationAuditSystemLogSource,
+  createSystemLogsProvider,
+} = require('./logsProvider');
+const {
   createAuthenticatedDashboardContextProvider,
   createDashboardContextFeaturesProvider,
 } = require('./authenticatedDashboardContext');
@@ -28,6 +34,9 @@ function createDashboardRouteDefinitions({
   featureGateEvaluator = null,
   preferencesRepository = null,
   botSettingsRepository = null,
+  moderationLogSource = null,
+  commandLogSource = null,
+  systemLogSource = null,
   mutationAuditRecorder = null,
   mutationMaxBodyBytes = undefined,
   resolveGuildScope = resolveDashboardGuildScope,
@@ -96,6 +105,20 @@ function createDashboardRouteDefinitions({
     getTagRoleConfig,
     getStartupVoiceConfig,
     resolveGuildScope,
+  });
+  const moderationLogsProvider = createModerationLogsProvider({
+    moderationLogSource,
+  });
+  const commandLogsProvider = createCommandLogsProvider({
+    commandLogSource,
+  });
+  const resolvedSystemLogSource =
+    systemLogSource ||
+    createMutationAuditSystemLogSource({
+      mutationAuditRecorder,
+    });
+  const systemLogsProvider = createSystemLogsProvider({
+    systemLogSource: resolvedSystemLogSource,
   });
   const requireDashboardGuildAccess = createRequireGuildAccess({
     config,
@@ -182,6 +205,27 @@ function createDashboardRouteDefinitions({
       group: 'dashboard',
       authMode: 'require_auth_and_guild_access_read_only',
       handler: withBoundaryChecks(setupReadinessProvider, [requireAuth, requireDashboardGuildAccess]),
+    },
+    {
+      method: 'GET',
+      path: '/api/dashboard/protected/logs/moderation',
+      group: 'dashboard',
+      authMode: 'require_auth_and_guild_access_read_only',
+      handler: withBoundaryChecks(moderationLogsProvider, [requireAuth, requireDashboardGuildAccess]),
+    },
+    {
+      method: 'GET',
+      path: '/api/dashboard/protected/logs/commands',
+      group: 'dashboard',
+      authMode: 'require_auth_and_guild_access_read_only',
+      handler: withBoundaryChecks(commandLogsProvider, [requireAuth, requireDashboardGuildAccess]),
+    },
+    {
+      method: 'GET',
+      path: '/api/dashboard/protected/logs/system',
+      group: 'dashboard',
+      authMode: 'require_auth_and_guild_access_read_only',
+      handler: withBoundaryChecks(systemLogsProvider, [requireAuth, requireDashboardGuildAccess]),
     },
   ]
     .concat(preferencesRouteDefinitions)

@@ -6,17 +6,21 @@ import {
   getAuthMe,
   getAuthPlan,
   getAuthStatus,
+  getCommandLogs,
   getCommandSettings,
   getDashboardContextFeatures,
   getDashboardPreferences,
+  getModerationLogs,
   getProtectedOverview,
   getSetupReadiness,
+  getSystemLogs,
   normalizeApiError,
   postAuthLogout,
   putCommandSettings,
   putDashboardPreferences,
 } from '../lib/apiClient.js';
 import { createLatestRequestGate } from '../lib/latestRequestGate.js';
+import { normalizeReadonlyLogsPayload } from '../lib/logsViewModel.js';
 import { normalizeSetupReadinessPayload } from '../lib/setupReadinessViewModel.js';
 
 export const DASHBOARD_VIEW_STATES = Object.freeze({
@@ -37,6 +41,23 @@ export const DEFAULT_DASHBOARD_PREFERENCES = Object.freeze({
 
 export const DEFAULT_STATUS_COMMAND_DETAIL_MODE = 'legacy';
 export const DEFAULT_DURUM_COMMAND_ENABLED = true;
+
+function createDefaultLogSystemState() {
+  return {
+    moderation: {
+      payload: null,
+      error: null,
+    },
+    commands: {
+      payload: null,
+      error: null,
+    },
+    system: {
+      payload: null,
+      error: null,
+    },
+  };
+}
 
 function toNormalizedList(rawValue) {
   if (!Array.isArray(rawValue)) return [];
@@ -218,12 +239,54 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
       error: normalizeApiError(error, 'Kurulum durumu yuklenemedi'),
     }));
 
+  const moderationLogsResultPromise = getModerationLogs({
+    guildId: resolvedGuildId,
+    client,
+  })
+    .then((payload) => ({
+      payload,
+      error: null,
+    }))
+    .catch((error) => ({
+      payload: null,
+      error: normalizeApiError(error, 'Moderasyon loglari yuklenemedi'),
+    }));
+
+  const commandLogsResultPromise = getCommandLogs({
+    guildId: resolvedGuildId,
+    client,
+  })
+    .then((payload) => ({
+      payload,
+      error: null,
+    }))
+    .catch((error) => ({
+      payload: null,
+      error: normalizeApiError(error, 'Komut loglari yuklenemedi'),
+    }));
+
+  const systemLogsResultPromise = getSystemLogs({
+    guildId: resolvedGuildId,
+    client,
+  })
+    .then((payload) => ({
+      payload,
+      error: null,
+    }))
+    .catch((error) => ({
+      payload: null,
+      error: normalizeApiError(error, 'Sistem olaylari yuklenemedi'),
+    }));
+
   const [
     featuresPayload,
     overviewPayload,
     preferencesPayload,
     commandSettingsPayload,
     setupReadinessResult,
+    moderationLogsResult,
+    commandLogsResult,
+    systemLogsResult,
   ] =
     await Promise.all([
       getDashboardContextFeatures({ guildId: resolvedGuildId, client }),
@@ -231,6 +294,9 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
       getDashboardPreferences({ guildId: resolvedGuildId, client }),
       getCommandSettings({ guildId: resolvedGuildId, client }),
       setupReadinessResultPromise,
+      moderationLogsResultPromise,
+      commandLogsResultPromise,
+      systemLogsResultPromise,
     ]);
 
   return {
@@ -242,6 +308,12 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
     commandSettingsPayload,
     setupReadinessPayload: setupReadinessResult?.payload || null,
     setupReadinessError: setupReadinessResult?.error || null,
+    moderationLogsPayload: moderationLogsResult?.payload || null,
+    moderationLogsError: moderationLogsResult?.error || null,
+    commandLogsPayload: commandLogsResult?.payload || null,
+    commandLogsError: commandLogsResult?.error || null,
+    systemLogsPayload: systemLogsResult?.payload || null,
+    systemLogsError: systemLogsResult?.error || null,
   };
 }
 
@@ -356,6 +428,7 @@ export function useDashboardData({ navigate }) {
   const [statusCommandSettings, setStatusCommandSettings] = useState(null);
   const [setupReadiness, setSetupReadiness] = useState(null);
   const [setupReadinessLoadError, setSetupReadinessLoadError] = useState(null);
+  const [logSystem, setLogSystem] = useState(createDefaultLogSystemState);
 
   const [preferencesDraft, setPreferencesDraft] = useState({ ...DEFAULT_DASHBOARD_PREFERENCES });
   const [dismissedNoticeIdsInput, setDismissedNoticeIdsInput] = useState('');
@@ -397,6 +470,7 @@ export function useDashboardData({ navigate }) {
     setStatusCommandSettings(null);
     setSetupReadiness(null);
     setSetupReadinessLoadError(null);
+    setLogSystem(createDefaultLogSystemState());
     setStatusCommandEnabledDraft(DEFAULT_DURUM_COMMAND_ENABLED);
     setStatusCommandDetailModeDraft(DEFAULT_STATUS_COMMAND_DETAIL_MODE);
     setProtectedError(null);
@@ -434,6 +508,33 @@ export function useDashboardData({ navigate }) {
         : null
     );
     setSetupReadinessLoadError(snapshot?.setupReadinessError || null);
+    const normalizedGuildId = String(snapshot?.guildId || '').trim() || null;
+    setLogSystem({
+      moderation: {
+        payload: snapshot?.moderationLogsPayload
+          ? normalizeReadonlyLogsPayload(snapshot.moderationLogsPayload, {
+              guildId: normalizedGuildId,
+            })
+          : null,
+        error: snapshot?.moderationLogsError || null,
+      },
+      commands: {
+        payload: snapshot?.commandLogsPayload
+          ? normalizeReadonlyLogsPayload(snapshot.commandLogsPayload, {
+              guildId: normalizedGuildId,
+            })
+          : null,
+        error: snapshot?.commandLogsError || null,
+      },
+      system: {
+        payload: snapshot?.systemLogsPayload
+          ? normalizeReadonlyLogsPayload(snapshot.systemLogsPayload, {
+              guildId: normalizedGuildId,
+            })
+          : null,
+        error: snapshot?.systemLogsError || null,
+      },
+    });
   }, []);
 
   const runAuthBootstrap = useCallback(async () => {
@@ -776,6 +877,7 @@ export function useDashboardData({ navigate }) {
     statusCommandSettings,
     setupReadiness,
     setupReadinessLoadError,
+    logSystem,
     statusCommandEnabledDraft,
     setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft,

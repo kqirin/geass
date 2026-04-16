@@ -633,6 +633,24 @@ test('enabled mode serves meta and dashboard read-only endpoints with stable saf
       true
     );
     assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'GET /api/dashboard/protected/logs/moderation'
+      ),
+      true
+    );
+    assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'GET /api/dashboard/protected/logs/commands'
+      ),
+      true
+    );
+    assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'GET /api/dashboard/protected/logs/system'
+      ),
+      true
+    );
+    assert.equal(
       capabilitiesJson.data.endpoints.includes('GET /api/dashboard/protected/preferences'),
       true
     );

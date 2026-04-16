@@ -16,6 +16,9 @@ export const CONTROL_PLANE_ROUTES = Object.freeze({
   authLogout: '/api/auth/logout',
   dashboardOverview: '/api/dashboard/protected/overview',
   dashboardSetupReadiness: '/api/dashboard/protected/setup-readiness',
+  dashboardLogsModeration: '/api/dashboard/protected/logs/moderation',
+  dashboardLogsCommands: '/api/dashboard/protected/logs/commands',
+  dashboardLogsSystem: '/api/dashboard/protected/logs/system',
   dashboardContextFeatures: '/api/dashboard/context/features',
   dashboardPreferences: '/api/dashboard/protected/preferences',
   dashboardStatusCommand: '/api/dashboard/protected/bot-settings/status-command',
@@ -316,6 +319,72 @@ export async function getSetupReadiness({ guildId = null, client = apiClient } =
     CONTROL_PLANE_ROUTES.dashboardSetupReadiness,
     toGuildQueryConfig(guildId)
   );
+  return unwrapApiData(response);
+}
+
+export async function getModerationLogs({
+  guildId = null,
+  limit = null,
+  cursor = null,
+  client = apiClient,
+} = {}) {
+  const config = toGuildQueryConfig(guildId);
+  const params =
+    config?.params && typeof config.params === 'object' ? { ...config.params } : {};
+  if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+    params.limit = Math.floor(Number(limit));
+  }
+  const normalizedCursor = String(cursor || '').trim();
+  if (normalizedCursor) {
+    params.cursor = normalizedCursor;
+  }
+  const response = await client.get(CONTROL_PLANE_ROUTES.dashboardLogsModeration, {
+    params,
+  });
+  return unwrapApiData(response);
+}
+
+export async function getCommandLogs({
+  guildId = null,
+  limit = null,
+  cursor = null,
+  client = apiClient,
+} = {}) {
+  const config = toGuildQueryConfig(guildId);
+  const params =
+    config?.params && typeof config.params === 'object' ? { ...config.params } : {};
+  if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+    params.limit = Math.floor(Number(limit));
+  }
+  const normalizedCursor = String(cursor || '').trim();
+  if (normalizedCursor) {
+    params.cursor = normalizedCursor;
+  }
+  const response = await client.get(CONTROL_PLANE_ROUTES.dashboardLogsCommands, {
+    params,
+  });
+  return unwrapApiData(response);
+}
+
+export async function getSystemLogs({
+  guildId = null,
+  limit = null,
+  cursor = null,
+  client = apiClient,
+} = {}) {
+  const config = toGuildQueryConfig(guildId);
+  const params =
+    config?.params && typeof config.params === 'object' ? { ...config.params } : {};
+  if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+    params.limit = Math.floor(Number(limit));
+  }
+  const normalizedCursor = String(cursor || '').trim();
+  if (normalizedCursor) {
+    params.cursor = normalizedCursor;
+  }
+  const response = await client.get(CONTROL_PLANE_ROUTES.dashboardLogsSystem, {
+    params,
+  });
   return unwrapApiData(response);
 }
 

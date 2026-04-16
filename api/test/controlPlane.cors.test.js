@@ -318,6 +318,9 @@ test('allowed origin CORS headers apply across required auth and dashboard route
     { method: 'GET', path: '/api/dashboard/context/features' },
     { method: 'GET', path: '/api/dashboard/protected/overview' },
     { method: 'GET', path: '/api/dashboard/protected/setup-readiness' },
+    { method: 'GET', path: '/api/dashboard/protected/logs/moderation' },
+    { method: 'GET', path: '/api/dashboard/protected/logs/commands' },
+    { method: 'GET', path: '/api/dashboard/protected/logs/system' },
     { method: 'GET', path: '/api/dashboard/protected/preferences' },
     {
       method: 'PUT',
