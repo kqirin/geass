@@ -29,6 +29,13 @@ const { isDirectHttpResponse } = require('./routeHttpResponse');
 
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,OPTIONS';
 const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type';
+const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
+  '/api/auth/status',
+  '/api/auth/me',
+  '/api/auth/logout',
+  '/api/auth/login',
+  '/api/auth/callback',
+]);
 
 function writeHealthOk(res) {
   res.statusCode = 200;
@@ -71,6 +78,16 @@ function writeDirectResponse(res, directResponse = {}) {
 function isApiPath(path) {
   const normalized = normalizeRequestPath(path);
   return normalized === '/api' || normalized.startsWith('/api/');
+}
+
+function isDashboardApiPath(path) {
+  const normalized = normalizeRequestPath(path);
+  return normalized === '/api/dashboard' || normalized.startsWith('/api/dashboard/');
+}
+
+function isControlPlaneCorsPath(path) {
+  const normalized = normalizeRequestPath(path);
+  return isDashboardApiPath(normalized) || CONTROL_PLANE_CORS_AUTH_PATHS.has(normalized);
 }
 
 function normalizeHeaderValue(value) {
@@ -118,7 +135,17 @@ function appendVaryHeader(res, headerName = '') {
   res.setHeader('Vary', varyEntries.join(', '));
 }
 
-function applyControlPlaneCors({ req = null, res = null, method = 'GET', config = {} } = {}) {
+function applyControlPlaneCors({
+  req = null,
+  res = null,
+  method = 'GET',
+  path = '/',
+  config = {},
+} = {}) {
+  if (!isControlPlaneCorsPath(path)) {
+    return false;
+  }
+
   const requestOrigin = normalizeOrigin(req?.headers?.origin);
   if (!requestOrigin) {
     return false;
@@ -148,13 +175,9 @@ function applyControlPlaneCors({ req = null, res = null, method = 'GET', config 
     return true;
   }
 
-  const requestedHeaders =
-    normalizeHeaderValue(req?.headers?.['access-control-request-headers']) ||
-    CORS_DEFAULT_ALLOWED_HEADERS;
-
   res.statusCode = 204;
   res.setHeader('Access-Control-Allow-Methods', CORS_ALLOWED_METHODS);
-  res.setHeader('Access-Control-Allow-Headers', requestedHeaders);
+  res.setHeader('Access-Control-Allow-Headers', CORS_DEFAULT_ALLOWED_HEADERS);
   res.setHeader('Access-Control-Max-Age', '600');
   res.end('');
   return true;
@@ -332,7 +355,7 @@ function createControlPlaneRequestHandler({
       return;
     }
 
-    if (applyControlPlaneCors({ req, res, method, config })) {
+    if (applyControlPlaneCors({ req, res, method, path, config })) {
       return;
     }
 

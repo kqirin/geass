@@ -45,21 +45,39 @@ function parseControlPlanePlanOverrides(rawValue = '') {
   return output;
 }
 
+function trimSurroundingQuotes(value = '') {
+  const normalized = String(value || '').trim();
+  if (normalized.length < 2) return normalized;
+  const firstChar = normalized.charAt(0);
+  const lastChar = normalized.charAt(normalized.length - 1);
+  if (
+    (firstChar === '"' && lastChar === '"') ||
+    (firstChar === "'" && lastChar === "'")
+  ) {
+    return normalized.slice(1, -1).trim();
+  }
+  return normalized;
+}
+
 function parseOriginList(rawValue = '') {
-  const source = String(rawValue || '').trim();
-  if (!source) return [];
-
+  const sources = Array.isArray(rawValue) ? rawValue : [rawValue];
   const origins = [];
-  const entries = source
-    .split(',')
-    .map((entry) => String(entry || '').trim())
-    .filter(Boolean);
 
-  for (const entry of entries) {
-    try {
-      origins.push(new URL(entry).origin);
-    } catch {
-      // Ignore invalid origins; startup should stay compatibility-safe.
+  for (const rawSource of sources) {
+    const source = trimSurroundingQuotes(rawSource);
+    if (!source) continue;
+
+    const entries = source
+      .split(',')
+      .map((entry) => trimSurroundingQuotes(entry))
+      .filter(Boolean);
+
+    for (const entry of entries) {
+      try {
+        origins.push(new URL(entry).origin);
+      } catch {
+        // Ignore invalid origins; startup should stay compatibility-safe.
+      }
     }
   }
 
@@ -90,12 +108,20 @@ const controlPlaneAuthCookieSecureFromEnv = toBoolean(
 );
 const controlPlaneAuthCookieSecure =
   controlPlaneAuthCookieSameSite === 'None' ? true : controlPlaneAuthCookieSecureFromEnv;
+const dashboardAllowedOriginEnvValues = [
+  process.env.CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN,
+  process.env.CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGINS,
+  process.env.CONTROL_PLANE_ALLOWED_ORIGINS,
+  process.env.DASHBOARD_ALLOWED_ORIGINS,
+  process.env.CORS_ORIGIN,
+];
+const hasExplicitDashboardAllowedOriginEnv = dashboardAllowedOriginEnvValues.some(
+  (value) => Boolean(trimSurroundingQuotes(value))
+);
 const controlPlaneDashboardAllowedOriginsFromEnv = parseOriginList(
-  process.env.CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN ||
-    process.env.CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGINS ||
-    process.env.CORS_ORIGIN ||
-    process.env.FRONTEND_URL ||
-    ''
+  hasExplicitDashboardAllowedOriginEnv
+    ? dashboardAllowedOriginEnvValues
+    : process.env.FRONTEND_URL || ''
 );
 const controlPlaneDashboardAllowedOrigins =
   controlPlaneDashboardAllowedOriginsFromEnv.length > 0

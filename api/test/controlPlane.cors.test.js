@@ -5,6 +5,8 @@ const http = require('node:http');
 const configPath = require.resolve('../src/config');
 const { createControlPlaneRequestHandler } = require('../src/controlPlane/server');
 
+const DASHBOARD_ORIGIN = 'https://geass-dashboard.pages.dev';
+
 async function startServer(handler) {
   const server = http.createServer(handler);
   await new Promise((resolve, reject) => {
@@ -122,6 +124,8 @@ test('local development defaults keep dashboard origin allow-list compatible', a
       NODE_ENV: 'development',
       CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN: '',
       CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGINS: '',
+      CONTROL_PLANE_ALLOWED_ORIGINS: '',
+      DASHBOARD_ALLOWED_ORIGINS: '',
       CORS_ORIGIN: '',
       FRONTEND_URL: '',
     },
@@ -145,6 +149,8 @@ test('production mode requires explicit dashboard origin configuration', async (
       NODE_ENV: 'production',
       CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN: '',
       CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGINS: '',
+      CONTROL_PLANE_ALLOWED_ORIGINS: '',
+      DASHBOARD_ALLOWED_ORIGINS: '',
       CORS_ORIGIN: '',
       FRONTEND_URL: '',
     },
@@ -155,19 +161,33 @@ test('production mode requires explicit dashboard origin configuration', async (
   );
 });
 
-test('dashboard allowed origin env parsing normalizes and filters invalid values', async () => {
+test('dashboard allowed origin env parsing supports alias list, commas, and quotes', async () => {
   await withEnvOverrides(
     {
       NODE_ENV: 'production',
-      CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN:
-        'https://your-dashboard.pages.dev, invalid-origin, https://preview.example.com/path',
+      CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGIN: ` "${DASHBOARD_ORIGIN}" `,
+      CONTROL_PLANE_DASHBOARD_ALLOWED_ORIGINS:
+        "https://preview.example.com/path, 'https://preview.example.com'",
+      CONTROL_PLANE_ALLOWED_ORIGINS: " 'https://control-plane.example.com' ",
+      DASHBOARD_ALLOWED_ORIGINS: '"https://legacy-dashboard.example.com",invalid-origin',
+      CORS_ORIGIN: "'https://cors.example.com'",
+      FRONTEND_URL: 'https://frontend-fallback.example.com',
     },
     async () => {
       const { config } = require(configPath);
       assert.deepEqual(config.controlPlane.auth.dashboardAllowedOrigins, [
-        'https://your-dashboard.pages.dev',
+        DASHBOARD_ORIGIN,
         'https://preview.example.com',
+        'https://control-plane.example.com',
+        'https://legacy-dashboard.example.com',
+        'https://cors.example.com',
       ]);
+      assert.equal(
+        config.controlPlane.auth.dashboardAllowedOrigins.includes(
+          'https://frontend-fallback.example.com'
+        ),
+        false
+      );
     }
   );
 });
@@ -187,12 +207,12 @@ test('SameSite=None enforces secure cookie mode for session safety', async () =>
   );
 });
 
-test('allowed origin request returns credentialed CORS headers', async () => {
+test('allowed origin request returns credentialed CORS headers for auth status route', async () => {
   const server = await startServer(
     createControlPlaneRequestHandler({
       enabled: true,
       config: createEnabledControlPlaneServerConfig({
-        dashboardAllowedOrigins: ['https://your-dashboard.pages.dev'],
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
       }),
     })
   );
@@ -200,17 +220,14 @@ test('allowed origin request returns credentialed CORS headers', async () => {
   try {
     const response = await request({
       port: server.port,
-      path: '/api/meta/runtime',
+      path: '/api/auth/status',
       headers: {
-        Origin: 'https://your-dashboard.pages.dev',
+        Origin: DASHBOARD_ORIGIN,
       },
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(
-      response.headers['access-control-allow-origin'],
-      'https://your-dashboard.pages.dev'
-    );
+    assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
     assert.equal(response.headers['access-control-allow-credentials'], 'true');
     assert.match(String(response.headers.vary || ''), /Origin/i);
   } finally {
@@ -223,7 +240,7 @@ test('disallowed origin request does not receive credentialed CORS headers', asy
     createControlPlaneRequestHandler({
       enabled: true,
       config: createEnabledControlPlaneServerConfig({
-        dashboardAllowedOrigins: ['https://your-dashboard.pages.dev'],
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
       }),
     })
   );
@@ -231,7 +248,7 @@ test('disallowed origin request does not receive credentialed CORS headers', asy
   try {
     const response = await request({
       port: server.port,
-      path: '/api/meta/runtime',
+      path: '/api/auth/status',
       headers: {
         Origin: 'https://evil.example.com',
       },
@@ -245,12 +262,85 @@ test('disallowed origin request does not receive credentialed CORS headers', asy
   }
 });
 
+test('allowed origin CORS headers apply across required auth and dashboard routes', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: createEnabledControlPlaneServerConfig({
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
+      }),
+    })
+  );
+
+  const routeChecks = [
+    { method: 'GET', path: '/api/auth/status' },
+    { method: 'GET', path: '/api/auth/me' },
+    { method: 'POST', path: '/api/auth/logout' },
+    { method: 'GET', path: '/api/auth/login' },
+    { method: 'GET', path: '/api/auth/callback?code=test&state=test' },
+    { method: 'GET', path: '/api/dashboard/overview' },
+    { method: 'GET', path: '/api/dashboard/guild' },
+    { method: 'GET', path: '/api/dashboard/features' },
+    { method: 'GET', path: '/api/dashboard/resources' },
+    { method: 'GET', path: '/api/dashboard/context' },
+    { method: 'GET', path: '/api/dashboard/context/features' },
+    { method: 'GET', path: '/api/dashboard/protected/overview' },
+    { method: 'GET', path: '/api/dashboard/protected/preferences' },
+    {
+      method: 'PUT',
+      path: '/api/dashboard/protected/preferences',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        preferences: {
+          compactMode: true,
+        },
+      }),
+    },
+    { method: 'GET', path: '/api/dashboard/protected/bot-settings/status-command' },
+    {
+      method: 'PUT',
+      path: '/api/dashboard/protected/bot-settings/status-command',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          detailMode: 'compact',
+        },
+      }),
+    },
+  ];
+
+  try {
+    for (const routeCheck of routeChecks) {
+      const response = await request({
+        port: server.port,
+        path: routeCheck.path,
+        method: routeCheck.method,
+        headers: {
+          Origin: DASHBOARD_ORIGIN,
+          ...(routeCheck.headers || {}),
+        },
+        body: routeCheck.body || '',
+      });
+
+      assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
+      assert.equal(response.headers['access-control-allow-credentials'], 'true');
+      assert.match(String(response.headers.vary || ''), /Origin/i);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
 test('allowed preflight request is accepted with explicit credentials support', async () => {
   const server = await startServer(
     createControlPlaneRequestHandler({
       enabled: true,
       config: createEnabledControlPlaneServerConfig({
-        dashboardAllowedOrigins: ['https://your-dashboard.pages.dev'],
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
       }),
     })
   );
@@ -258,29 +348,24 @@ test('allowed preflight request is accepted with explicit credentials support', 
   try {
     const response = await request({
       port: server.port,
-      path: '/api/dashboard/protected/preferences',
+      path: '/api/auth/logout',
       method: 'OPTIONS',
       headers: {
-        Origin: 'https://your-dashboard.pages.dev',
-        'Access-Control-Request-Method': 'PUT',
-        'Access-Control-Request-Headers': 'Content-Type',
+        Origin: DASHBOARD_ORIGIN,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'Content-Type, X-Requested-With',
       },
     });
 
     assert.equal(response.statusCode, 204);
-    assert.equal(
-      response.headers['access-control-allow-origin'],
-      'https://your-dashboard.pages.dev'
-    );
+    assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
     assert.equal(response.headers['access-control-allow-credentials'], 'true');
-    assert.match(
-      String(response.headers['access-control-allow-methods'] || ''),
-      /PUT/i
+    assert.equal(
+      response.headers['access-control-allow-methods'],
+      'GET,POST,PUT,OPTIONS'
     );
-    assert.match(
-      String(response.headers['access-control-allow-headers'] || ''),
-      /content-type/i
-    );
+    assert.equal(response.headers['access-control-allow-headers'], 'Content-Type');
+    assert.match(String(response.headers.vary || ''), /Origin/i);
   } finally {
     await server.close();
   }
@@ -291,7 +376,7 @@ test('disallowed preflight request fails closed', async () => {
     createControlPlaneRequestHandler({
       enabled: true,
       config: createEnabledControlPlaneServerConfig({
-        dashboardAllowedOrigins: ['https://your-dashboard.pages.dev'],
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
       }),
     })
   );
@@ -318,12 +403,12 @@ test('disallowed preflight request fails closed', async () => {
   }
 });
 
-test('disabled control-plane mode preserves health-style listener behavior', async () => {
+test('non-auth and non-dashboard api routes do not receive credentialed CORS headers', async () => {
   const server = await startServer(
     createControlPlaneRequestHandler({
-      enabled: false,
+      enabled: true,
       config: createEnabledControlPlaneServerConfig({
-        dashboardAllowedOrigins: ['https://your-dashboard.pages.dev'],
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
       }),
     })
   );
@@ -332,9 +417,36 @@ test('disabled control-plane mode preserves health-style listener behavior', asy
     const response = await request({
       port: server.port,
       path: '/api/meta/runtime',
+      headers: {
+        Origin: DASHBOARD_ORIGIN,
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['access-control-allow-origin'], undefined);
+    assert.equal(response.headers['access-control-allow-credentials'], undefined);
+  } finally {
+    await server.close();
+  }
+});
+
+test('disabled control-plane mode preserves health-style listener behavior', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: false,
+      config: createEnabledControlPlaneServerConfig({
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
+      }),
+    })
+  );
+
+  try {
+    const response = await request({
+      port: server.port,
+      path: '/api/auth/status',
       method: 'OPTIONS',
       headers: {
-        Origin: 'https://your-dashboard.pages.dev',
+        Origin: DASHBOARD_ORIGIN,
         'Access-Control-Request-Method': 'GET',
       },
     });
