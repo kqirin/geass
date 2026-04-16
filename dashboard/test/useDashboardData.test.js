@@ -274,6 +274,39 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
           },
         },
       },
+      '/api/dashboard/protected/setup-readiness?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          summary: {
+            status: 'warning',
+            score: 67,
+            totalChecks: 6,
+            passedChecks: 3,
+            warningChecks: 2,
+            failedChecks: 1,
+          },
+          sections: [
+            {
+              id: 'static-config',
+              title: 'Statik Yapilandirma',
+              status: 'warning',
+              checks: [],
+            },
+          ],
+          issues: [
+            {
+              severity: 'warning',
+              reasonCode: 'static_config_defaults_in_use',
+              title: 'Ayar bulunamadi',
+              description: 'Bu sunucu defaults ayarlari ile calisiyor.',
+              targetType: 'config',
+              targetKey: 'static_server_config.defaults',
+            },
+          ],
+        },
+      },
     },
   });
 
@@ -289,10 +322,90 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
   assert.equal(snapshot.preferencesPayload.preferences.advancedLayoutMode, 'split');
   assert.equal(snapshot.commandSettingsPayload.effective.durum.detailMode, 'compact');
   assert.equal(snapshot.commandSettingsPayload.effective.durum.enabled, false);
+  assert.equal(snapshot.setupReadinessPayload.summary.status, 'warning');
+  assert.equal(snapshot.setupReadinessPayload.summary.score, 67);
+  assert.equal(snapshot.setupReadinessError, null);
   assert.equal(
     calls.filter((entry) => entry.method === 'GET').length,
-    5
+    6
   );
+});
+
+test('protected snapshot keeps core dashboard data when setup-readiness request fails', async () => {
+  const { client } = createMockClient({
+    getMap: {
+      '/api/auth/plan?guildId=g-pro': {
+        ok: true,
+        data: {
+          plan: { status: 'resolved', tier: 'pro', source: 'repository', reasonCode: null },
+          access: { targetGuildId: 'g-pro' },
+        },
+      },
+      '/api/dashboard/context/features?guildId=g-pro': {
+        ok: true,
+        data: {
+          capabilities: {
+            advanced_dashboard_preferences: { allowed: true },
+          },
+          capabilitySummary: {
+            totalCapabilities: 4,
+            allowedCapabilities: 3,
+            deniedCapabilities: 1,
+            activeCapabilities: 3,
+          },
+        },
+      },
+      '/api/dashboard/protected/overview?guildId=g-pro': {
+        ok: true,
+        data: {
+          mode: 'protected_read_only_overview',
+        },
+      },
+      '/api/dashboard/protected/preferences?guildId=g-pro': {
+        ok: true,
+        data: {
+          preferences: {
+            defaultView: 'overview',
+            compactMode: false,
+            dismissedNoticeIds: [],
+            advancedLayoutMode: null,
+          },
+          capabilities: {
+            advancedDashboardPreferences: { available: true },
+          },
+        },
+      },
+      '/api/dashboard/protected/bot-settings/commands?guildId=g-pro': {
+        ok: true,
+        data: {
+          commands: {
+            durum: {
+              enabled: true,
+              detailMode: 'legacy',
+            },
+          },
+          effective: {
+            durum: {
+              enabled: true,
+              detailMode: 'legacy',
+            },
+          },
+        },
+      },
+      '/api/dashboard/protected/setup-readiness?guildId=g-pro': {
+        __error: createHttpError(500, 'internal_error', 'setup_readiness_unavailable'),
+      },
+    },
+  });
+
+  const snapshot = await loadProtectedDashboardSnapshot({ guildId: 'g-pro', client });
+
+  assert.equal(snapshot.guildId, 'g-pro');
+  assert.equal(snapshot.overviewPayload.mode, 'protected_read_only_overview');
+  assert.equal(snapshot.commandSettingsPayload.effective.durum.enabled, true);
+  assert.equal(snapshot.setupReadinessPayload, null);
+  assert.equal(typeof snapshot.setupReadinessError, 'object');
+  assert.equal(snapshot.setupReadinessError.code, 'internal_error');
 });
 
 test('no-access and auth-unavailable errors map to safe dashboard states', async () => {

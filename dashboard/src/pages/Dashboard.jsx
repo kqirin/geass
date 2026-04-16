@@ -5,6 +5,11 @@ import DashboardHeader from '../components/Dashboard/shell/DashboardHeader';
 import SystemHealthCard from '../components/Dashboard/shell/SystemHealthCard';
 import DashboardToast from '../components/Dashboard/shell/DashboardToast';
 import { DASHBOARD_VIEW_STATES, useDashboardData } from '../hooks/useDashboardData';
+import {
+  getSetupReadinessIssueCategory,
+  getSetupReadinessStatusLabel,
+  resolveSetupReadinessSectionState,
+} from '../lib/setupReadinessViewModel.js';
 
 const DEFAULT_VIEW_OPTIONS = ['overview', 'guild', 'features', 'resources', 'protected_overview'];
 const DEFAULT_VIEW_OPTION_LABELS = Object.freeze({
@@ -21,6 +26,7 @@ const DASHBOARD_SECTIONS = Object.freeze([
   { id: 'log-system', label: 'Log Sistemi', subtitle: 'Kayıt ve denetim akışları' },
   { id: 'private-rooms', label: 'Özel Oda Sistemi', subtitle: 'Özel oda yönetimi' },
   { id: 'role-reactions', label: 'Rol / Tepki Rolleri', subtitle: 'Rol ve tepki akışları' },
+  { id: 'setup-readiness', label: 'Kurulum Durumu', subtitle: 'Salt-okunur kurulum denetimi' },
   { id: 'command-settings', label: 'Komut Ayarları', subtitle: 'Komut görünüm ayarları' },
   { id: 'premium', label: 'Premium', subtitle: 'Paket ve kilitli özellikler' },
   { id: 'server-settings', label: 'Sunucu Ayarları', subtitle: 'Panel tercihleri' },
@@ -30,6 +36,25 @@ const STATUS_META = Object.freeze({
   off: { label: 'Kapalı', className: 'border-rose-400/35 bg-rose-500/15 text-rose-100' },
   soon: { label: 'Yakında', className: 'border-amber-400/35 bg-amber-500/15 text-amber-100' },
   pro: { label: 'Pro', className: 'border-cyan-400/35 bg-cyan-500/15 text-cyan-100' },
+});
+const SETUP_READINESS_STATUS_META = Object.freeze({
+  ready: {
+    label: 'Hazir',
+    className: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100',
+  },
+  warning: {
+    label: 'Uyari Var',
+    className: 'border-amber-400/35 bg-amber-500/15 text-amber-100',
+  },
+  incomplete: {
+    label: 'Eksik Kurulum',
+    className: 'border-rose-400/35 bg-rose-500/15 text-rose-100',
+  },
+});
+const SETUP_READINESS_ISSUE_META = Object.freeze({
+  error: 'border-rose-400/35 bg-rose-500/10 text-rose-100',
+  warning: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
+  info: 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100',
 });
 const PLACEHOLDER_SECTIONS = Object.freeze({
   moderation: {
@@ -127,6 +152,12 @@ function toSaveFeedbackTone(state = 'idle') {
   if (state === 'saving') return 'border-amber-400/35 bg-amber-500/10 text-amber-100';
   return 'border-white/10 bg-white/5 text-white/70';
 }
+function toSetupReadinessBadge(status = 'warning') {
+  return SETUP_READINESS_STATUS_META[status] || SETUP_READINESS_STATUS_META.warning;
+}
+function toSetupIssueTone(severity = 'warning') {
+  return SETUP_READINESS_ISSUE_META[severity] || SETUP_READINESS_ISSUE_META.warning;
+}
 
 function StatusBadge({ status = 'soon' }) {
   const meta = STATUS_META[status] || STATUS_META.soon;
@@ -217,6 +248,7 @@ export default function Dashboard() {
     activeGuildName, authenticatedUserSummary, session, effectivePlan, capabilities, capabilitySummary,
     advancedPreferencesCapability, overview, preferencesDraft, setPreferencesDraft, dismissedNoticeIdsInput,
     setDismissedNoticeIdsInput, preferencesSaveState, preferencesSaveMessage, savePreferences,
+    setupReadiness, setupReadinessLoadError,
     statusCommandSettings, statusCommandEnabledDraft, setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft, setStatusCommandDetailModeDraft,
     statusCommandSaveState, statusCommandSaveMessage, saveStatusCommandSettings,
@@ -243,6 +275,31 @@ export default function Dashboard() {
   const planTone = toPlanTone(effectivePlan?.tier);
   const canSaveSettings = Boolean(String(guildId || '').trim());
   const isProPlan = ['pro', 'enterprise'].includes(String(effectivePlan?.tier || '').trim().toLowerCase());
+  const setupReadinessState = resolveSetupReadinessSectionState({
+    setupReadiness,
+    isLoading: isProtectedLoading,
+    error: setupReadinessLoadError,
+  });
+  const setupReadinessSummary = setupReadiness?.summary || {
+    status: 'warning',
+    score: 0,
+    totalChecks: 0,
+    passedChecks: 0,
+    warningChecks: 0,
+    failedChecks: 0,
+  };
+  const setupReadinessStatusLabel = getSetupReadinessStatusLabel(setupReadinessSummary.status);
+  const setupReadinessBadgeMeta = toSetupReadinessBadge(setupReadinessSummary.status);
+  const setupReadinessScore = Math.max(
+    0,
+    Math.min(100, Number(setupReadinessSummary.score || 0))
+  );
+  const setupReadinessSections = Array.isArray(setupReadiness?.sections)
+    ? setupReadiness.sections
+    : [];
+  const setupReadinessIssues = Array.isArray(setupReadiness?.issues)
+    ? setupReadiness.issues
+    : [];
 
   const renderPlaceholderSection = (sectionId) => {
     const section = PLACEHOLDER_SECTIONS[sectionId];
@@ -305,6 +362,134 @@ export default function Dashboard() {
             <div className={`mt-4 rounded-xl border px-3 py-2 text-xs ${advancedPreferencesCapability.available ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>{advancedText}</div>
             <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-gray-500">Geliştirici: {Object.keys(capabilities || {}).join(', ') || 'kayıt yok'}</div>
           </Card>
+        </div>
+      );
+    }
+    if (activeSection === 'setup-readiness') {
+      if (setupReadinessState === 'loading') {
+        return (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <Card title="Kurulum Durumu">
+              <EmptyState
+                title="Kurulum denetimi yukleniyor"
+                description="Sunucu kurulum kontrolleri guvenli modda getiriliyor."
+              />
+            </Card>
+            <Card title="Bilgi">
+              <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                Bu ekran simdilik sadece kurulum durumunu gosterir. Ayarlari degistirme ozelligi sonraki asamada eklenecek.
+              </div>
+            </Card>
+          </div>
+        );
+      }
+      if (setupReadinessState === 'error') {
+        return (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <Card title="Kurulum Durumu">
+              <EmptyState
+                title="Kurulum denetimi okunamadi"
+                description={setupReadinessLoadError?.message || 'Kurulum verisi gecici olarak okunamadi.'}
+              />
+            </Card>
+            <Card title="Bilgi">
+              <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                Bu ekran simdilik sadece kurulum durumunu gosterir. Ayarlari degistirme ozelligi sonraki asamada eklenecek.
+              </div>
+              <div className="mt-3">
+                <button onClick={refreshProtectedData} className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10">Yenile</button>
+              </div>
+            </Card>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-5">
+          <Card title="Kurulum Durumu" subtitle="Salt-okunur kurulum ozeti">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-2xl font-black tracking-tight text-white">{setupReadinessStatusLabel}</div>
+              <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${setupReadinessBadgeMeta.className}`}>
+                {setupReadinessBadgeMeta.label}
+              </span>
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/10 bg-[#0f0f1b]/80 p-4">
+              <div className="flex items-center justify-between text-xs text-gray-300">
+                <span>Skor</span>
+                <span className="font-semibold text-white">{Math.round(setupReadinessScore)}%</span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-white/10">
+                <div
+                  className="h-2 rounded-full bg-cyan-400/80 transition-all"
+                  style={{ width: `${setupReadinessScore}%` }}
+                />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-gray-300 md:grid-cols-4">
+                <div>Kontrol: {setupReadinessSummary.totalChecks}</div>
+                <div>Hazir: {setupReadinessSummary.passedChecks}</div>
+                <div>Uyari: {setupReadinessSummary.warningChecks}</div>
+                <div>Eksik: {setupReadinessSummary.failedChecks}</div>
+              </div>
+            </div>
+            <div className="mt-4 rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+              Bu ekran simdilik sadece kurulum durumunu gosterir. Ayarlari degistirme ozelligi sonraki asamada eklenecek.
+            </div>
+          </Card>
+
+          <Card title="Kurulum Kartlari" subtitle="Alan bazli denetim sonucu">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {setupReadinessSections.map((section) => {
+                const sectionBadge = toSetupReadinessBadge(section?.status);
+                const checkCount = Array.isArray(section?.checks) ? section.checks.length : 0;
+                return (
+                  <div key={section?.id || section?.title} className="rounded-xl border border-white/10 bg-[#0f0f1b]/70 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">{section?.title || section?.id}</div>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${sectionBadge.className}`}>
+                        {getSetupReadinessStatusLabel(section?.status)}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-400">Kontrol sayisi: {checkCount}</div>
+                    {checkCount > 0 ? (
+                      <div className="mt-3 space-y-1">
+                        {section.checks.slice(0, 3).map((check) => (
+                          <div key={check?.id || check?.title} className="text-xs text-gray-300">
+                            {check?.title || 'Kontrol'}: {getSetupReadinessStatusLabel(check?.status)}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-xs text-gray-400">Kontrol detayi bulunamadi.</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card title="Sorun Listesi" subtitle="Tespit edilen eksik veya uyari kalemleri">
+            {setupReadinessIssues.length === 0 ? (
+              <EmptyState
+                title="Sorun bulunamadi"
+                description="Kurulum kontrollerinde kritik bir eksik gorunmuyor."
+              />
+            ) : (
+              <div className="space-y-3">
+                {setupReadinessIssues.map((issue, index) => (
+                  <div key={`${issue?.reasonCode || 'issue'}-${index}`} className={`rounded-xl border px-3 py-3 text-xs ${toSetupIssueTone(issue?.severity)}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">{issue?.title || 'Kurulum uyarisi'}</div>
+                      <div className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]">
+                        {getSetupReadinessIssueCategory(issue)}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px]">{issue?.description || 'Detay bulunamadi.'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <DeveloperNote>Gelistirici: GET /api/dashboard/protected/setup-readiness</DeveloperNote>
         </div>
       );
     }
@@ -513,5 +698,8 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
 
 

@@ -10,12 +10,14 @@ import {
   getDashboardContextFeatures,
   getDashboardPreferences,
   getProtectedOverview,
+  getSetupReadiness,
   normalizeApiError,
   postAuthLogout,
   putCommandSettings,
   putDashboardPreferences,
 } from '../lib/apiClient.js';
 import { createLatestRequestGate } from '../lib/latestRequestGate.js';
+import { normalizeSetupReadinessPayload } from '../lib/setupReadinessViewModel.js';
 
 export const DASHBOARD_VIEW_STATES = Object.freeze({
   LOADING: 'loading',
@@ -203,12 +205,32 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
   const resolvedGuildId =
     String(planPayload?.access?.targetGuildId || guildId || '').trim() || null;
 
-  const [featuresPayload, overviewPayload, preferencesPayload, commandSettingsPayload] =
+  const setupReadinessResultPromise = getSetupReadiness({
+    guildId: resolvedGuildId,
+    client,
+  })
+    .then((payload) => ({
+      payload,
+      error: null,
+    }))
+    .catch((error) => ({
+      payload: null,
+      error: normalizeApiError(error, 'Kurulum durumu yuklenemedi'),
+    }));
+
+  const [
+    featuresPayload,
+    overviewPayload,
+    preferencesPayload,
+    commandSettingsPayload,
+    setupReadinessResult,
+  ] =
     await Promise.all([
       getDashboardContextFeatures({ guildId: resolvedGuildId, client }),
       getProtectedOverview({ guildId: resolvedGuildId, client }),
       getDashboardPreferences({ guildId: resolvedGuildId, client }),
       getCommandSettings({ guildId: resolvedGuildId, client }),
+      setupReadinessResultPromise,
     ]);
 
   return {
@@ -218,6 +240,8 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
     overviewPayload,
     preferencesPayload,
     commandSettingsPayload,
+    setupReadinessPayload: setupReadinessResult?.payload || null,
+    setupReadinessError: setupReadinessResult?.error || null,
   };
 }
 
@@ -330,6 +354,8 @@ export function useDashboardData({ navigate }) {
   const [preferencesPlan, setPreferencesPlan] = useState(null);
   const [preferencesCapabilities, setPreferencesCapabilities] = useState(null);
   const [statusCommandSettings, setStatusCommandSettings] = useState(null);
+  const [setupReadiness, setSetupReadiness] = useState(null);
+  const [setupReadinessLoadError, setSetupReadinessLoadError] = useState(null);
 
   const [preferencesDraft, setPreferencesDraft] = useState({ ...DEFAULT_DASHBOARD_PREFERENCES });
   const [dismissedNoticeIdsInput, setDismissedNoticeIdsInput] = useState('');
@@ -369,6 +395,8 @@ export function useDashboardData({ navigate }) {
     setPreferencesPlan(null);
     setPreferencesCapabilities(null);
     setStatusCommandSettings(null);
+    setSetupReadiness(null);
+    setSetupReadinessLoadError(null);
     setStatusCommandEnabledDraft(DEFAULT_DURUM_COMMAND_ENABLED);
     setStatusCommandDetailModeDraft(DEFAULT_STATUS_COMMAND_DETAIL_MODE);
     setProtectedError(null);
@@ -400,6 +428,12 @@ export function useDashboardData({ navigate }) {
     setStatusCommandDetailModeDraft(
       toStatusCommandDetailMode(snapshot?.commandSettingsPayload || {})
     );
+    setSetupReadiness(
+      snapshot?.setupReadinessPayload
+        ? normalizeSetupReadinessPayload(snapshot.setupReadinessPayload)
+        : null
+    );
+    setSetupReadinessLoadError(snapshot?.setupReadinessError || null);
   }, []);
 
   const runAuthBootstrap = useCallback(async () => {
@@ -740,6 +774,8 @@ export function useDashboardData({ navigate }) {
     savePreferences,
 
     statusCommandSettings,
+    setupReadiness,
+    setupReadinessLoadError,
     statusCommandEnabledDraft,
     setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft,

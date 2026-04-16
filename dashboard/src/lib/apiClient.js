@@ -15,6 +15,7 @@ export const CONTROL_PLANE_ROUTES = Object.freeze({
   authPlan: '/api/auth/plan',
   authLogout: '/api/auth/logout',
   dashboardOverview: '/api/dashboard/protected/overview',
+  dashboardSetupReadiness: '/api/dashboard/protected/setup-readiness',
   dashboardContextFeatures: '/api/dashboard/context/features',
   dashboardPreferences: '/api/dashboard/protected/preferences',
   dashboardStatusCommand: '/api/dashboard/protected/bot-settings/status-command',
@@ -305,6 +306,14 @@ export async function getDashboardContextFeatures({ guildId = null, client = api
 export async function getProtectedOverview({ guildId = null, client = apiClient } = {}) {
   const response = await client.get(
     CONTROL_PLANE_ROUTES.dashboardOverview,
+    toGuildQueryConfig(guildId)
+  );
+  return unwrapApiData(response);
+}
+
+export async function getSetupReadiness({ guildId = null, client = apiClient } = {}) {
+  const response = await client.get(
+    CONTROL_PLANE_ROUTES.dashboardSetupReadiness,
     toGuildQueryConfig(guildId)
   );
   return unwrapApiData(response);

@@ -434,6 +434,46 @@ test('Bearer token authenticates protected dashboard overview', async () => {
   }
 });
 
+test('Bearer token authenticates protected setup-readiness endpoint', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: createAuthEnabledConfig({ postLoginRedirectUri: '/dashboard' }),
+      getConfiguredStaticGuildIdsFn: () => [PRIMARY_GUILD_ID],
+      authFoundationOptions: {
+        fetchImpl: createMockOauthFetch(),
+      },
+    })
+  );
+
+  try {
+    const { loginCode } = await oauthLoginAndCallback({ port: server.port });
+    const exchange = await exchangeLoginCode({
+      port: server.port,
+      code: loginCode,
+    });
+    assert.equal(exchange.statusCode, 200);
+    const accessToken = String(parseJsonBody(exchange)?.data?.accessToken || '').trim();
+    assert.ok(accessToken);
+
+    const setupReadiness = await request({
+      port: server.port,
+      path: `/api/dashboard/protected/setup-readiness?guildId=${PRIMARY_GUILD_ID}`,
+      headers: buildAccessTokenHeader(accessToken),
+    });
+    assert.equal(setupReadiness.statusCode, 200);
+    const setupReadinessJson = parseJsonBody(setupReadiness);
+    assert.equal(setupReadinessJson.ok, true);
+    assert.equal(setupReadinessJson.data.contractVersion, 1);
+    assert.equal(setupReadinessJson.data.guildId, PRIMARY_GUILD_ID);
+    assert.equal(typeof setupReadinessJson.data.summary, 'object');
+    assert.equal(Array.isArray(setupReadinessJson.data.sections), true);
+    assert.equal(Array.isArray(setupReadinessJson.data.issues), true);
+  } finally {
+    await server.close();
+  }
+});
+
 test('CORS preflight allows Authorization header for auth exchange route', async () => {
   const server = await startServer(
     createControlPlaneRequestHandler({

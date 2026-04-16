@@ -317,6 +317,7 @@ test('allowed origin CORS headers apply across required auth and dashboard route
     { method: 'GET', path: '/api/dashboard/context' },
     { method: 'GET', path: '/api/dashboard/context/features' },
     { method: 'GET', path: '/api/dashboard/protected/overview' },
+    { method: 'GET', path: '/api/dashboard/protected/setup-readiness' },
     { method: 'GET', path: '/api/dashboard/protected/preferences' },
     {
       method: 'PUT',
@@ -460,6 +461,45 @@ test('OPTIONS /api/dashboard/protected/overview returns CORS headers for allowed
     const response = await request({
       port: server.port,
       path: '/api/dashboard/protected/overview',
+      method: 'OPTIONS',
+      headers: {
+        Origin: DASHBOARD_ORIGIN,
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'Authorization, Content-Type',
+      },
+    });
+
+    assert.equal(response.statusCode, 204);
+    assert.equal(response.headers['access-control-allow-origin'], DASHBOARD_ORIGIN);
+    assert.equal(response.headers['access-control-allow-credentials'], 'true');
+    assert.equal(
+      response.headers['access-control-allow-methods'],
+      'GET,POST,PUT,OPTIONS'
+    );
+    assert.equal(
+      response.headers['access-control-allow-headers'],
+      'Content-Type, Authorization'
+    );
+    assert.match(String(response.headers.vary || ''), /Origin/i);
+  } finally {
+    await server.close();
+  }
+});
+
+test('OPTIONS /api/dashboard/protected/setup-readiness returns CORS headers for allowed dashboard origin', async () => {
+  const server = await startServer(
+    createControlPlaneRequestHandler({
+      enabled: true,
+      config: createEnabledControlPlaneServerConfig({
+        dashboardAllowedOrigins: [DASHBOARD_ORIGIN],
+      }),
+    })
+  );
+
+  try {
+    const response = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/setup-readiness',
       method: 'OPTIONS',
       headers: {
         Origin: DASHBOARD_ORIGIN,

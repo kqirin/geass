@@ -4,6 +4,7 @@ const {
   createDashboardFeaturesProvider,
   createDashboardResourcesProvider,
 } = require('./dashboardProviders');
+const { createSetupReadinessProvider } = require('./setupReadinessProvider');
 const {
   createAuthenticatedDashboardContextProvider,
   createDashboardContextFeaturesProvider,
@@ -86,6 +87,16 @@ function createDashboardRouteDefinitions({
     featureGateEvaluator,
     resolveGuildScope,
   });
+  const setupReadinessProvider = createSetupReadinessProvider({
+    config,
+    getConfiguredStaticGuildIds,
+    getStaticGuildSettings,
+    getStaticGuildBindings,
+    getPrivateVoiceConfig,
+    getTagRoleConfig,
+    getStartupVoiceConfig,
+    resolveGuildScope,
+  });
   const requireDashboardGuildAccess = createRequireGuildAccess({
     config,
     getConfiguredStaticGuildIds,
@@ -164,6 +175,13 @@ function createDashboardRouteDefinitions({
       group: 'dashboard',
       authMode: 'require_auth_and_guild_access_read_only',
       handler: withBoundaryChecks(protectedOverviewProvider, [requireAuth, requireDashboardGuildAccess]),
+    },
+    {
+      method: 'GET',
+      path: '/api/dashboard/protected/setup-readiness',
+      group: 'dashboard',
+      authMode: 'require_auth_and_guild_access_read_only',
+      handler: withBoundaryChecks(setupReadinessProvider, [requireAuth, requireDashboardGuildAccess]),
     },
   ]
     .concat(preferencesRouteDefinitions)
