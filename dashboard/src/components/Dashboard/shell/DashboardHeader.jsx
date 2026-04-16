@@ -11,6 +11,7 @@ export default function DashboardHeader({
   userDisplayName = 'Misafir',
   userHandle = '@misafir',
   userId = null,
+  planLabel = 'Belirsiz Paket',
 }) {
   const actionLabel = isAuthenticated ? 'Çıkış' : 'Giriş';
   const actionHandler = isAuthenticated ? onLogout : onLogin;
@@ -32,6 +33,9 @@ export default function DashboardHeader({
                 Çoklu Sunucu
               </span>
             )}
+            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-white/70">
+              {planLabel}
+            </span>
           </div>
         </div>
 
