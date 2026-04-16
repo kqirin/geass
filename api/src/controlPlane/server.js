@@ -38,6 +38,7 @@ const STATIC_ALLOWED_METHODS = new Set(['GET', 'HEAD']);
 const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
   '/api/auth/status',
   '/api/auth/me',
+  '/api/auth/guilds',
   '/api/auth/logout',
   '/api/auth/login',
   '/api/auth/callback',
