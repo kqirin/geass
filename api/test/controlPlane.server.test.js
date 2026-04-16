@@ -647,6 +647,18 @@ test('enabled mode serves meta and dashboard read-only endpoints with stable saf
       true
     );
     assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'GET /api/dashboard/protected/bot-settings/commands'
+      ),
+      true
+    );
+    assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'PUT /api/dashboard/protected/bot-settings/commands'
+      ),
+      true
+    );
+    assert.equal(
       capabilitiesJson.data.endpoints.includes('GET /api/control/private/status'),
       true
     );
@@ -2391,6 +2403,47 @@ test('guild access endpoints fail closed for no-access users and allow authentic
       /^\d{4}-\d{2}-\d{2}T/
     );
 
+    const protectedBotCommandSettingsInitial = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      headers: {
+        Cookie: operatorCookie,
+      },
+    });
+    assert.equal(protectedBotCommandSettingsInitial.statusCode, 200);
+    const protectedBotCommandSettingsInitialJson = parseJsonBody(
+      protectedBotCommandSettingsInitial
+    );
+    assert.equal(protectedBotCommandSettingsInitialJson.ok, true);
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.mode,
+      'protected_bot_command_settings'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.scope.guildId,
+      '999999999999999001'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.scope.actorId,
+      '323456789012345678'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.commands.durum.enabled,
+      null
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.commands.durum.detailMode,
+      null
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.effective.durum.enabled,
+      true
+    );
+    assert.equal(
+      protectedBotCommandSettingsInitialJson.data.effective.durum.detailMode,
+      'legacy'
+    );
+
     const protectedBotStatusSettingsInitial = await request({
       port: server.port,
       path: '/api/dashboard/protected/bot-settings/status-command',
@@ -2590,6 +2643,262 @@ test('guild access endpoints fail closed for no-access users and allow authentic
     assert.equal(
       protectedBotStatusSettingsReadBackJson.data.effective.detailMode,
       'legacy'
+    );
+
+    const protectedBotCommandSettingsInvalidCommand = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          ping: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsInvalidCommand.statusCode, 400);
+    const protectedBotCommandSettingsInvalidCommandJson = parseJsonBody(
+      protectedBotCommandSettingsInvalidCommand
+    );
+    assert.equal(protectedBotCommandSettingsInvalidCommandJson.ok, false);
+    assert.equal(protectedBotCommandSettingsInvalidCommandJson.error, 'invalid_request_body');
+    assert.equal(
+      protectedBotCommandSettingsInvalidCommandJson.details.reasonCode,
+      'unknown_field'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidCommandJson.details.field,
+      'commands.ping'
+    );
+
+    const protectedBotCommandSettingsInvalidField = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          durum: {
+            unknownFlag: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsInvalidField.statusCode, 400);
+    const protectedBotCommandSettingsInvalidFieldJson = parseJsonBody(
+      protectedBotCommandSettingsInvalidField
+    );
+    assert.equal(protectedBotCommandSettingsInvalidFieldJson.ok, false);
+    assert.equal(protectedBotCommandSettingsInvalidFieldJson.error, 'invalid_request_body');
+    assert.equal(
+      protectedBotCommandSettingsInvalidFieldJson.details.reasonCode,
+      'unknown_field'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidFieldJson.details.field,
+      'commands.durum.unknownFlag'
+    );
+
+    const protectedBotCommandSettingsInvalidDetailMode = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          durum: {
+            detailMode: 'wide',
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsInvalidDetailMode.statusCode, 400);
+    const protectedBotCommandSettingsInvalidDetailModeJson = parseJsonBody(
+      protectedBotCommandSettingsInvalidDetailMode
+    );
+    assert.equal(protectedBotCommandSettingsInvalidDetailModeJson.ok, false);
+    assert.equal(
+      protectedBotCommandSettingsInvalidDetailModeJson.error,
+      'invalid_request_body'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidDetailModeJson.details.reasonCode,
+      'invalid_enum_value'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidDetailModeJson.details.field,
+      'commands.durum.detailMode'
+    );
+
+    const protectedBotCommandSettingsInvalidEnabledType = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          durum: {
+            enabled: 'false',
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsInvalidEnabledType.statusCode, 400);
+    const protectedBotCommandSettingsInvalidEnabledTypeJson = parseJsonBody(
+      protectedBotCommandSettingsInvalidEnabledType
+    );
+    assert.equal(protectedBotCommandSettingsInvalidEnabledTypeJson.ok, false);
+    assert.equal(
+      protectedBotCommandSettingsInvalidEnabledTypeJson.error,
+      'invalid_request_body'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidEnabledTypeJson.details.reasonCode,
+      'invalid_field_type'
+    );
+    assert.equal(
+      protectedBotCommandSettingsInvalidEnabledTypeJson.details.field,
+      'commands.durum.enabled'
+    );
+
+    const protectedBotCommandSettingsPutEnabledFalse = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          durum: {
+            enabled: false,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsPutEnabledFalse.statusCode, 200);
+    const protectedBotCommandSettingsPutEnabledFalseJson = parseJsonBody(
+      protectedBotCommandSettingsPutEnabledFalse
+    );
+    assert.equal(protectedBotCommandSettingsPutEnabledFalseJson.ok, true);
+    assert.equal(
+      protectedBotCommandSettingsPutEnabledFalseJson.data.mutation.type,
+      'bot_command_settings_upsert'
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutEnabledFalseJson.data.commands.durum.enabled,
+      false
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutEnabledFalseJson.data.effective.durum.enabled,
+      false
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutEnabledFalseJson.data.effective.durum.detailMode,
+      'legacy'
+    );
+
+    const protectedBotCommandSettingsPutCompact = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: {
+          durum: {
+            detailMode: 'compact',
+          },
+        },
+      }),
+    });
+    assert.equal(protectedBotCommandSettingsPutCompact.statusCode, 200);
+    const protectedBotCommandSettingsPutCompactJson = parseJsonBody(
+      protectedBotCommandSettingsPutCompact
+    );
+    assert.equal(protectedBotCommandSettingsPutCompactJson.ok, true);
+    assert.equal(
+      protectedBotCommandSettingsPutCompactJson.data.mutation.type,
+      'bot_command_settings_upsert'
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutCompactJson.data.commands.durum.detailMode,
+      'compact'
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutCompactJson.data.effective.durum.detailMode,
+      'compact'
+    );
+    assert.equal(
+      protectedBotCommandSettingsPutCompactJson.data.effective.durum.enabled,
+      false
+    );
+
+    const protectedBotCommandSettingsReadBack = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/commands',
+      headers: {
+        Cookie: operatorCookie,
+      },
+    });
+    assert.equal(protectedBotCommandSettingsReadBack.statusCode, 200);
+    const protectedBotCommandSettingsReadBackJson = parseJsonBody(
+      protectedBotCommandSettingsReadBack
+    );
+    assert.equal(protectedBotCommandSettingsReadBackJson.ok, true);
+    assert.equal(
+      protectedBotCommandSettingsReadBackJson.data.commands.durum.enabled,
+      false
+    );
+    assert.equal(
+      protectedBotCommandSettingsReadBackJson.data.commands.durum.detailMode,
+      'compact'
+    );
+    assert.equal(
+      protectedBotCommandSettingsReadBackJson.data.effective.durum.enabled,
+      false
+    );
+    assert.equal(
+      protectedBotCommandSettingsReadBackJson.data.effective.durum.detailMode,
+      'compact'
+    );
+
+    const protectedBotStatusSettingsAfterCommandMutation = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/bot-settings/status-command',
+      headers: {
+        Cookie: operatorCookie,
+      },
+    });
+    assert.equal(protectedBotStatusSettingsAfterCommandMutation.statusCode, 200);
+    const protectedBotStatusSettingsAfterCommandMutationJson = parseJsonBody(
+      protectedBotStatusSettingsAfterCommandMutation
+    );
+    assert.equal(protectedBotStatusSettingsAfterCommandMutationJson.ok, true);
+    assert.equal(
+      protectedBotStatusSettingsAfterCommandMutationJson.data.settings.detailMode,
+      null
+    );
+    assert.equal(
+      protectedBotStatusSettingsAfterCommandMutationJson.data.effective.detailMode,
+      'compact'
     );
 
     const protectedGuildOperator = await request({

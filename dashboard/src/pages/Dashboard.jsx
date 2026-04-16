@@ -217,7 +217,8 @@ export default function Dashboard() {
     activeGuildName, authenticatedUserSummary, session, effectivePlan, capabilities, capabilitySummary,
     advancedPreferencesCapability, overview, preferencesDraft, setPreferencesDraft, dismissedNoticeIdsInput,
     setDismissedNoticeIdsInput, preferencesSaveState, preferencesSaveMessage, savePreferences,
-    statusCommandSettings, statusCommandDetailModeDraft, setStatusCommandDetailModeDraft,
+    statusCommandSettings, statusCommandEnabledDraft, setStatusCommandEnabledDraft,
+    statusCommandDetailModeDraft, setStatusCommandDetailModeDraft,
     statusCommandSaveState, statusCommandSaveMessage, saveStatusCommandSettings,
   } = useDashboardData({ navigate });
 
@@ -225,8 +226,18 @@ export default function Dashboard() {
   const authUnavailableDetail = authStatus?.auth?.reasonCode || authStatus?.reasonCode || authError?.reasonCode || protectedError?.reasonCode || 'auth_not_configured';
   const noAccessDetail = protectedError?.reasonCode || authError?.reasonCode || 'guild_scope_unresolved';
   const advancedText = advancedPreferencesCapability.available ? 'Premium tercih özelliği kullanılabilir.' : 'Bu özellik Pro pakette kullanılabilir.';
-  const statusMode = String(statusCommandSettings?.effective?.detailMode || 'legacy').toLowerCase();
+  const statusMode = String(
+    statusCommandSettings?.effective?.durum?.detailMode ||
+      statusCommandSettings?.effective?.detailMode ||
+      'legacy'
+  ).toLowerCase();
   const statusModeLabel = statusMode === 'compact' ? 'Kompakt' : 'Klasik';
+  const statusEnabled =
+    typeof statusCommandSettings?.effective?.durum?.enabled === 'boolean'
+      ? statusCommandSettings.effective.durum.enabled
+      : typeof statusCommandSettings?.effective?.enabled === 'boolean'
+        ? statusCommandSettings.effective.enabled
+        : Boolean(statusCommandEnabledDraft);
   const selectedGuild = useMemo(() => guilds.find((g) => String(g?.id || '') === String(guildId || '')) || null, [guildId, guilds]);
   const planLabel = formatPlanTier(effectivePlan?.tier);
   const planTone = toPlanTone(effectivePlan?.tier);
@@ -301,18 +312,54 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <Card title="Komut Ayarları" subtitle="Durum komutu davranış ayarı">
-              <div className="space-y-4">
-                <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                  Durum Komutu Modu
-                  <select value={statusCommandDetailModeDraft} onChange={(e) => setStatusCommandDetailModeDraft(e.target.value === 'compact' ? 'compact' : 'legacy')} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none">
-                    <option value="legacy">Klasik</option>
-                    <option value="compact">Kompakt</option>
-                  </select>
-                </label>
-                <div className="space-y-1 text-xs text-gray-300">
-                  <div>Etkin mod: {statusModeLabel}</div>
-                  <div>Güncellenme zamanı: {statusCommandSettings?.updatedAt || '-'}</div>
+            <Card title="Komut Ayarlari" subtitle="Gercek komut kontrol merkezi">
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-white/10 bg-[#0f0f1b]/80 px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">.durum komutu</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        Sunucu durum komutunu ac/kapat ve gorunum modunu belirle.
+                      </div>
+                    </div>
+                    <StatusBadge status={statusEnabled ? 'active' : 'off'} />
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                      Komut Durumu
+                      <select
+                        value={statusCommandEnabledDraft ? 'enabled' : 'disabled'}
+                        onChange={(e) => setStatusCommandEnabledDraft(e.target.value === 'enabled')}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                      >
+                        <option value="enabled">Acik</option>
+                        <option value="disabled">Kapali</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                      Detay Modu
+                      <select
+                        value={statusCommandDetailModeDraft}
+                        onChange={(e) =>
+                          setStatusCommandDetailModeDraft(
+                            e.target.value === 'compact' ? 'compact' : 'legacy'
+                          )
+                        }
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                      >
+                        <option value="legacy">Klasik</option>
+                        <option value="compact">Kompakt</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-4 space-y-1 text-xs text-gray-300">
+                    <div>Etkin mod: {statusModeLabel}</div>
+                    <div>Komut durumu: {statusEnabled ? 'Acik' : 'Kapali'}</div>
+                    <div>Guncellenme zamani: {statusCommandSettings?.updatedAt || '-'}</div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-500">
+                  Yakinda: diger komutlar icin ayarlar bu alana eklenecek.
                 </div>
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <button onClick={saveStatusCommandSettings} disabled={!canSaveSettings || statusCommandSaveState === 'saving'} className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60">{statusCommandSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</button>
@@ -323,9 +370,9 @@ export default function Dashboard() {
           </div>
           <div className="space-y-4">
             <Card title="Kaydetme Durumu">
-              <SaveFeedback saveState={statusCommandSaveState} message={statusCommandSaveMessage} idleText="Durum komutu ayarları buradan kaydedilir." />
+              <SaveFeedback saveState={statusCommandSaveState} message={statusCommandSaveMessage} idleText="Durum komutu ayarlari buradan kaydedilir." />
             </Card>
-            <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/bot-settings/status-command</DeveloperNote>
+            <DeveloperNote>Gelistirici: GET/PUT /api/dashboard/protected/bot-settings/commands</DeveloperNote>
           </div>
         </div>
       );
@@ -466,3 +513,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+

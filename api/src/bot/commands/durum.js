@@ -3,7 +3,7 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const {
   BOT_STATUS_DETAIL_MODE_COMPACT,
   BOT_STATUS_DETAIL_MODE_LEGACY,
-  resolveStatusCommandRuntimeMode,
+  resolveDurumCommandRuntimeSettings,
 } = require('../../controlPlane/botSettingsRepository');
 
 const STATUS_EMBED_COLOR = 0x4b5563;
@@ -162,7 +162,7 @@ function buildStatusEmbed(message, metrics, { detailMode = BOT_STATUS_DETAIL_MOD
   });
 }
 
-async function resolveStatusDetailMode(ctx = {}) {
+function resolveExplicitStatusDetailMode(ctx = {}) {
   const explicitDetailMode = String(ctx?.statusDetailMode || '').trim().toLowerCase();
   if (explicitDetailMode === BOT_STATUS_DETAIL_MODE_COMPACT) {
     return BOT_STATUS_DETAIL_MODE_COMPACT;
@@ -170,9 +170,28 @@ async function resolveStatusDetailMode(ctx = {}) {
   if (explicitDetailMode === BOT_STATUS_DETAIL_MODE_LEGACY) {
     return BOT_STATUS_DETAIL_MODE_LEGACY;
   }
+  return null;
+}
 
+async function resolveDurumRuntimeSettings(ctx = {}) {
   const guildId = String(ctx?.message?.guild?.id || '').trim();
-  return resolveStatusCommandRuntimeMode({ guildId });
+  const runtimeSettings = await resolveDurumCommandRuntimeSettings({ guildId });
+  const explicitDetailMode = internals.resolveExplicitStatusDetailMode(ctx);
+  if (!explicitDetailMode) {
+    return runtimeSettings;
+  }
+  return {
+    ...runtimeSettings,
+    detailMode: explicitDetailMode,
+  };
+}
+
+function buildDisabledEmbed(message) {
+  return createBaseEmbed(message, {
+    color: ERROR_EMBED_COLOR,
+    title: 'Komut Kapal\u0131',
+    description: 'Bu sunucuda `.durum` komutu ge\u00e7ici olarak devre d\u0131\u015f\u0131.',
+  });
 }
 
 function buildErrorEmbed(message, title, description) {
@@ -223,6 +242,13 @@ async function sendTemporaryError(message, description, title = '\u0130\u015flem
   return internals.sendTemporaryEmbed(message, errorEmbed, STATUS_MESSAGE_TTL_MS).catch(() => null);
 }
 
+async function sendTemporaryDisabled(message) {
+  const disabledEmbed = internals.buildDisabledEmbed(message);
+  return internals.sendTemporaryEmbed(message, disabledEmbed, STATUS_MESSAGE_TTL_MS).catch(
+    () => null
+  );
+}
+
 async function tryDeleteSourceMessage(message) {
   if (message?.deletable === false || typeof message?.delete !== 'function') return false;
   return message.delete().then(() => true).catch(() => false);
@@ -263,8 +289,14 @@ async function run(ctx) {
   }
 
   try {
+    const runtimeSettings = await internals.resolveDurumRuntimeSettings(ctx);
+    if (runtimeSettings.enabled === false) {
+      await internals.sendTemporaryDisabled(message);
+      return;
+    }
+
     const metrics = await internals.collectStatusMetrics(message);
-    const detailMode = await internals.resolveStatusDetailMode(ctx);
+    const detailMode = runtimeSettings.detailMode;
     const embed = internals.buildStatusEmbed(message, metrics, { detailMode });
     await internals.sendTemporaryEmbed(message, embed, STATUS_MESSAGE_TTL_MS);
   } catch {
@@ -287,11 +319,14 @@ const internals = {
   resolveThumbnailUrl,
   buildStatusDescription,
   buildStatusEmbed,
-  resolveStatusDetailMode,
+  resolveExplicitStatusDetailMode,
+  resolveDurumRuntimeSettings,
+  buildDisabledEmbed,
   buildErrorEmbed,
   scheduleMessageDelete,
   sendTemporaryEmbed,
   sendTemporaryError,
+  sendTemporaryDisabled,
   tryDeleteSourceMessage,
   collectStatusMetrics,
 };

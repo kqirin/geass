@@ -18,6 +18,7 @@ export const CONTROL_PLANE_ROUTES = Object.freeze({
   dashboardContextFeatures: '/api/dashboard/context/features',
   dashboardPreferences: '/api/dashboard/protected/preferences',
   dashboardStatusCommand: '/api/dashboard/protected/bot-settings/status-command',
+  dashboardCommands: '/api/dashboard/protected/bot-settings/commands',
 });
 
 export const apiClient = axios.create({
@@ -350,6 +351,27 @@ export async function putStatusCommandSettings({
         detailMode,
       },
     },
+    toGuildQueryConfig(guildId)
+  );
+  return unwrapApiData(response);
+}
+
+export async function getCommandSettings({ guildId = null, client = apiClient } = {}) {
+  const response = await client.get(
+    CONTROL_PLANE_ROUTES.dashboardCommands,
+    toGuildQueryConfig(guildId)
+  );
+  return unwrapApiData(response);
+}
+
+export async function putCommandSettings({
+  guildId = null,
+  commands = {},
+  client = apiClient,
+} = {}) {
+  const response = await client.put(
+    CONTROL_PLANE_ROUTES.dashboardCommands,
+    { commands },
     toGuildQueryConfig(guildId)
   );
   return unwrapApiData(response);

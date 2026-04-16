@@ -1,0 +1,58 @@
+{
+  "status": "incomplete",
+  "summary": "Core command-settings foundation is present and all requested test commands pass, but backend tests do not explicitly cover the new /api/dashboard/protected/bot-settings/commands contract and one unrelated dist asset is currently deleted in the working tree.",
+  "changedFiles": [
+    "api/src/bot/commands/durum.js",
+    "api/src/controlPlane/botSettingsRepository.js",
+    "api/src/controlPlane/botSettingsRoutes.js",
+    "dashboard/src/hooks/useDashboardData.js",
+    "dashboard/src/lib/apiClient.js",
+    "dashboard/src/pages/Dashboard.jsx",
+    "dashboard/test/useDashboardData.test.js"
+  ],
+  "deletedFiles": [
+    "dashboard/dist/assets/index-Clx5aPzq.css"
+  ],
+  "createdFiles": [],
+  "implementedBackend": {
+    "commandsEndpointAdded": true,
+    "getRoute": "/api/dashboard/protected/bot-settings/commands",
+    "putRoute": "/api/dashboard/protected/bot-settings/commands",
+    "repositoryUpdated": true,
+    "runtimeDurumIntegration": true,
+    "legacyFallbackPreserved": true
+  },
+  "implementedFrontend": {
+    "apiClientUpdated": true,
+    "dashboardUiUpdated": true,
+    "testsUpdated": true
+  },
+  "testResults": {
+    "apiFocused": {
+      "command": "cd api && npm.cmd test -- test/controlPlane.server.test.js test/durum.command.test.js",
+      "passed": true,
+      "summary": "Pass: 19, Fail: 0"
+    },
+    "apiFull": {
+      "command": "cd api && npm.cmd test",
+      "passed": true,
+      "summary": "Pass: 301, Fail: 0"
+    },
+    "dashboard": {
+      "command": "cd dashboard && npm.cmd test",
+      "passed": true,
+      "summary": "Pass: 25, Fail: 0"
+    }
+  },
+  "knownProblems": [
+    "No API test currently references /api/dashboard/protected/bot-settings/commands or bot_command_settings_upsert.",
+    "No focused API assertion currently verifies the .durum disabled-path response when enabled=false.",
+    "dashboard/dist/assets/index-Clx5aPzq.css is deleted in the working tree (likely unrelated artifact drift)."
+  ],
+  "riskyAreas": [
+    "api/src/controlPlane/botSettingsRoutes.js was heavily rewritten; old status-command compatibility appears preserved via existing passing tests, but new commands-route behavior is not directly API test-covered.",
+    "dashboard/src/pages/Dashboard.jsx command-settings section was modified mid-recovery and should be re-reviewed for UX/text consistency.",
+    "Mixed Turkish/mojibake text patterns in Dashboard.jsx can cause visible label inconsistency."
+  ],
+  "recommendedNextAction": "Add dedicated API integration tests for GET/PUT /api/dashboard/protected/bot-settings/commands (defaults, enabled=false, detailMode=compact, invalid payloads), add/extend durum command tests for enabled=false, restore or intentionally regenerate deleted dist asset, then rerun full API and dashboard tests."
+}

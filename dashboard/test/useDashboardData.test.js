@@ -8,7 +8,7 @@ import {
   loadProtectedDashboardSnapshot,
   parseDismissedNoticeIdsInput,
 } from '../src/hooks/useDashboardData.js';
-import { normalizeApiError, putDashboardPreferences, putStatusCommandSettings } from '../src/lib/apiClient.js';
+import { normalizeApiError, putCommandSettings, putDashboardPreferences } from '../src/lib/apiClient.js';
 
 function createHttpError(status, error, reasonCode = null) {
   return {
@@ -209,7 +209,7 @@ test('authenticated bootstrap supports top-level authenticated auth-status shape
   assert.equal(snapshot.session.id, 's-top');
 });
 
-test('protected snapshot loads overview, plan, capabilities, preferences, and status-command settings', async () => {
+test('protected snapshot loads overview, plan, capabilities, preferences, and command settings', async () => {
   const { client, calls } = createMockClient({
     getMap: {
       '/api/auth/plan?guildId=g-pro': {
@@ -257,11 +257,21 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and st
           },
         },
       },
-      '/api/dashboard/protected/bot-settings/status-command?guildId=g-pro': {
+      '/api/dashboard/protected/bot-settings/commands?guildId=g-pro': {
         ok: true,
         data: {
-          settings: { detailMode: 'compact' },
-          effective: { detailMode: 'compact' },
+          commands: {
+            durum: {
+              enabled: false,
+              detailMode: 'compact',
+            },
+          },
+          effective: {
+            durum: {
+              enabled: false,
+              detailMode: 'compact',
+            },
+          },
         },
       },
     },
@@ -277,7 +287,8 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and st
   );
   assert.equal(snapshot.overviewPayload.mode, 'protected_read_only_overview');
   assert.equal(snapshot.preferencesPayload.preferences.advancedLayoutMode, 'split');
-  assert.equal(snapshot.statusCommandPayload.effective.detailMode, 'compact');
+  assert.equal(snapshot.commandSettingsPayload.effective.durum.detailMode, 'compact');
+  assert.equal(snapshot.commandSettingsPayload.effective.durum.enabled, false);
   assert.equal(
     calls.filter((entry) => entry.method === 'GET').length,
     5
@@ -334,16 +345,27 @@ test('preferences write sends protected payload and guild scope', async () => {
   assert.equal(calls[0].key, '/api/dashboard/protected/preferences?guildId=g-pro');
 });
 
-test('status-command write sends low-risk detail mode mutation', async () => {
+test('command settings write sends durum enabled/detail mode mutation', async () => {
   const { client, calls } = createMockClient({
     putMap: {
-      '/api/dashboard/protected/bot-settings/status-command?guildId=g-pro': ({ payload }) => {
-        assert.equal(payload.settings.detailMode, 'compact');
+      '/api/dashboard/protected/bot-settings/commands?guildId=g-pro': ({ payload }) => {
+        assert.equal(payload.commands.durum.enabled, false);
+        assert.equal(payload.commands.durum.detailMode, 'compact');
         return {
           ok: true,
           data: {
-            settings: { detailMode: 'compact' },
-            effective: { detailMode: 'compact' },
+            commands: {
+              durum: {
+                enabled: false,
+                detailMode: 'compact',
+              },
+            },
+            effective: {
+              durum: {
+                enabled: false,
+                detailMode: 'compact',
+              },
+            },
             mutation: { applied: true },
           },
         };
@@ -351,17 +373,23 @@ test('status-command write sends low-risk detail mode mutation', async () => {
     },
   });
 
-  const response = await putStatusCommandSettings({
+  const response = await putCommandSettings({
     guildId: 'g-pro',
-    detailMode: 'compact',
+    commands: {
+      durum: {
+        enabled: false,
+        detailMode: 'compact',
+      },
+    },
     client,
   });
 
-  assert.equal(response.effective.detailMode, 'compact');
+  assert.equal(response.effective.durum.detailMode, 'compact');
+  assert.equal(response.effective.durum.enabled, false);
   assert.equal(calls.length, 1);
   assert.equal(
     calls[0].key,
-    '/api/dashboard/protected/bot-settings/status-command?guildId=g-pro'
+    '/api/dashboard/protected/bot-settings/commands?guildId=g-pro'
   );
 });
 

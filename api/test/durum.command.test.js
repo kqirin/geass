@@ -214,3 +214,121 @@ test('durum command uses compact presentation when guild detail mode is configur
   assert.doesNotMatch(String(embedJson.description || ''), /RAM Kullanımı/i);
   assert.doesNotMatch(String(embedJson.description || ''), /CPU Kullanımı/i);
 });
+
+test('durum command uses compact presentation when commands.durum.detailMode is compact', async () => {
+  const { message, state } = createMessage({ isAdmin: true });
+  const botSettingsRepository = getSharedBotSettingsRepository();
+  await botSettingsRepository.upsertByGuildId({
+    actorId: 'actor-1',
+    guildId: 'guild-1',
+    patch: {
+      commands: {
+        durum: {
+          detailMode: 'compact',
+        },
+      },
+    },
+  });
+
+  durumCommand.__internal.collectStatusMetrics = async () => ({
+    memoryUsage: '256 MB',
+    cpuUsage: '%10,0',
+    ping: '30 ms',
+    uptime: '2 saat 5 dakika',
+  });
+  durumCommand.__internal.scheduleMessageDelete = (_sentMessage, ttlMs) => {
+    state.scheduledDelete = ttlMs;
+  };
+
+  await durumCommand.run({ message });
+
+  assert.equal(state.sentPayloads.length, 1);
+  assert.equal(state.scheduledDelete, durumCommand.__internal.STATUS_MESSAGE_TTL_MS);
+
+  const embedJson = state.sentPayloads[0].embeds[0].toJSON();
+  assert.match(String(embedJson.description || ''), /Ping: 30 ms/i);
+  assert.match(String(embedJson.description || ''), /Uptime: 2 saat 5 dakika/i);
+  assert.doesNotMatch(String(embedJson.description || ''), /RAM Kullan/i);
+  assert.doesNotMatch(String(embedJson.description || ''), /CPU Kullan/i);
+});
+
+test('durum command with no settings uses legacy mode (default behavior preserved)', async () => {
+  const { message, state } = createMessage({ isAdmin: true });
+
+  let metricsCollected = 0;
+  durumCommand.__internal.collectStatusMetrics = async () => {
+    metricsCollected += 1;
+    return {
+      memoryUsage: '128 MB',
+      cpuUsage: '%5,0',
+      ping: '20 ms',
+      uptime: '10 dakika',
+    };
+  };
+  durumCommand.__internal.scheduleMessageDelete = (_sentMessage, ttlMs) => {
+    state.scheduledDelete = ttlMs;
+  };
+
+  await durumCommand.run({ message });
+
+  assert.equal(metricsCollected, 1, 'metrics must be collected for default enabled command');
+  assert.equal(state.sentPayloads.length, 1);
+  assert.equal(state.scheduledDelete, durumCommand.__internal.STATUS_MESSAGE_TTL_MS);
+
+  const embedJson = state.sentPayloads[0].embeds[0].toJSON();
+  // Legacy mode shows all fields
+  assert.match(String(embedJson.description || ''), /RAM Kullan/i);
+  assert.match(String(embedJson.description || ''), /CPU Kullan/i);
+  assert.match(String(embedJson.description || ''), /Ping: 20 ms/i);
+  assert.match(String(embedJson.description || ''), /Uptime: 10 dakika/i);
+});
+
+test('durum command returns disabled embed and skips metrics when commands.durum.enabled=false', async () => {
+  const { message, state } = createMessage({ isAdmin: true });
+  const botSettingsRepository = getSharedBotSettingsRepository();
+  await botSettingsRepository.upsertByGuildId({
+    actorId: 'actor-1',
+    guildId: 'guild-1',
+    patch: {
+      commands: {
+        durum: {
+          enabled: false,
+        },
+      },
+    },
+  });
+
+  let metricsCollected = 0;
+  durumCommand.__internal.collectStatusMetrics = async () => {
+    metricsCollected += 1;
+    return {
+      memoryUsage: '128 MB',
+      cpuUsage: '%5,0',
+      ping: '20 ms',
+      uptime: '10 dakika',
+    };
+  };
+  durumCommand.__internal.scheduleMessageDelete = (_sentMessage, ttlMs) => {
+    state.scheduledDelete = ttlMs;
+  };
+
+  await durumCommand.run({ message });
+
+  assert.equal(metricsCollected, 0, 'metrics must NOT be collected when command is disabled');
+  assert.equal(state.sentPayloads.length, 1, 'disabled embed must still be sent');
+  assert.equal(state.scheduledDelete, durumCommand.__internal.STATUS_MESSAGE_TTL_MS);
+
+  const embedJson = state.sentPayloads[0].embeds[0].toJSON();
+  assert.equal(embedJson.title, 'Komut Kapal\u0131', 'disabled embed must show correct title');
+  assert.match(
+    String(embedJson.description || ''),
+    /\.durum.+devre d\u0131\u015f\u0131/i,
+    'disabled embed must mention the command is disabled'
+  );
+  // Must NOT be a normal status embed
+  assert.doesNotMatch(
+    String(embedJson.title || ''),
+    /Bot Durum/i,
+    'disabled embed must not be mistaken for a status embed'
+  );
+});

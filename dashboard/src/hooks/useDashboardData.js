@@ -6,14 +6,14 @@ import {
   getAuthMe,
   getAuthPlan,
   getAuthStatus,
+  getCommandSettings,
   getDashboardContextFeatures,
   getDashboardPreferences,
   getProtectedOverview,
-  getStatusCommandSettings,
   normalizeApiError,
   postAuthLogout,
+  putCommandSettings,
   putDashboardPreferences,
-  putStatusCommandSettings,
 } from '../lib/apiClient.js';
 import { createLatestRequestGate } from '../lib/latestRequestGate.js';
 
@@ -34,6 +34,7 @@ export const DEFAULT_DASHBOARD_PREFERENCES = Object.freeze({
 });
 
 export const DEFAULT_STATUS_COMMAND_DETAIL_MODE = 'legacy';
+export const DEFAULT_DURUM_COMMAND_ENABLED = true;
 
 function toNormalizedList(rawValue) {
   if (!Array.isArray(rawValue)) return [];
@@ -202,12 +203,12 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
   const resolvedGuildId =
     String(planPayload?.access?.targetGuildId || guildId || '').trim() || null;
 
-  const [featuresPayload, overviewPayload, preferencesPayload, statusCommandPayload] =
+  const [featuresPayload, overviewPayload, preferencesPayload, commandSettingsPayload] =
     await Promise.all([
       getDashboardContextFeatures({ guildId: resolvedGuildId, client }),
       getProtectedOverview({ guildId: resolvedGuildId, client }),
       getDashboardPreferences({ guildId: resolvedGuildId, client }),
-      getStatusCommandSettings({ guildId: resolvedGuildId, client }),
+      getCommandSettings({ guildId: resolvedGuildId, client }),
     ]);
 
   return {
@@ -216,7 +217,7 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
     featuresPayload,
     overviewPayload,
     preferencesPayload,
-    statusCommandPayload,
+    commandSettingsPayload,
   };
 }
 
@@ -235,14 +236,65 @@ function toDefaultPreferences(rawPreferences = {}) {
   };
 }
 
-function toStatusCommandDetailMode(rawStatusSettings = {}) {
-  const effectiveDetailMode = String(rawStatusSettings?.effective?.detailMode || '').trim().toLowerCase();
+function toDurumCommandSettingNode(rawCommandSettings = {}) {
+  const rawCommandsNode =
+    rawCommandSettings?.commands &&
+    typeof rawCommandSettings.commands === 'object' &&
+    !Array.isArray(rawCommandSettings.commands)
+      ? rawCommandSettings.commands
+      : null;
+  const fromCommands = rawCommandsNode?.durum;
+  if (fromCommands && typeof fromCommands === 'object' && !Array.isArray(fromCommands)) {
+    return fromCommands;
+  }
+
+  const legacyStatusNode =
+    rawCommandSettings?.settings &&
+    typeof rawCommandSettings.settings === 'object' &&
+    !Array.isArray(rawCommandSettings.settings)
+      ? rawCommandSettings.settings
+      : null;
+  return legacyStatusNode || {};
+}
+
+function toDurumEffectiveSettingNode(rawCommandSettings = {}) {
+  const rawEffectiveNode =
+    rawCommandSettings?.effective &&
+    typeof rawCommandSettings.effective === 'object' &&
+    !Array.isArray(rawCommandSettings.effective)
+      ? rawCommandSettings.effective
+      : null;
+  const fromCommands = rawEffectiveNode?.durum;
+  if (fromCommands && typeof fromCommands === 'object' && !Array.isArray(fromCommands)) {
+    return fromCommands;
+  }
+  return rawEffectiveNode || {};
+}
+
+function toStatusCommandDetailMode(rawCommandSettings = {}) {
+  const effectiveNode = toDurumEffectiveSettingNode(rawCommandSettings);
+  const storedNode = toDurumCommandSettingNode(rawCommandSettings);
+  const effectiveDetailMode = String(effectiveNode?.detailMode || '').trim().toLowerCase();
   if (effectiveDetailMode === 'compact') return 'compact';
 
-  const rawDetailMode = String(rawStatusSettings?.settings?.detailMode || '').trim().toLowerCase();
+  const rawDetailMode = String(storedNode?.detailMode || '').trim().toLowerCase();
   if (rawDetailMode === 'compact') return 'compact';
 
   return DEFAULT_STATUS_COMMAND_DETAIL_MODE;
+}
+
+function toStatusCommandEnabled(rawCommandSettings = {}) {
+  const effectiveNode = toDurumEffectiveSettingNode(rawCommandSettings);
+  if (typeof effectiveNode?.enabled === 'boolean') {
+    return effectiveNode.enabled;
+  }
+
+  const storedNode = toDurumCommandSettingNode(rawCommandSettings);
+  if (typeof storedNode?.enabled === 'boolean') {
+    return storedNode.enabled;
+  }
+
+  return DEFAULT_DURUM_COMMAND_ENABLED;
 }
 
 function normalizeCapabilitySummary(rawSummary = {}) {
@@ -281,6 +333,9 @@ export function useDashboardData({ navigate }) {
 
   const [preferencesDraft, setPreferencesDraft] = useState({ ...DEFAULT_DASHBOARD_PREFERENCES });
   const [dismissedNoticeIdsInput, setDismissedNoticeIdsInput] = useState('');
+  const [statusCommandEnabledDraft, setStatusCommandEnabledDraft] = useState(
+    DEFAULT_DURUM_COMMAND_ENABLED
+  );
   const [statusCommandDetailModeDraft, setStatusCommandDetailModeDraft] = useState(
     DEFAULT_STATUS_COMMAND_DETAIL_MODE
   );
@@ -314,6 +369,7 @@ export function useDashboardData({ navigate }) {
     setPreferencesPlan(null);
     setPreferencesCapabilities(null);
     setStatusCommandSettings(null);
+    setStatusCommandEnabledDraft(DEFAULT_DURUM_COMMAND_ENABLED);
     setStatusCommandDetailModeDraft(DEFAULT_STATUS_COMMAND_DETAIL_MODE);
     setProtectedError(null);
     setPreferencesSaveState('idle');
@@ -337,9 +393,12 @@ export function useDashboardData({ navigate }) {
     setPreferencesPlan(snapshot?.preferencesPayload?.plan || null);
     setPreferencesCapabilities(snapshot?.preferencesPayload?.capabilities || null);
 
-    setStatusCommandSettings(snapshot?.statusCommandPayload || null);
+    setStatusCommandSettings(snapshot?.commandSettingsPayload || null);
+    setStatusCommandEnabledDraft(
+      toStatusCommandEnabled(snapshot?.commandSettingsPayload || {})
+    );
     setStatusCommandDetailModeDraft(
-      toStatusCommandDetailMode(snapshot?.statusCommandPayload || {})
+      toStatusCommandDetailMode(snapshot?.commandSettingsPayload || {})
     );
   }, []);
 
@@ -518,15 +577,22 @@ export function useDashboardData({ navigate }) {
       statusCommandDetailModeDraft === 'compact'
         ? 'compact'
         : DEFAULT_STATUS_COMMAND_DETAIL_MODE;
+    const enabled = Boolean(statusCommandEnabledDraft);
     setStatusCommandSaveState('saving');
     setStatusCommandSaveMessage('');
 
     try {
-      const response = await putStatusCommandSettings({
+      const response = await putCommandSettings({
         guildId,
-        detailMode,
+        commands: {
+          durum: {
+            enabled,
+            detailMode,
+          },
+        },
       });
       setStatusCommandSettings(response || null);
+      setStatusCommandEnabledDraft(toStatusCommandEnabled(response || {}));
       setStatusCommandDetailModeDraft(toStatusCommandDetailMode(response || {}));
       setStatusCommandSaveState('success');
       setStatusCommandSaveMessage('Durum komutu ayarı kaydedildi');
@@ -545,7 +611,13 @@ export function useDashboardData({ navigate }) {
         setViewState(nextViewState);
       }
     }
-  }, [authenticated, guildId, showToast, statusCommandDetailModeDraft]);
+  }, [
+    authenticated,
+    guildId,
+    showToast,
+    statusCommandDetailModeDraft,
+    statusCommandEnabledDraft,
+  ]);
 
   const login = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -668,6 +740,8 @@ export function useDashboardData({ navigate }) {
     savePreferences,
 
     statusCommandSettings,
+    statusCommandEnabledDraft,
+    setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft,
     setStatusCommandDetailModeDraft,
     statusCommandSaveState,
