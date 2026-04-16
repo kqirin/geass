@@ -33,6 +33,7 @@ const { isDirectHttpResponse } = require('./routeHttpResponse');
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,OPTIONS';
 const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type';
 const HEALTH_PATH = '/health';
+const DASHBOARD_PATH_PREFIX = '/dashboard';
 const STATIC_ALLOWED_METHODS = new Set(['GET', 'HEAD']);
 const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
   '/api/auth/status',
@@ -305,6 +306,18 @@ function resolveDashboardAssetPath({ distPath = null, requestPath = '/' } = {}) 
   return candidatePath;
 }
 
+function toStaticCandidateRequestPaths(requestPath = '/') {
+  const normalizedPath = normalizeRequestPath(requestPath);
+  const output = [normalizedPath];
+  if (normalizedPath === DASHBOARD_PATH_PREFIX) {
+    output.push('/');
+  } else if (normalizedPath.startsWith(`${DASHBOARD_PATH_PREFIX}/`)) {
+    const withoutPrefix = normalizedPath.slice(DASHBOARD_PATH_PREFIX.length) || '/';
+    output.push(withoutPrefix);
+  }
+  return [...new Set(output)];
+}
+
 async function readFileIfRegularFile(filePath = '') {
   try {
     const fileStat = await fsPromises.stat(filePath);
@@ -350,18 +363,17 @@ async function tryServeDashboardStatic({
   }
 
   const normalizedPath = normalizeRequestPath(requestPath);
-  const requestedAssetPath = resolveDashboardAssetPath({
-    distPath: dashboardStaticRuntime.distPath,
-    requestPath: normalizedPath,
-  });
+  const candidatePaths = toStaticCandidateRequestPaths(normalizedPath);
+  for (const candidatePath of candidatePaths) {
+    const requestedAssetPath = resolveDashboardAssetPath({
+      distPath: dashboardStaticRuntime.distPath,
+      requestPath: candidatePath,
+    });
+    if (!requestedAssetPath) continue;
 
-  if (!requestedAssetPath) {
-    writeNotFound(res);
-    return true;
-  }
+    const requestedAssetBody = await readFileIfRegularFile(requestedAssetPath);
+    if (!requestedAssetBody) continue;
 
-  const requestedAssetBody = await readFileIfRegularFile(requestedAssetPath);
-  if (requestedAssetBody) {
     writeStaticFileResponse({
       res,
       method,
@@ -523,12 +535,11 @@ function createControlPlaneRequestHandler({
     const request = parseRequestPathAndQuery(req?.url || '/');
     const requestPath = request.path;
 
-    if (requestPath === HEALTH_PATH) {
-      writeHealthOk(res);
-      return;
-    }
-
     if (!isApiPath(requestPath)) {
+      if (requestPath === HEALTH_PATH) {
+        writeHealthOk(res);
+        return;
+      }
       const staticServed = await tryServeDashboardStatic({
         res,
         method,

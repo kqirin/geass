@@ -171,9 +171,20 @@ test('/api/auth/status remains API-owned when static dashboard serving is enable
   });
 });
 
-test('static dashboard index.html is served for /', async () => {
+test('/dashboard serves dashboard index.html instead of legacy ok fallback', async () => {
   await withStaticDashboardServer(async ({ port }) => {
-    const response = await request({ port, path: '/' });
+    const response = await request({ port, path: '/dashboard' });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers['content-type'] || ''), /text\/html/i);
+    assert.equal(response.body.includes('dashboard-static-shell'), true);
+    assert.notEqual(response.body.trim(), 'ok');
+  });
+});
+
+test('/dashboard/settings serves dashboard index as SPA fallback', async () => {
+  await withStaticDashboardServer(async ({ port }) => {
+    const response = await request({ port, path: '/dashboard/settings' });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers['content-type'] || ''), /text\/html/i);
@@ -181,13 +192,18 @@ test('static dashboard index.html is served for /', async () => {
   });
 });
 
-test('SPA fallback serves dashboard index for non-API frontend routes', async () => {
+test('/assets/* serves static asset files from dashboard dist when present', async () => {
   await withStaticDashboardServer(async ({ port }) => {
-    const response = await request({ port, path: '/dashboard/settings' });
+    const rootAssets = await request({ port, path: '/assets/index.js' });
+    const prefixedAssets = await request({ port, path: '/dashboard/assets/index.js' });
 
-    assert.equal(response.statusCode, 200);
-    assert.match(String(response.headers['content-type'] || ''), /text\/html/i);
-    assert.equal(response.body.includes('dashboard-static-shell'), true);
+    assert.equal(rootAssets.statusCode, 200);
+    assert.match(String(rootAssets.headers['content-type'] || ''), /text\/javascript/i);
+    assert.equal(rootAssets.body.includes('fixture'), true);
+
+    assert.equal(prefixedAssets.statusCode, 200);
+    assert.match(String(prefixedAssets.headers['content-type'] || ''), /text\/javascript/i);
+    assert.equal(prefixedAssets.body.includes('fixture'), true);
   });
 });
 
