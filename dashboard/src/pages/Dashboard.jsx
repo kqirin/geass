@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import DashboardHeader from '../components/Dashboard/shell/DashboardHeader';
@@ -21,6 +22,29 @@ const DEFAULT_VIEW_OPTION_LABELS = Object.freeze({
   protected_overview: 'Korumalı Genel Bakış',
 });
 
+const DASHBOARD_SECTIONS = Object.freeze([
+  {
+    id: 'overview',
+    label: 'Genel Bakış',
+    hint: 'Kullanıcı, sunucu, paket ve sistem özeti',
+  },
+  {
+    id: 'preferences',
+    label: 'Panel Tercihleri',
+    hint: 'Görünüm ve kişisel panel ayarları',
+  },
+  {
+    id: 'status',
+    label: 'Durum Komutu',
+    hint: 'Durum komutu sunum biçimi',
+  },
+  {
+    id: 'premium',
+    label: 'Paket / Premium',
+    hint: 'Plan durumu ve premium özellikler',
+  },
+]);
+
 function formatPlanTier(rawTier) {
   const normalizedTier = String(rawTier || '').trim().toLowerCase();
   if (!normalizedTier) return 'Belirsiz Paket';
@@ -34,7 +58,7 @@ function formatPlanTier(rawTier) {
 function formatPlanStatus(rawStatus) {
   const normalizedStatus = String(rawStatus || '').trim().toLowerCase();
   if (!normalizedStatus) return 'Belirsiz';
-  if (normalizedStatus === 'resolved') return 'Hazir';
+  if (normalizedStatus === 'resolved') return 'Hazır';
   if (normalizedStatus === 'unresolved') return 'Belirsiz';
   return normalizedStatus;
 }
@@ -44,13 +68,49 @@ function formatPlanSource(rawSource) {
   if (!normalizedSource) return 'Belirsiz';
   if (normalizedSource === 'repository') return 'Depo';
   if (normalizedSource === 'manual_override') return 'Manuel';
-  if (normalizedSource === 'default') return 'Varsayilan';
+  if (normalizedSource === 'default') return 'Varsayılan';
   if (normalizedSource === 'unresolved') return 'Belirsiz';
   return normalizedSource;
 }
 
 function formatDefaultViewLabel(entry = '') {
   return DEFAULT_VIEW_OPTION_LABELS[entry] || entry;
+}
+
+function toPlanTone(rawTier = '') {
+  const normalizedTier = String(rawTier || '').trim().toLowerCase();
+  if (normalizedTier === 'pro' || normalizedTier === 'enterprise') {
+    return {
+      badgeClass:
+        'border-cyan-400/35 bg-cyan-500/20 text-cyan-100',
+      borderClass: 'border-cyan-400/20',
+    };
+  }
+  if (normalizedTier === 'free') {
+    return {
+      badgeClass:
+        'border-amber-400/35 bg-amber-500/15 text-amber-100',
+      borderClass: 'border-amber-400/20',
+    };
+  }
+  return {
+    badgeClass:
+      'border-white/20 bg-white/10 text-white/80',
+    borderClass: 'border-white/10',
+  };
+}
+
+function toSaveFeedbackTone(saveState = 'idle') {
+  if (saveState === 'success') {
+    return 'border-emerald-400/35 bg-emerald-500/10 text-emerald-100';
+  }
+  if (saveState === 'error') {
+    return 'border-rose-400/35 bg-rose-500/10 text-rose-100';
+  }
+  if (saveState === 'saving') {
+    return 'border-amber-400/35 bg-amber-500/10 text-amber-100';
+  }
+  return 'border-white/10 bg-white/5 text-white/70';
 }
 
 function StateCard({
@@ -96,8 +156,66 @@ function StateCard({
   );
 }
 
+function GlassCard({ title, children, subtitle = '' }) {
+  return (
+    <section className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">
+        {title}
+      </div>
+      {subtitle ? <div className="mt-2 text-xs text-gray-400">{subtitle}</div> : null}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function SectionNavigation({ activeSection, onChange }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {DASHBOARD_SECTIONS.map((section) => {
+        const active = activeSection === section.id;
+        return (
+          <button
+            key={section.id}
+            onClick={() => onChange(section.id)}
+            className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+              active
+                ? 'border-cyan-400/35 bg-cyan-500/15'
+                : 'border-white/10 bg-white/5 hover:bg-white/10'
+            }`}
+          >
+            <div
+              className={`text-sm font-semibold tracking-wide ${
+                active ? 'text-cyan-100' : 'text-white'
+              }`}
+            >
+              {section.label}
+            </div>
+            <div className={`mt-1 text-xs ${active ? 'text-cyan-200/80' : 'text-gray-400'}`}>
+              {section.hint}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SaveFeedback({ saveState = 'idle', message = '', idleText = '' }) {
+  const resolvedMessage =
+    String(message || '').trim() ||
+    (saveState === 'saving' ? 'Kaydediliyor...' : idleText);
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2 text-xs ${toSaveFeedbackTone(saveState)}`}
+    >
+      {resolvedMessage}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState('overview');
   const {
     viewState,
     isAuthLoading,
@@ -148,14 +266,21 @@ export default function Dashboard() {
   const noAccessDetail =
     protectedError?.reasonCode || authError?.reasonCode || 'guild_scope_unresolved';
   const advancedCapabilityText = advancedPreferencesCapability.available
-    ? 'Kullanıma hazır'
+    ? 'Premium tercih özelliği kullanılabilir.'
     : 'Bu özellik Pro pakette kullanılabilir.';
-  const advancedCapabilityReasonText = advancedPreferencesCapability.reasonCode
-    ? `Teknik kod: ${advancedPreferencesCapability.reasonCode}`
-    : null;
   const statusCommandEffectiveMode = String(
     statusCommandSettings?.effective?.detailMode || 'legacy'
   ).toLowerCase();
+  const statusCommandEffectiveLabel =
+    statusCommandEffectiveMode === 'compact' ? 'Kompakt' : 'Klasik';
+  const planTone = toPlanTone(effectivePlan?.tier);
+
+  const selectedGuild = useMemo(
+    () => guilds.find((guild) => String(guild?.id || '') === String(guildId || '')) || null,
+    [guildId, guilds]
+  );
+
+  const canSaveSettings = Boolean(selectedGuild?.id || guildId);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0b0b14] via-[#0b0b14] to-[#07070f] text-white">
@@ -170,14 +295,26 @@ export default function Dashboard() {
           onLogout={logout}
           onLogin={login}
           isAuthenticated={isAuthenticated}
+          userDisplayName={authenticatedUserSummary?.displayName || 'Misafir'}
+          userHandle={
+            authenticatedUserSummary?.username
+              ? `@${authenticatedUserSummary.username}`
+              : '@misafir'
+          }
+          userId={authenticatedUserSummary?.id || null}
         />
 
-        <SystemHealthCard overview={overview} viewState={viewState} />
+        <SystemHealthCard
+          overview={overview}
+          viewState={viewState}
+          preferencesSaveState={preferencesSaveState}
+          statusCommandSaveState={statusCommandSaveState}
+        />
 
         <div className="mt-8 space-y-7">
           {viewState === DASHBOARD_VIEW_STATES.LOADING ? (
             <StateCard
-              title="Panel Hazirlaniyor"
+              title="Panel Hazırlanıyor"
               description="Oturum ve panel verileri güvenli olarak yükleniyor."
               actionLabel="Yenile"
               onAction={refreshAuth}
@@ -185,7 +322,7 @@ export default function Dashboard() {
                 isAuthLoading
                   ? 'Kimlik doğrulama durumu kontrol ediliyor.'
                   : isProtectedLoading
-                    ? 'Korumali panel verileri getiriliyor.'
+                    ? 'Korumalı panel verileri getiriliyor.'
                     : 'Bekleniyor...'
               }
             />
@@ -215,8 +352,8 @@ export default function Dashboard() {
 
           {viewState === DASHBOARD_VIEW_STATES.NO_ACCESS ? (
             <StateCard
-              title="Sunucu Erisimi Yok"
-              description="Bu sunucu icin panel erisimi su an kullanilamiyor."
+              title="Sunucu Erişimi Yok"
+              description="Bu sunucu için panel erişimi şu an kullanılamıyor."
               actionLabel="Veriyi Yenile"
               onAction={refreshProtectedData}
               secondaryActionLabel="Oturumu Yenile"
@@ -228,7 +365,7 @@ export default function Dashboard() {
           {viewState === DASHBOARD_VIEW_STATES.ERROR ? (
             <StateCard
               title="Panelde Beklenmeyen Hata"
-              description="Veriler guvenli modda tutuldu. Tekrar deneyebilirsin."
+              description="Veriler güvenli modda tutuldu. Tekrar deneyebilirsin."
               actionLabel="Oturumu Yenile"
               onAction={refreshAuth}
               secondaryActionLabel="Veriyi Yenile"
@@ -238,223 +375,323 @@ export default function Dashboard() {
           ) : null}
 
           {viewState === DASHBOARD_VIEW_STATES.READY ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
               <div className="space-y-2">
                 <div className="text-3xl font-black tracking-tight text-white">
                   Geass Yönetim Paneli
                 </div>
                 <div className="text-sm text-white/65">
-                  Sunucu ayarlarini guvenli sekilde yonetin. Teknik bilgiler arka planda,
-                  oncelik operasyon akisi.
+                  Sunucu ayarlarını tek merkezden güvenli şekilde yönet. Güncel durum,
+                  tercihler ve premium yetenekler bu panelde.
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">
-                    Kullanıcı
-                  </div>
-                  <div className="mt-2 font-black text-xl text-white">
-                    {authenticatedUserSummary?.displayName || '-'}
-                  </div>
-                  <div className="mt-1 text-xs text-gray-400">
-                    @{authenticatedUserSummary?.username || 'bilinmiyor'}
-                  </div>
-                  <div className="mt-3 text-xs text-gray-400">ID: {authenticatedUserSummary?.id || '-'}</div>
-                  <div className="mt-3 text-xs text-gray-300">
-                    Sunucu: {authenticatedUserSummary?.guildCount || 0} | Yetkili:{' '}
-                    {authenticatedUserSummary?.operatorGuildCount || 0}
-                  </div>
-                  <div className="mt-1 text-xs text-gray-300">
-                    Oturum: {session?.id ? 'Açık' : 'Bilinmiyor'}
-                  </div>
-                </div>
+              <SectionNavigation
+                activeSection={activeSection}
+                onChange={setActiveSection}
+              />
 
-                <div className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">
-                    Paket
-                  </div>
-                  <div className="mt-2 font-black text-xl text-white">
-                    {formatPlanTier(effectivePlan?.tier)}
-                  </div>
-                  <div className="mt-3 text-xs text-gray-300">
-                    Durum: {formatPlanStatus(effectivePlan?.status)}
-                  </div>
-                  <div className="mt-1 text-xs text-gray-300">
-                    Kaynak: {formatPlanSource(effectivePlan?.source)}
-                  </div>
-                  {effectivePlan?.reasonCode ? (
-                    <div className="mt-1 text-xs text-gray-400">
-                      Teknik kod: {effectivePlan.reasonCode}
+              {activeSection === 'overview' ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-white/70">
+                      Seçili bölüm: <span className="font-semibold text-white">Genel Bakış</span>
                     </div>
-                  ) : null}
-                </div>
-
-                <div className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">
-                    Özellikler
-                  </div>
-                  <div className="mt-3 text-xs text-gray-300">
-                    Kullanilabilir: {capabilitySummary.allowedCapabilities} /{' '}
-                    {capabilitySummary.totalCapabilities}
-                  </div>
-                  <div className="mt-1 text-xs text-gray-300">
-                    Kısıtlı: {capabilitySummary.deniedCapabilities}
-                  </div>
-                  <div className="mt-1 text-xs text-gray-300">
-                    Aktif: {capabilitySummary.activeCapabilities}
-                  </div>
-                  <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-cyan-100">
-                    {advancedCapabilityText}
-                  </div>
-                  <div className="mt-2 text-xs text-gray-400">
-                    Gerekli Paket: {formatPlanTier(advancedPreferencesCapability.requiredPlan)}
-                  </div>
-                  {advancedCapabilityReasonText ? (
-                    <div className="mt-1 text-[11px] text-gray-500">
-                      {advancedCapabilityReasonText}
-                    </div>
-                  ) : null}
-                  <div className="mt-3 break-all text-[10px] uppercase tracking-[0.18em] text-gray-500">
-                    Teknik anahtarlar: {Object.keys(capabilities || {}).join(', ') || 'yok'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
-                  <div className="text-lg font-black tracking-tight text-white">
-                    Panel Tercihleri
-                  </div>
-                  <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-gray-500">
-                    Uc nokta: GET/PUT /api/dashboard/protected/preferences
-                  </div>
-
-                  <div className="mt-5 space-y-4">
-                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                      Varsayilan Sekme
-                      <select
-                        value={preferencesDraft.defaultView}
-                        onChange={(event) =>
-                          setPreferencesDraft((previous) => ({
-                            ...previous,
-                            defaultView: event.target.value,
-                          }))
-                        }
-                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
-                      >
-                        {DEFAULT_VIEW_OPTIONS.map((entry) => (
-                          <option key={entry} value={entry}>
-                            {formatDefaultViewLabel(entry)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="flex items-center gap-3 text-xs font-semibold tracking-wide text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(preferencesDraft.compactMode)}
-                        onChange={(event) =>
-                          setPreferencesDraft((previous) => ({
-                            ...previous,
-                            compactMode: event.target.checked,
-                          }))
-                        }
-                      />
-                      Kompakt Mod
-                    </label>
-
-                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                      Kapatılan Bildirim Kimlikleri (virgülle ayırın)
-                      <input
-                        value={dismissedNoticeIdsInput}
-                        onChange={(event) => setDismissedNoticeIdsInput(event.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
-                        placeholder="notice-a, notice-b"
-                      />
-                    </label>
-
-                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                      Gelişmiş Yerleşim Modu
-                      <select
-                        value={preferencesDraft.advancedLayoutMode || ''}
-                        onChange={(event) =>
-                          setPreferencesDraft((previous) => ({
-                            ...previous,
-                            advancedLayoutMode: event.target.value || null,
-                          }))
-                        }
-                        disabled={!advancedPreferencesCapability.available}
-                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none disabled:opacity-60"
-                      >
-                        <option value="">Kapali</option>
-                        <option value="focus">Odak</option>
-                        <option value="split">Bölünmüş</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="mt-6 flex items-center gap-3">
                     <button
-                      onClick={savePreferences}
-                      disabled={preferencesSaveState === 'saving'}
-                      className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60"
+                      onClick={refreshProtectedData}
+                      className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10"
                     >
-                      {preferencesSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}
+                      Yenile
                     </button>
-                    <div className="text-xs text-gray-300">
-                      {preferencesSaveMessage || ' '}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.8rem] border border-white/10 bg-[#16162a]/85 p-6 shadow-2xl shadow-black/20">
-                  <div className="text-lg font-black tracking-tight text-white">
-                    Durum Komutu Ayarı
-                  </div>
-                  <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-gray-500">
-                    Uc nokta: GET/PUT /api/dashboard/protected/bot-settings/status-command
                   </div>
 
-                  <div className="mt-5 space-y-4">
-                    <label className="block text-xs font-semibold tracking-wide text-gray-300">
-                      Detay Modu
-                      <select
-                        value={statusCommandDetailModeDraft}
-                        onChange={(event) =>
-                          setStatusCommandDetailModeDraft(event.target.value === 'compact' ? 'compact' : 'legacy')
-                        }
-                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <GlassCard title="Kullanıcı" subtitle="Kimlik ve oturum özeti">
+                      <div className="text-xl font-black text-white">
+                        {authenticatedUserSummary?.displayName || 'Bilinmiyor'}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-400">
+                        @{authenticatedUserSummary?.username || 'bilinmiyor'}
+                      </div>
+                      <div className="mt-4 space-y-1 text-xs text-gray-300">
+                        <div>ID: {authenticatedUserSummary?.id || '-'}</div>
+                        <div>Sunucu sayısı: {authenticatedUserSummary?.guildCount || 0}</div>
+                        <div>
+                          Operatör sunucu: {authenticatedUserSummary?.operatorGuildCount || 0}
+                        </div>
+                        <div>Oturum: {session?.id ? 'Açık' : 'Bilinmiyor'}</div>
+                      </div>
+                    </GlassCard>
+
+                    <GlassCard title="Sunucu" subtitle="Aktif hedef sunucu">
+                      <div className="text-xl font-black text-white">
+                        {selectedGuild?.name || activeGuildName || 'Sunucu bulunamadı'}
+                      </div>
+                      <div className="mt-4 space-y-1 text-xs text-gray-300">
+                        <div>ID: {selectedGuild?.id || guildId || '-'}</div>
+                        <div>Operatör yetkisi: {selectedGuild?.isOperator ? 'Evet' : 'Hayır'}</div>
+                        <div>Çoklu seçim: {canSelectGuild ? 'Açık' : 'Kapalı'}</div>
+                        <div>Mod: {singleGuildMode ? 'Tek sunucu' : 'Çoklu sunucu'}</div>
+                      </div>
+                    </GlassCard>
+
+                    <GlassCard title="Paket" subtitle="Plan ve erişim bilgisi">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span
+                          className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${planTone.badgeClass}`}
+                        >
+                          {formatPlanTier(effectivePlan?.tier)}
+                        </span>
+                        <span className="text-xs text-gray-300">
+                          Durum: {formatPlanStatus(effectivePlan?.status)}
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-1 text-xs text-gray-300">
+                        <div>Kaynak: {formatPlanSource(effectivePlan?.source)}</div>
+                        <div>Teknik kod: {effectivePlan?.reasonCode || '-'}</div>
+                      </div>
+                    </GlassCard>
+
+                    <GlassCard title="Özellikler" subtitle="Kapasite özeti">
+                      <div className="space-y-1 text-xs text-gray-300">
+                        <div>
+                          Kullanılabilir: {capabilitySummary.allowedCapabilities} /{' '}
+                          {capabilitySummary.totalCapabilities}
+                        </div>
+                        <div>Kısıtlı: {capabilitySummary.deniedCapabilities}</div>
+                        <div>Aktif: {capabilitySummary.activeCapabilities}</div>
+                      </div>
+                      <div
+                        className={`mt-4 rounded-xl border px-3 py-2 text-xs ${
+                          advancedPreferencesCapability.available
+                            ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
+                            : 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+                        }`}
                       >
-                        <option value="legacy">Klasik</option>
-                        <option value="compact">Kompakt</option>
-                      </select>
-                    </label>
-                    <div className="text-xs text-gray-300">
-                      Etkin: {statusCommandEffectiveMode === 'compact' ? 'kompakt' : 'klasik'}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      Güncellenme zamanı: {statusCommandSettings?.updatedAt || '-'}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex items-center gap-3">
-                    <button
-                      onClick={saveStatusCommandSettings}
-                      disabled={statusCommandSaveState === 'saving'}
-                      className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60"
-                    >
-                      {statusCommandSaveState === 'saving'
-                        ? 'Kaydediliyor...'
-                        : 'Kaydet'}
-                    </button>
-                    <div className="text-xs text-gray-300">
-                      {statusCommandSaveMessage || ' '}
-                    </div>
+                        {advancedCapabilityText}
+                      </div>
+                      <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-gray-500">
+                        Geliştirici: {Object.keys(capabilities || {}).join(', ') || 'kayıt yok'}
+                      </div>
+                    </GlassCard>
                   </div>
                 </div>
-              </div>
+              ) : null}
+
+              {activeSection === 'preferences' ? (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <GlassCard title="Panel Tercihleri" subtitle="Görünüm ve kişisel ayarlar">
+                      <div className="space-y-4">
+                        <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                          Varsayılan Sekme
+                          <select
+                            value={preferencesDraft.defaultView}
+                            onChange={(event) =>
+                              setPreferencesDraft((previous) => ({
+                                ...previous,
+                                defaultView: event.target.value,
+                              }))
+                            }
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                          >
+                            {DEFAULT_VIEW_OPTIONS.map((entry) => (
+                              <option key={entry} value={entry}>
+                                {formatDefaultViewLabel(entry)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="flex items-center gap-3 text-xs font-semibold tracking-wide text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(preferencesDraft.compactMode)}
+                            onChange={(event) =>
+                              setPreferencesDraft((previous) => ({
+                                ...previous,
+                                compactMode: event.target.checked,
+                              }))
+                            }
+                          />
+                          Kompakt Mod
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                          Kapatılan Bildirim Kimlikleri (virgülle ayırın)
+                          <input
+                            value={dismissedNoticeIdsInput}
+                            onChange={(event) => setDismissedNoticeIdsInput(event.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                            placeholder="notice-a, notice-b"
+                          />
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                          Gelişmiş Yerleşim Modu
+                          <select
+                            value={preferencesDraft.advancedLayoutMode || ''}
+                            onChange={(event) =>
+                              setPreferencesDraft((previous) => ({
+                                ...previous,
+                                advancedLayoutMode: event.target.value || null,
+                              }))
+                            }
+                            disabled={!advancedPreferencesCapability.available}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none disabled:opacity-60"
+                          >
+                            <option value="">Kapalı</option>
+                            <option value="focus">Odak</option>
+                            <option value="split">Bölünmüş</option>
+                          </select>
+                        </label>
+                        {!advancedPreferencesCapability.available ? (
+                          <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                            Bu özellik Pro pakette kullanılabilir.
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap items-center gap-3 pt-1">
+                          <button
+                            onClick={savePreferences}
+                            disabled={!canSaveSettings || preferencesSaveState === 'saving'}
+                            className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60"
+                          >
+                            {preferencesSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}
+                          </button>
+                          <button
+                            onClick={refreshProtectedData}
+                            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10"
+                          >
+                            Yenile
+                          </button>
+                        </div>
+                      </div>
+                    </GlassCard>
+                  </div>
+
+                  <div className="space-y-4">
+                    <GlassCard title="Kaydetme Durumu">
+                      <SaveFeedback
+                        saveState={preferencesSaveState}
+                        message={preferencesSaveMessage}
+                        idleText="Tercih değiştirip kaydedebilirsin."
+                      />
+                    </GlassCard>
+                    <GlassCard title="Geliştirici Notu">
+                      <div className="text-[11px] text-gray-500">
+                        GET/PUT /api/dashboard/protected/preferences
+                      </div>
+                    </GlassCard>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeSection === 'status' ? (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <GlassCard title="Durum Komutu" subtitle="Komut cevap biçimi ayarları">
+                      <div className="space-y-4">
+                        <label className="block text-xs font-semibold tracking-wide text-gray-300">
+                          Detay Modu
+                          <select
+                            value={statusCommandDetailModeDraft}
+                            onChange={(event) =>
+                              setStatusCommandDetailModeDraft(
+                                event.target.value === 'compact' ? 'compact' : 'legacy'
+                              )
+                            }
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0d0d17] px-4 py-3 text-sm outline-none"
+                          >
+                            <option value="legacy">Klasik</option>
+                            <option value="compact">Kompakt</option>
+                          </select>
+                        </label>
+
+                        <div className="space-y-1 text-xs text-gray-300">
+                          <div>Etkin mod: {statusCommandEffectiveLabel}</div>
+                          <div>Güncellenme zamanı: {statusCommandSettings?.updatedAt || '-'}</div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 pt-1">
+                          <button
+                            onClick={saveStatusCommandSettings}
+                            disabled={!canSaveSettings || statusCommandSaveState === 'saving'}
+                            className="rounded-2xl border border-cyan-400/35 bg-cyan-500/20 px-5 py-3 text-xs font-bold tracking-wide text-cyan-100 transition-all hover:bg-cyan-500/30 disabled:opacity-60"
+                          >
+                            {statusCommandSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}
+                          </button>
+                          <button
+                            onClick={refreshProtectedData}
+                            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10"
+                          >
+                            Yenile
+                          </button>
+                        </div>
+                      </div>
+                    </GlassCard>
+                  </div>
+
+                  <div className="space-y-4">
+                    <GlassCard title="Kaydetme Durumu">
+                      <SaveFeedback
+                        saveState={statusCommandSaveState}
+                        message={statusCommandSaveMessage}
+                        idleText="Durum komutu ayarları burada kaydedilir."
+                      />
+                    </GlassCard>
+                    <GlassCard title="Geliştirici Notu">
+                      <div className="text-[11px] text-gray-500">
+                        GET/PUT /api/dashboard/protected/bot-settings/status-command
+                      </div>
+                    </GlassCard>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeSection === 'premium' ? (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <GlassCard title="Paket Durumu" subtitle="Aktif plan özeti">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span
+                        className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${planTone.badgeClass}`}
+                      >
+                        {formatPlanTier(effectivePlan?.tier)}
+                      </span>
+                      <span className="text-xs text-gray-300">
+                        Durum: {formatPlanStatus(effectivePlan?.status)}
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-1 text-xs text-gray-300">
+                      <div>Kaynak: {formatPlanSource(effectivePlan?.source)}</div>
+                      <div>Teknik kod: {effectivePlan?.reasonCode || '-'}</div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard title="Premium Özellikler" subtitle="Plan bazlı erişim">
+                    <div className="space-y-3">
+                      <div
+                        className={`rounded-xl border px-3 py-2 text-xs ${
+                          advancedPreferencesCapability.available
+                            ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
+                            : 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+                        }`}
+                      >
+                        {advancedCapabilityText}
+                      </div>
+                      <div className="text-xs text-gray-300">
+                        Gerekli paket: {formatPlanTier(advancedPreferencesCapability.requiredPlan)}
+                      </div>
+                      <button
+                        onClick={refreshProtectedData}
+                        className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold tracking-wide text-white/90 transition-all hover:bg-white/10"
+                      >
+                        Yenile
+                      </button>
+                    </div>
+                  </GlassCard>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
