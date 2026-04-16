@@ -1205,7 +1205,12 @@ test('configured auth supports login callback session resolution me and logout',
       path: `/api/auth/callback?code=oauth-code&state=${encodeURIComponent(oauthState)}`,
     });
     assert.equal(callback.statusCode, 302);
-    assert.equal(String(callback.headers.location || ''), '/dashboard');
+    const callbackRedirect = new URL(
+      String(callback.headers.location || ''),
+      'http://127.0.0.1'
+    );
+    assert.equal(callbackRedirect.pathname, '/dashboard');
+    assert.ok(String(callbackRedirect.searchParams.get('loginCode') || '').trim());
 
     const sessionSetCookie = firstSetCookieHeader(callback.headers);
     assert.match(sessionSetCookie, /^cp_session=/);
@@ -1554,7 +1559,12 @@ test('production callback and logout set cross-site compatible session cookie at
       path: `/api/auth/callback?code=oauth-prod-code&state=${encodeURIComponent(state)}`,
     });
     assert.equal(callback.statusCode, 302);
-    assert.equal(String(callback.headers.location || ''), 'https://geass-dashboard.pages.dev');
+    const callbackRedirect = new URL(String(callback.headers.location || ''));
+    assert.equal(
+      `${callbackRedirect.origin}${callbackRedirect.pathname}`,
+      'https://geass-dashboard.pages.dev/'
+    );
+    assert.ok(String(callbackRedirect.searchParams.get('loginCode') || '').trim());
 
     const sessionSetCookie = firstSetCookieHeader(callback.headers);
     assert.match(sessionSetCookie, /^cp_session=/);

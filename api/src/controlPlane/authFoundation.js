@@ -1,6 +1,12 @@
 const { createAuthContextResolver, normalizeAuthAvailability } = require('./authBoundary');
 const { createAuthRouteDefinitions } = require('./authRoutes');
 const { createDiscordOauthClient } = require('./oauthClient');
+const {
+  createAccessTokenRepositoryFromStateStore,
+} = require('./accessTokenRepository');
+const {
+  createDashboardLoginCodeStoreFromStateStore,
+} = require('./dashboardLoginCodeStore');
 const { createOauthStateStoreFromStateStore } = require('./oauthStateStore');
 const { createSessionRepositoryFromStateStore } = require('./sessionRepository');
 const { createSessionCookieManager } = require('./sessionCookie');
@@ -52,12 +58,16 @@ function createControlPlaneAuthFoundation({
   oauthStateStore = null,
   sessionRepository = null,
   sessionCookieManager = null,
+  dashboardLoginCodeStore = null,
+  accessTokenRepository = null,
   scheduler = null,
   sharedStateBackend = null,
   sharedStateRedisClientFactory = null,
   schedulerSharedStateRedisClientFactory = null,
   nowFn = Date.now,
   randomBytesFn = undefined,
+  dashboardLoginCodeTtlMs = 2 * 60 * 1000,
+  accessTokenTtlMs = 15 * 60 * 1000,
   logError = null,
   getConfiguredStaticGuildIds = () => [],
   featureGateEvaluator = null,
@@ -137,6 +147,39 @@ function createControlPlaneAuthFoundation({
       enableScheduledExpiryCleanup: authExpirySchedulerEnabled,
       ...(typeof randomBytesFn === 'function' ? { randomBytesFn } : {}),
     });
+  const resolvedDashboardLoginCodeStore =
+    dashboardLoginCodeStore ||
+    createDashboardLoginCodeStoreFromStateStore({
+      stateStore: sharedStateStore,
+      codeTtlMs:
+        Number(dashboardLoginCodeTtlMs || 0) > 0
+          ? Number(dashboardLoginCodeTtlMs)
+          : 2 * 60 * 1000,
+      nowFn,
+      expiryScheduler: resolvedScheduler,
+      enableScheduledExpiryCleanup: authExpirySchedulerEnabled,
+      ...(typeof randomBytesFn === 'function' ? { randomBytesFn } : {}),
+    });
+  const sessionTtlMs =
+    Number(config?.controlPlane?.auth?.sessionTtlMs || 0) || 8 * 60 * 60 * 1000;
+  const resolvedAccessTokenTtlMs = (() => {
+    const configuredTtlMs = Number(accessTokenTtlMs || 0);
+    const fallbackTtlMs = Math.min(sessionTtlMs, 15 * 60 * 1000);
+    if (!Number.isFinite(configuredTtlMs) || configuredTtlMs <= 0) {
+      return fallbackTtlMs;
+    }
+    return Math.min(configuredTtlMs, sessionTtlMs);
+  })();
+  const resolvedAccessTokenRepository =
+    accessTokenRepository ||
+    createAccessTokenRepositoryFromStateStore({
+      stateStore: sharedStateStore,
+      accessTokenTtlMs: resolvedAccessTokenTtlMs,
+      nowFn,
+      expiryScheduler: resolvedScheduler,
+      enableScheduledExpiryCleanup: authExpirySchedulerEnabled,
+      ...(typeof randomBytesFn === 'function' ? { randomBytesFn } : {}),
+    });
 
   const authAvailability = normalizeAuthAvailability(
     resolveAuthAvailability({
@@ -150,6 +193,7 @@ function createControlPlaneAuthFoundation({
     authAvailability,
     sessionRepository: resolvedSessionRepository,
     sessionCookieManager: resolvedSessionCookieManager,
+    accessTokenRepository: resolvedAccessTokenRepository,
   });
 
   const authRouteDefinitions = createAuthRouteDefinitions({
@@ -158,6 +202,9 @@ function createControlPlaneAuthFoundation({
     oauthStateStore: resolvedOauthStateStore,
     sessionRepository: resolvedSessionRepository,
     sessionCookie: resolvedSessionCookieManager,
+    dashboardLoginCodeStore: resolvedDashboardLoginCodeStore,
+    accessTokenRepository: resolvedAccessTokenRepository,
+    accessTokenTtlMs: resolvedAccessTokenTtlMs,
     postLoginRedirectUri: config?.controlPlane?.auth?.postLoginRedirectUri || '/',
     config,
     getConfiguredStaticGuildIds,
@@ -180,6 +227,8 @@ function createControlPlaneAuthFoundation({
     resolveAuthContext,
     sessionCookieManager: resolvedSessionCookieManager,
     sessionRepository: resolvedSessionRepository,
+    dashboardLoginCodeStore: resolvedDashboardLoginCodeStore,
+    accessTokenRepository: resolvedAccessTokenRepository,
     sharedStateSummary:
       typeof resolvedSharedStateBackend?.getSummary === 'function'
         ? resolvedSharedStateBackend.getSummary()

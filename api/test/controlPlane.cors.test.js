@@ -297,6 +297,16 @@ test('allowed origin CORS headers apply across required auth and dashboard route
     { method: 'GET', path: '/api/auth/status' },
     { method: 'GET', path: '/api/auth/me' },
     { method: 'POST', path: '/api/auth/logout' },
+    {
+      method: 'POST',
+      path: '/api/auth/exchange',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        code: 'demo-login-code',
+      }),
+    },
     { method: 'GET', path: '/api/auth/login' },
     { method: 'GET', path: '/api/auth/callback?code=test&state=test' },
     { method: 'GET', path: '/api/dashboard/overview' },
@@ -374,7 +384,7 @@ test('allowed preflight request is accepted with explicit credentials support', 
       headers: {
         Origin: DASHBOARD_ORIGIN,
         'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'Content-Type, X-Requested-With',
+        'Access-Control-Request-Headers': 'Content-Type, Authorization',
       },
     });
 
@@ -385,7 +395,10 @@ test('allowed preflight request is accepted with explicit credentials support', 
       response.headers['access-control-allow-methods'],
       'GET,POST,PUT,OPTIONS'
     );
-    assert.equal(response.headers['access-control-allow-headers'], 'Content-Type');
+    assert.equal(
+      response.headers['access-control-allow-headers'],
+      'Content-Type, Authorization'
+    );
     assert.match(String(response.headers.vary || ''), /Origin/i);
   } finally {
     await server.close();

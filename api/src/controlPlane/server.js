@@ -31,7 +31,7 @@ const { createFeatureGateEvaluator } = require('./featureGates');
 const { isDirectHttpResponse } = require('./routeHttpResponse');
 
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,OPTIONS';
-const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type';
+const CORS_DEFAULT_ALLOWED_HEADERS = 'Content-Type, Authorization';
 const HEALTH_PATH = '/health';
 const DASHBOARD_PATH_PREFIX = '/dashboard';
 const STATIC_ALLOWED_METHODS = new Set(['GET', 'HEAD']);
@@ -41,6 +41,7 @@ const CONTROL_PLANE_CORS_AUTH_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/login',
   '/api/auth/callback',
+  '/api/auth/exchange',
 ]);
 const STATIC_CONTENT_TYPES = Object.freeze({
   '.css': 'text/css; charset=utf-8',

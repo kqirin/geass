@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  clearStoredDashboardAuthToken,
   getAuthGuilds,
   getAuthLoginUrl,
   getAuthMe,
@@ -364,6 +365,9 @@ export function useDashboardData({ navigate }) {
 
       const resolvedGuildId = String(sessionSnapshot.guildId || '').trim();
       setGuildId(resolvedGuildId);
+      if (!sessionSnapshot.authenticated) {
+        clearStoredDashboardAuthToken();
+      }
 
       if (sessionSnapshot.viewState !== DASHBOARD_VIEW_STATES.LOADING) {
         setViewState(sessionSnapshot.viewState);
@@ -374,6 +378,9 @@ export function useDashboardData({ navigate }) {
       if (!request.isCurrent()) return;
       const normalizedError = normalizeApiError(error, 'Auth status yuklenemedi');
       setAuthError(normalizedError);
+      if (normalizedError.isUnauthenticated) {
+        clearStoredDashboardAuthToken();
+      }
       setAuthenticated(false);
       resetProtectedData();
       setGuilds([]);
@@ -549,6 +556,7 @@ export function useDashboardData({ navigate }) {
     try {
       await postAuthLogout();
     } catch {}
+    clearStoredDashboardAuthToken();
     setAuthenticated(false);
     setViewState(DASHBOARD_VIEW_STATES.UNAUTHENTICATED);
     resetProtectedData();

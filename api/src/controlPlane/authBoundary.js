@@ -13,6 +13,18 @@ function normalizeAuthAvailability(rawAvailability = {}) {
   };
 }
 
+function readBearerTokenFromRequest(req = null) {
+  const authorizationHeader = Array.isArray(req?.headers?.authorization)
+    ? String(req.headers.authorization[0] || '').trim()
+    : String(req?.headers?.authorization || '').trim();
+  if (!authorizationHeader) return null;
+
+  const bearerPrefix = /^Bearer\s+/i;
+  if (!bearerPrefix.test(authorizationHeader)) return null;
+  const token = authorizationHeader.replace(bearerPrefix, '').trim();
+  return token || null;
+}
+
 function createAuthContextResolver({
   authAvailability = {
     enabled: false,
@@ -21,6 +33,7 @@ function createAuthContextResolver({
   },
   sessionRepository = null,
   sessionCookieManager = null,
+  accessTokenRepository = null,
 } = {}) {
   const availability = normalizeAuthAvailability(authAvailability);
 
@@ -46,6 +59,76 @@ function createAuthContextResolver({
         reasonCode: availability.reasonCode || 'auth_not_configured',
         principal: createAnonymousPrincipal(),
         session: null,
+      };
+    }
+
+    const bearerAccessToken = readBearerTokenFromRequest(req);
+    if (bearerAccessToken) {
+      if (
+        !accessTokenRepository ||
+        typeof accessTokenRepository.getAccessToken !== 'function'
+      ) {
+        return {
+          mode: 'configured',
+          enabled: true,
+          configured: true,
+          authenticated: false,
+          reasonCode: 'access_token_repository_missing',
+          principal: createAnonymousPrincipal(),
+          session: null,
+        };
+      }
+
+      let accessTokenRecord = null;
+      try {
+        accessTokenRecord = await accessTokenRepository.getAccessToken(
+          bearerAccessToken
+        );
+      } catch {
+        return {
+          mode: 'configured',
+          enabled: true,
+          configured: true,
+          authenticated: false,
+          reasonCode: 'access_token_lookup_failed',
+          principal: createAnonymousPrincipal(),
+          session: null,
+        };
+      }
+
+      if (!accessTokenRecord) {
+        return {
+          mode: 'configured',
+          enabled: true,
+          configured: true,
+          authenticated: false,
+          reasonCode: 'access_token_not_found',
+          principal: createAnonymousPrincipal(),
+          session: null,
+        };
+      }
+
+      const principal = normalizePrincipal(accessTokenRecord.principal);
+      if (!principal) {
+        return {
+          mode: 'configured',
+          enabled: true,
+          configured: true,
+          authenticated: false,
+          reasonCode: 'access_token_principal_invalid',
+          principal: createAnonymousPrincipal(),
+          session: null,
+        };
+      }
+
+      return {
+        mode: 'configured',
+        enabled: true,
+        configured: true,
+        authenticated: true,
+        reasonCode: null,
+        principal,
+        session: toSessionSummary(accessTokenRecord.session),
       };
     }
 
@@ -320,6 +403,7 @@ module.exports = {
   createAuthContextResolver,
   createBoundaryErrorResult,
   isBoundaryErrorResult,
+  readBearerTokenFromRequest,
   normalizeAuthAvailability,
   normalizeAuthContext,
   createRequireGuildAccess,

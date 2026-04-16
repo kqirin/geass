@@ -2,10 +2,14 @@ import axios from 'axios';
 
 const metaEnv = typeof import.meta !== 'undefined' && import.meta?.env ? import.meta.env : {};
 const API_BASE = metaEnv.VITE_API_BASE || 'http://localhost:3000';
+const DASHBOARD_AUTH_TOKEN_STORAGE_KEY = 'geass_dashboard_access_token_v1';
+
+let inMemoryDashboardAuthTokenRecord = null;
 
 export const CONTROL_PLANE_ROUTES = Object.freeze({
   authStatus: '/api/auth/status',
   authLogin: '/api/auth/login',
+  authExchange: '/api/auth/exchange',
   authMe: '/api/auth/me',
   authGuilds: '/api/auth/guilds',
   authPlan: '/api/auth/plan',
@@ -21,6 +25,107 @@ export const apiClient = axios.create({
   withCredentials: true,
   timeout: 15_000,
 });
+
+function getStorageRef() {
+  try {
+    if (typeof window !== 'undefined' && window?.localStorage) {
+      return window.localStorage;
+    }
+  } catch {}
+  return null;
+}
+
+function nowMs() {
+  return Date.now();
+}
+
+function toStoredTokenRecord(rawValue = null) {
+  if (!rawValue) return null;
+
+  if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+    const accessToken = String(rawValue.accessToken || '').trim();
+    if (!accessToken) return null;
+    const expiresAt =
+      rawValue.expiresAt === null || rawValue.expiresAt === undefined
+        ? null
+        : String(rawValue.expiresAt || '').trim() || null;
+    return {
+      accessToken,
+      expiresAt,
+      principal:
+        rawValue.principal && typeof rawValue.principal === 'object'
+          ? rawValue.principal
+          : null,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(String(rawValue || ''));
+    return toStoredTokenRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(record = null) {
+  const expiresAtIso = String(record?.expiresAt || '').trim();
+  if (!expiresAtIso) return false;
+  const expiresAtMs = Date.parse(expiresAtIso);
+  if (!Number.isFinite(expiresAtMs)) return false;
+  return expiresAtMs <= nowMs();
+}
+
+function readStoredTokenRecord() {
+  const storage = getStorageRef();
+  if (!storage) return inMemoryDashboardAuthTokenRecord;
+
+  const rawValue = storage.getItem(DASHBOARD_AUTH_TOKEN_STORAGE_KEY);
+  return toStoredTokenRecord(rawValue);
+}
+
+function writeStoredTokenRecord(record = null) {
+  const storage = getStorageRef();
+  if (!storage) {
+    inMemoryDashboardAuthTokenRecord = record;
+    return;
+  }
+
+  if (!record) {
+    storage.removeItem(DASHBOARD_AUTH_TOKEN_STORAGE_KEY);
+    return;
+  }
+  storage.setItem(DASHBOARD_AUTH_TOKEN_STORAGE_KEY, JSON.stringify(record));
+}
+
+export function clearStoredDashboardAuthToken() {
+  writeStoredTokenRecord(null);
+}
+
+export function getStoredDashboardAuthTokenRecord() {
+  const record = toStoredTokenRecord(readStoredTokenRecord());
+  if (!record) return null;
+
+  if (isTokenExpired(record)) {
+    clearStoredDashboardAuthToken();
+    return null;
+  }
+  return record;
+}
+
+export function getStoredDashboardAccessToken() {
+  return getStoredDashboardAuthTokenRecord()?.accessToken || null;
+}
+
+export function storeDashboardAuthToken(rawRecord = {}) {
+  const record = toStoredTokenRecord(rawRecord);
+  if (!record) {
+    clearStoredDashboardAuthToken();
+    return null;
+  }
+
+  writeStoredTokenRecord(record);
+  return record;
+}
 
 function toNormalizedPath(path = '/') {
   const raw = String(path || '').trim() || '/';
@@ -101,8 +206,33 @@ export function unwrapApiData(response) {
   return toResponseEnvelopeData(response?.data);
 }
 
+apiClient.interceptors.request.use((requestConfig) => {
+  const existingAuthorizationHeader =
+    String(requestConfig?.headers?.Authorization || '').trim() ||
+    String(requestConfig?.headers?.authorization || '').trim();
+  if (existingAuthorizationHeader) return requestConfig;
+
+  const accessToken = getStoredDashboardAccessToken();
+  if (!accessToken) return requestConfig;
+
+  const nextHeaders =
+    requestConfig?.headers && typeof requestConfig.headers === 'object'
+      ? requestConfig.headers
+      : {};
+  nextHeaders.Authorization = `Bearer ${accessToken}`;
+  return {
+    ...requestConfig,
+    headers: nextHeaders,
+  };
+});
+
 export async function getAuthStatus(client = apiClient) {
   const response = await client.get(CONTROL_PLANE_ROUTES.authStatus);
+  return unwrapApiData(response);
+}
+
+export async function postAuthExchange({ code = '', client = apiClient } = {}) {
+  const response = await client.post(CONTROL_PLANE_ROUTES.authExchange, { code });
   return unwrapApiData(response);
 }
 

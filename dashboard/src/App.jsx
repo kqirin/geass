@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-d
 import { getAuthStatus } from './lib/apiClient';
 import {
   ROOT_AUTH_ROUTE_STATES,
-  deriveRootAuthRouteState,
+  resolveRootAuthRouteDecision,
   toRootAuthNotice,
 } from './lib/authRouteState';
 import Login from './pages/Login';
@@ -36,12 +36,18 @@ function RootAuthRouteGate() {
 
     async function resolveAuthStatus() {
       try {
-        const authStatus = await getAuthStatus();
+        const routeStateDecision = await resolveRootAuthRouteDecision({
+          getAuthStatusFn: getAuthStatus,
+        });
         if (!isActive) return;
-        setRouteDecision(deriveRootAuthRouteState({ authStatus }));
+        setRouteDecision(routeStateDecision);
       } catch (error) {
         if (!isActive) return;
-        setRouteDecision(deriveRootAuthRouteState({ error }));
+        setRouteDecision({
+          routeState: ROOT_AUTH_ROUTE_STATES.SAFE_LOGIN,
+          reasonCode: 'auth_status_unavailable',
+          message: String(error?.message || 'Auth status yuklenemedi'),
+        });
       }
     }
 

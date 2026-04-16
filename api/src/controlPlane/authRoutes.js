@@ -1,7 +1,9 @@
 const { createPrincipalFromDiscordIdentity, normalizePrincipal } = require('./principal');
 const { createDirectJsonResponse, createDirectRedirectResponse } = require('./routeHttpResponse');
+const { parseJsonRequestBody } = require('./requestValidation');
 const { toSessionSummary } = require('./sessionRepository');
 const { evaluateGuildAccessPolicy } = require('./guildAccessPolicy');
+const { readBearerTokenFromRequest } = require('./authBoundary');
 const {
   summarizePrincipalGuildAccess,
   toPublicGuildSummaries,
@@ -58,12 +60,37 @@ function readRequestedGuildIdFromQuery(query = {}) {
   return String(rawGuildId || '').trim() || null;
 }
 
+function appendLoginCodeToRedirectUri(redirectUri = '/', loginCode = '') {
+  const normalizedRedirectUri = String(redirectUri || '/').trim() || '/';
+  const normalizedLoginCode = String(loginCode || '').trim();
+  if (!normalizedLoginCode) return normalizedRedirectUri;
+
+  const isAbsoluteUri = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(normalizedRedirectUri);
+  try {
+    const parsed = new URL(normalizedRedirectUri, 'http://127.0.0.1');
+    parsed.searchParams.set('loginCode', normalizedLoginCode);
+    if (isAbsoluteUri) return parsed.toString();
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    const fallbackPath = normalizedRedirectUri.startsWith('/')
+      ? normalizedRedirectUri
+      : `/${normalizedRedirectUri}`;
+    const joiner = fallbackPath.includes('?') ? '&' : '?';
+    return `${fallbackPath}${joiner}loginCode=${encodeURIComponent(
+      normalizedLoginCode
+    )}`;
+  }
+}
+
 function createAuthRouteDefinitions({
   authAvailability = {},
   oauthClient = null,
   oauthStateStore = null,
   sessionRepository = null,
   sessionCookie = null,
+  dashboardLoginCodeStore = null,
+  accessTokenRepository = null,
+  accessTokenTtlMs = 15 * 60 * 1000,
   postLoginRedirectUri = '/',
   config = {},
   getConfiguredStaticGuildIds = () => [],
@@ -438,13 +465,60 @@ function createAuthRouteDefinitions({
       principal,
       provider: 'discord_oauth',
     });
+    if (
+      !dashboardLoginCodeStore ||
+      typeof dashboardLoginCodeStore.createCode !== 'function'
+    ) {
+      return createDirectJsonResponse({
+        statusCode: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'auth_handoff_unavailable',
+          details: {
+            reasonCode: 'dashboard_login_code_store_missing',
+          },
+        },
+      });
+    }
+
+    let dashboardLoginCodeRecord = null;
+    try {
+      dashboardLoginCodeRecord = await dashboardLoginCodeStore.createCode({
+        principal,
+        session: sessionRecord.summary || toSessionSummary(sessionRecord),
+      });
+    } catch (error) {
+      return createDirectJsonResponse({
+        statusCode: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'auth_handoff_unavailable',
+          details: {
+            reasonCode:
+              String(error?.reasonCode || '').trim() ||
+              'dashboard_login_code_store_unavailable',
+          },
+        },
+      });
+    }
+
+    const callbackRedirectUri = appendLoginCodeToRedirectUri(
+      postLoginRedirectUri,
+      dashboardLoginCodeRecord?.code
+    );
     const setCookieHeader = sessionCookie.createSetCookieHeader(sessionRecord.id, {
       expiresAtMs: sessionRecord.expiresAtMs,
     });
 
     return createDirectRedirectResponse({
       statusCode: 302,
-      location: String(postLoginRedirectUri || '/'),
+      location: callbackRedirectUri,
       headers: {
         'Cache-Control': 'no-store',
         ...(setCookieHeader ? { 'Set-Cookie': setCookieHeader } : {}),
@@ -452,9 +526,170 @@ function createAuthRouteDefinitions({
     });
   }
 
+  async function handleExchange({ req = null } = {}) {
+    if (!availability.enabled || !availability.configured) {
+      return createAuthUnavailableResponse(availability);
+    }
+
+    if (
+      !dashboardLoginCodeStore ||
+      typeof dashboardLoginCodeStore.consumeCode !== 'function' ||
+      !accessTokenRepository ||
+      typeof accessTokenRepository.createAccessToken !== 'function'
+    ) {
+      return createDirectJsonResponse({
+        statusCode: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'auth_exchange_unavailable',
+          details: {
+            reasonCode: 'auth_exchange_store_missing',
+          },
+        },
+      });
+    }
+
+    let requestBody = null;
+    try {
+      requestBody = await parseJsonRequestBody({
+        req,
+        maxBytes: 8 * 1024,
+      });
+    } catch (error) {
+      return createDirectJsonResponse({
+        statusCode: Number(error?.statusCode || 400),
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: String(error?.errorCode || 'invalid_request_body'),
+          details:
+            error?.details && typeof error.details === 'object'
+              ? error.details
+              : {
+                  reasonCode: 'invalid_request_body',
+                },
+        },
+      });
+    }
+
+    const code = String(requestBody?.code || '').trim();
+    if (!code) {
+      return createDirectJsonResponse({
+        statusCode: 400,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'invalid_request_body',
+          details: {
+            reasonCode: 'missing_code',
+            field: 'code',
+          },
+        },
+      });
+    }
+
+    const consumedCode = await dashboardLoginCodeStore.consumeCode(code);
+    if (!consumedCode.ok) {
+      const reasonCode = String(consumedCode.reasonCode || 'code_not_found');
+      const isUnavailableReason =
+        reasonCode === 'dashboard_login_code_store_missing' ||
+        reasonCode === 'dashboard_login_code_store_unavailable';
+      return createDirectJsonResponse({
+        statusCode: isUnavailableReason ? 503 : 400,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: isUnavailableReason ? 'auth_exchange_unavailable' : 'invalid_login_code',
+          details: {
+            reasonCode,
+          },
+        },
+      });
+    }
+
+    const principal = normalizePrincipal(consumedCode.principal);
+    if (!principal) {
+      return createDirectJsonResponse({
+        statusCode: 502,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'auth_exchange_failed',
+          details: {
+            reasonCode: 'principal_resolution_failed',
+          },
+        },
+      });
+    }
+
+    let accessTokenRecord = null;
+    try {
+      accessTokenRecord = await accessTokenRepository.createAccessToken({
+        principal,
+        session: consumedCode.session,
+        provider: 'dashboard_oauth_handoff',
+      });
+    } catch (error) {
+      return createDirectJsonResponse({
+        statusCode: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+        payload: {
+          ok: false,
+          error: 'auth_exchange_unavailable',
+          details: {
+            reasonCode:
+              String(error?.reasonCode || '').trim() ||
+              'access_token_store_unavailable',
+          },
+        },
+      });
+    }
+
+    return createDirectJsonResponse({
+      statusCode: 200,
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+      payload: {
+        ok: true,
+        data: {
+          accessToken: String(accessTokenRecord?.accessToken || ''),
+          expiresAt: new Date(
+            Number(accessTokenRecord?.expiresAtMs || Date.now() + Number(accessTokenTtlMs || 0))
+          ).toISOString(),
+          principal: toPublicPrincipal(principal),
+        },
+      },
+    });
+  }
+
   async function handleLogout({ req = null } = {}) {
     if (!availability.enabled || !availability.configured) {
       return createAuthUnavailableResponse(availability);
+    }
+
+    const bearerAccessToken = readBearerTokenFromRequest(req);
+    if (
+      bearerAccessToken &&
+      accessTokenRepository &&
+      typeof accessTokenRepository.deleteAccessToken === 'function'
+    ) {
+      try {
+        await accessTokenRepository.deleteAccessToken(bearerAccessToken);
+      } catch {}
     }
 
     const sessionId = sessionCookie.readSessionIdFromRequest(req);
@@ -618,6 +853,13 @@ function createAuthRouteDefinitions({
       group: 'auth',
       authMode: 'public_oauth_callback',
       handler: handleCallback,
+    },
+    {
+      method: 'POST',
+      path: '/api/auth/exchange',
+      group: 'auth',
+      authMode: 'public_oauth_handoff_exchange',
+      handler: handleExchange,
     },
     {
       method: 'GET',
