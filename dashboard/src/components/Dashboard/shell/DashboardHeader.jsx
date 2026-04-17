@@ -1,4 +1,4 @@
-﻿export default function DashboardHeader({
+export default function DashboardHeader({
   guilds,
   guildId,
   activeGuildName,
@@ -9,7 +9,6 @@
   onLogin,
   isAuthenticated = true,
   userDisplayName = 'Misafir',
-  userHandle = '@misafir',
   userId = null,
   userAvatarUrl = null,
   planLabel = 'Belirsiz Paket',
@@ -24,47 +23,45 @@
 
   return (
     <header
-      className={`geass-top-header fixed top-0 right-0 z-40 ${withSidebar ? 'left-0 lg:left-[272px]' : 'left-0'}`}
+      className={`geass-top-header fixed top-0 right-0 z-40 ${withSidebar ? 'left-0 lg:left-[256px]' : 'left-0'}`}
     >
       <div className="geass-top-header-inner">
-        <div className="min-w-0 max-w-[32rem]">
-          <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-8">
+          <div className="flex items-center gap-2">
             <div className="geass-brand-badge">G</div>
-            <div>
-              <div className="geass-header-kicker">Obsidian Kontrol Merkezi</div>
-              <div className="geass-header-title">GEASS Command Suite</div>
+            <div className="text-2xl font-bold tracking-tight text-transparent bg-gradient-to-r from-[#cc97ff] to-[#9c48ea] bg-clip-text font-['Space_Grotesk']">
+              Obsidian Nebula
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#a9b4d8]">
-            <span>{activeGuildName || 'Sunucu'}</span>
-            <span className={`geass-chip ${singleGuildMode ? 'geass-chip-primary' : 'geass-chip-muted'}`}>
-              {singleGuildMode ? 'Tek Sunucu Modu' : 'Çoklu Sunucu'}
-            </span>
-            <span className="geass-chip geass-chip-muted">{planLabel}</span>
-          </div>
+
+          <nav className="hidden items-center gap-6 md:flex">
+            <span className="geass-top-nav-item is-active">Servers</span>
+            <span className="geass-top-nav-item">Network</span>
+            <span className="geass-top-nav-item">Resources</span>
+          </nav>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 sm:items-center sm:justify-end">
-          <label className="hidden xl:flex xl:w-[240px] xl:items-center xl:gap-2">
-            <span className="sr-only">Komut veya modül ara</span>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <label className="hidden items-center rounded-lg border border-[#40485d]/20 bg-black/65 px-3 py-2 text-xs lg:flex">
+            <span className="material-symbols-outlined mr-2 text-sm text-[#a3aac4]">search</span>
             <input
               type="text"
               readOnly
               value=""
-              placeholder="Komut veya modül ara..."
-              className="geass-input w-full text-sm placeholder:text-[#7f8eb8]"
+              placeholder="Search commands or modules..."
+              className="w-48 bg-transparent text-[#dee5ff] placeholder:text-[#a3aac4]/55 outline-none"
             />
           </label>
 
           {canSelectGuild ? (
-            <label className="block">
-              <div className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-[#9ca9ce]">
+            <label className="hidden min-w-[210px] xl:block">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9ca9ce]">
                 Sunucu Seçimi
               </div>
               <select
                 value={guildId}
                 onChange={(event) => onGuildChange(event.target.value)}
-                className="geass-select geass-input w-full min-w-[210px] sm:w-[280px]"
+                className="geass-select geass-input w-full py-2 text-xs"
               >
                 {guilds.map((guild) => (
                   <option key={guild.id} value={guild.id}>
@@ -73,39 +70,46 @@
                 ))}
               </select>
             </label>
-          ) : null}
+          ) : (
+            <span className="geass-chip geass-chip-muted hidden xl:inline-flex">{activeGuildName || 'Sunucu'}</span>
+          )}
 
-          <span className="geass-chip geass-chip-primary h-fit">{planLabel}</span>
+          <span className="geass-top-plan hidden sm:inline-flex">{singleGuildMode ? 'Tek Sunucu Modu' : 'Çoklu Sunucu'}</span>
+          <span className="geass-top-plan">{planLabel}</span>
 
-          <div className="geass-user-card">
-            <div className="geass-user-avatar">
-              {userAvatarUrl ? (
-                <img
-                  src={userAvatarUrl}
-                  alt={`${userDisplayName || 'Kullanıcı'} avatar`}
-                  className="h-full w-full rounded-[11px] object-cover"
-                />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-[#eef3ff]">
-                {userDisplayName || 'Misafir'}
+          <button className="geass-icon-btn" type="button">
+            <span className="material-symbols-outlined">notifications</span>
+          </button>
+          <button className="geass-icon-btn" type="button">
+            <span className="material-symbols-outlined">settings</span>
+          </button>
+
+          <div className="geass-top-avatar">
+            {userAvatarUrl ? (
+              <img
+                src={userAvatarUrl}
+                alt={`${userDisplayName || 'Kullanıcı'} avatar`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#e8d9ff]">
+                {initials}
               </div>
-              <div className="truncate text-xs text-[#a6b1d4]">{userHandle || '@misafir'}</div>
-              <div className="mt-1 text-[10px] text-[#8d99be]">
-                {userId ? `ID: ${userId}` : 'Oturum kimliği yok'}
-              </div>
-            </div>
+            )}
           </div>
 
           <button
             onClick={actionHandler}
-            className="geass-btn geass-btn-primary h-fit min-w-[116px]"
+            className="geass-btn geass-btn-primary min-w-[102px] px-4 py-2 text-[11px]"
           >
             {actionLabel}
           </button>
+
+          {userId ? (
+            <span className="hidden text-[10px] uppercase tracking-[0.15em] text-[#8d99be] 2xl:inline">
+              ID: {userId}
+            </span>
+          ) : null}
         </div>
       </div>
     </header>
