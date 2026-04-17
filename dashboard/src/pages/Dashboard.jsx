@@ -65,6 +65,18 @@ const LOG_SYSTEM_TABS = Object.freeze([
   { id: 'commands', label: 'Komut Logları' },
   { id: 'system', label: 'Sistem Olayları' },
 ]);
+const LOG_CATEGORY_LABELS = Object.freeze({
+  moderation: 'Moderasyon',
+  commands: 'Komut',
+  system: 'Sistem',
+});
+const LOG_STATE_LABELS = Object.freeze({
+  loading: 'Yükleniyor',
+  error: 'Hata',
+  unavailable: 'Kaynak Kapalı',
+  empty: 'Boş',
+  ready: 'Hazır',
+});
 const STATUS_META = Object.freeze({
   active: { label: 'Aktif', className: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100' },
   off: { label: 'Kapalı', className: 'border-rose-400/35 bg-rose-500/15 text-rose-100' },
@@ -183,6 +195,11 @@ function toSetupReadinessBadge(status = 'warning') {
 function toSetupIssueTone(severity = 'warning') {
   return SETUP_READINESS_ISSUE_META[severity] || SETUP_READINESS_ISSUE_META.warning;
 }
+function toSetupOverviewStatus(status = 'warning') {
+  if (status === 'ready') return 'active';
+  if (status === 'incomplete') return 'off';
+  return 'soon';
+}
 function formatLogDate(value = null) {
   const parsedMs = Date.parse(String(value || ''));
   if (!Number.isFinite(parsedMs)) return '-';
@@ -266,13 +283,19 @@ function SectionHeader({ kicker = 'Kontrol Modülü', title, description = '', a
   );
 }
 
-function TopCommandBar({ sectionMeta, activeGuildName, planLabel }) {
+function TopCommandBar({
+  sectionMeta,
+  activeGuildName,
+  planLabel,
+  setupReadinessScore = 0,
+  runtimeHealthy = false,
+}) {
   const heroTitleBySection = {
-    overview: 'Systems Overview',
-    'setup-readiness': 'Live Readiness',
-    'log-system': 'Live Intelligence / LOGS',
-    'command-settings': 'Module Management',
-    premium: 'Unlock the Digital Astral',
+    overview: 'Genel Bakış',
+    'setup-readiness': 'Kurulum Durumu',
+    'log-system': 'Log Sistemi',
+    'command-settings': 'Komut Ayarları',
+    premium: 'Premium Merkezi',
   };
   const heroTitle = heroTitleBySection[sectionMeta?.id] || sectionMeta?.label;
 
@@ -281,7 +304,7 @@ function TopCommandBar({ sectionMeta, activeGuildName, planLabel }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl px-1">
           <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#95a8d8]">
-            Command Protocol 7.2
+            GEASS Kontrol Merkezi
           </div>
           <div className="mt-2 text-5xl font-bold tracking-tighter text-[#dee5ff] font-['Space_Grotesk']">
             {heroTitle}
@@ -291,18 +314,22 @@ function TopCommandBar({ sectionMeta, activeGuildName, planLabel }) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#699cff]/70" />
               <span className="relative inline-flex h-3 w-3 rounded-full bg-[#699cff]" />
             </span>
-            Operational Cluster: <span className="font-mono text-[#699cff]">{activeGuildName || 'nebula-core-v4'}</span>
+            Aktif Sunucu: <span className="font-mono text-[#699cff]">{activeGuildName || 'geass-core'}</span>
           </div>
         </div>
 
         <div className="flex gap-4">
           <div className="geass-overview-chart rounded-xl border border-[#cc97ff]/20 px-6 py-3 text-center">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Latency</div>
-            <div className="mt-1 text-3xl font-bold font-['Space_Grotesk'] text-[#cc97ff]">14ms</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Kurulum Skoru</div>
+            <div className="mt-1 text-3xl font-bold font-['Space_Grotesk'] text-[#cc97ff]">
+              %{Math.round(setupReadinessScore)}
+            </div>
           </div>
           <div className="geass-overview-chart rounded-xl border border-[#699cff]/20 px-6 py-3 text-center">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Uptime</div>
-            <div className="mt-1 text-3xl font-bold font-['Space_Grotesk'] text-[#699cff]">99.9%</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Sistem</div>
+            <div className="mt-1 text-3xl font-bold font-['Space_Grotesk'] text-[#699cff]">
+              {runtimeHealthy ? 'Stabil' : 'Kontrol'}
+            </div>
           </div>
           <StatusPill label="Paket" value={planLabel} tone="primary" />
         </div>
@@ -430,8 +457,8 @@ function Sidebar({ activeSection, setActiveSection, planLabel }) {
           <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24" }}>rocket_launch</span>
         </div>
         <div>
-          <div className="text-xl font-bold tracking-tight text-[#dee5ff] font-['Space_Grotesk']">Nebula Bot</div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#cc97ff]">Elite Operator</div>
+          <div className="text-xl font-bold tracking-tight text-[#dee5ff] font-['Space_Grotesk']">GEASS Bot</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#cc97ff]">Sunucu Operatörü</div>
         </div>
       </div>
 
@@ -465,21 +492,21 @@ function Sidebar({ activeSection, setActiveSection, planLabel }) {
 
       <div className="px-4 pb-5">
         <div className="rounded-xl border border-[#40485d]/20 bg-[#192540]/60 p-4">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#cc97ff]">Power Source</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#cc97ff]">Panel Durumu</div>
           <div className="mt-2 flex items-center justify-between text-xs text-[#dee5ff]/80">
-            <span>Pro Status</span>
+            <span>Pro Durumu</span>
             <span className="rounded-full border border-[#cc97ff]/30 bg-[#cc97ff]/20 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#cc97ff]">
-              Active
+              Aktif
             </span>
           </div>
           <div className="mt-3 text-[10px] uppercase tracking-[0.14em] text-[#8ea1d2]">Paket: {planLabel}</div>
           <PremiumButton className="mt-3 w-full" disabled>
-            Upgrade to Pro
+            Yükseltme Yakında
           </PremiumButton>
         </div>
         <div className="mt-4 space-y-1 text-xs">
-          <div className="flex items-center gap-3 px-3 py-2 text-[#dee5ff]/60"><span className="material-symbols-outlined text-base">help</span>Support</div>
-          <div className="flex items-center gap-3 px-3 py-2 text-[#dee5ff]/60"><span className="material-symbols-outlined text-base">description</span>Docs</div>
+          <div className="flex items-center gap-3 px-3 py-2 text-[#dee5ff]/60"><span className="material-symbols-outlined text-base">help</span>Destek</div>
+          <div className="flex items-center gap-3 px-3 py-2 text-[#dee5ff]/60"><span className="material-symbols-outlined text-base">description</span>Dokümantasyon</div>
         </div>
       </div>
     </aside>
@@ -600,6 +627,19 @@ export default function Dashboard() {
   const systemLogCount = Array.isArray(logCategories.system?.payload?.items)
     ? logCategories.system.payload.items.length
     : 0;
+  const totalLogCount = moderationLogCount + commandLogCount + systemLogCount;
+  const activeLogCategoryLabel = LOG_CATEGORY_LABELS[activeLogTab] || activeLogTab;
+  const activeLogStateLabel = LOG_STATE_LABELS[activeLogState] || activeLogState;
+  const overviewLogCategory = logCategories.moderation || { payload: null, error: null };
+  const overviewLogState = resolveLogsCategoryState({
+    payload: overviewLogCategory?.payload || null,
+    error: overviewLogCategory?.error || null,
+    isLoading: isProtectedLoading,
+  });
+  const overviewRecentLogs = Array.isArray(overviewLogCategory?.payload?.items)
+    ? overviewLogCategory.payload.items.slice(0, 5)
+    : [];
+  const overviewLogUnavailableMessage = getUnavailableLogsMessage(overviewLogCategory?.payload || null);
 
   const renderPlaceholderSection = (sectionId) => {
     const section = PLACEHOLDER_SECTIONS[sectionId];
@@ -625,9 +665,6 @@ export default function Dashboard() {
   const renderReady = () => {
     if (PLACEHOLDER_SECTIONS[activeSection]) return renderPlaceholderSection(activeSection);
     if (activeSection === 'overview') {
-      const recentLogs = Array.isArray(logCategories.moderation?.payload?.items)
-        ? logCategories.moderation.payload.items.slice(0, 5)
-        : [];
       return (
         <div className="space-y-8">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -654,7 +691,7 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <FeatureMetricCard
               title="Sistem Sağlığı"
               value={runtimeHealthy ? 'Stabil' : 'Kontrol Gerekli'}
@@ -663,44 +700,101 @@ export default function Dashboard() {
               icon="monitor_heart"
             />
             <FeatureMetricCard
-              title="Özellikler / Yetenek Matrisi"
+              title="Özellikler"
               value={`${capabilitySummary.allowedCapabilities} / ${capabilitySummary.totalCapabilities}`}
               description={`Kısıtlı: ${capabilitySummary.deniedCapabilities} • Aktif: ${capabilitySummary.activeCapabilities}`}
               status={capabilitySummary.deniedCapabilities > 0 ? 'soon' : 'active'}
               icon="neurology"
             />
+            <FeatureMetricCard
+              title="Kurulum Durumu"
+              value={setupReadiness?.summary ? setupReadinessStatusLabel : 'Veri Yok'}
+              description={
+                setupReadiness?.summary
+                  ? `Skor: %${Math.round(setupReadinessScore)} • Hazır: ${setupReadinessSummary.passedChecks}/${setupReadinessSummary.totalChecks}`
+                  : 'Kurulum özeti henüz alınamadı.'
+              }
+              status={toSetupOverviewStatus(setupReadinessSummary.status)}
+              icon="fact_check"
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div className="geass-overview-chart rounded-2xl border border-[#40485d]/15 p-8 lg:col-span-2">
-              <div className="mb-10 flex items-center justify-between">
-                <h4 className="text-2xl font-bold font-['Space_Grotesk']">User Growth Index</h4>
-                <div className="flex gap-2">
-                  <button className="rounded-full bg-[#192540] px-4 py-1 text-xs font-bold text-[#cc97ff]">Daily</button>
-                  <button className="rounded-full px-4 py-1 text-xs font-bold text-[#a3aac4]">Weekly</button>
-                </div>
+              <div className="mb-6 flex items-center justify-between">
+                <h4 className="text-2xl font-bold font-['Space_Grotesk']">Sunucu Aktivitesi</h4>
+                <StatusBadge
+                  status={totalLogCount > 0 ? 'active' : 'soon'}
+                  label={totalLogCount > 0 ? 'Canlı' : 'Beklemede'}
+                />
               </div>
-              <div className="flex h-[300px] items-end justify-between gap-3 px-1">
-                {[28, 22, 34, 30, 44, 38, 58, 72, 52, 62].map((value, index) => (
-                  <div key={`overview-bar-${index}`} className="relative h-full w-full max-w-[44px]">
-                    <div
-                      className={`absolute bottom-0 w-full rounded-t-md ${index === 7 ? 'bg-gradient-to-t from-[#9c48ea] to-[#bfa3ff] shadow-[0_0_20px_rgba(204,151,255,0.45)]' : 'bg-[#1b2948]/85'}`}
-                      style={{ height: `${value}%` }}
-                    />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <StatusPill
+                  label="Moderasyon Kayıtları"
+                  value={String(moderationLogCount)}
+                  tone={moderationLogCount > 0 ? 'secondary' : 'neutral'}
+                />
+                <StatusPill
+                  label="Komut Kayıtları"
+                  value={String(commandLogCount)}
+                  tone={commandLogCount > 0 ? 'secondary' : 'neutral'}
+                />
+                <StatusPill
+                  label="Sistem Olayları"
+                  value={String(systemLogCount)}
+                  tone={systemLogCount > 0 ? 'secondary' : 'neutral'}
+                />
+              </div>
+              <div className="mt-4 geass-subpanel rounded-xl border px-4 py-3">
+                {setupReadiness?.summary ? (
+                  <div className="text-sm leading-relaxed text-[#c0cae9]">
+                    Kurulum özeti: <span className="font-semibold text-[#eef3ff]">{setupReadinessStatusLabel}</span>
+                    {' • '}Skor: <span className="font-semibold text-[#eef3ff]">%{Math.round(setupReadinessScore)}</span>
+                    {' • '}Kontrol: <span className="font-semibold text-[#eef3ff]">{setupReadinessSummary.totalChecks}</span>
                   </div>
-                ))}
+                ) : (
+                  <EmptyStatePanel
+                    title="Kurulum özeti henüz hazır değil"
+                    description="Kurulum verisi geldiğinde bu alanda otomatik olarak gösterilecek."
+                  />
+                )}
               </div>
             </div>
 
             <div className="geass-overview-chart rounded-2xl border border-[#40485d]/15 p-6">
-              <div className="text-2xl font-bold font-['Space_Grotesk']">Recent Terminal Logs</div>
-              {recentLogs.length === 0 ? (
+              <div className="text-2xl font-bold font-['Space_Grotesk']">Son Kayıtlar</div>
+              {overviewLogState === 'loading' ? (
+                <div className="mt-4">
+                  <EmptyStatePanel
+                    title="Kayıtlar yükleniyor"
+                    description="Son moderasyon kayıtları getiriliyor."
+                  />
+                </div>
+              ) : null}
+              {overviewLogState === 'error' ? (
+                <div className="mt-4">
+                  <EmptyStatePanel
+                    title="Kayıtlar okunamadı"
+                    description={overviewLogCategory?.error?.message || 'Kayıt verisi geçici olarak okunamadı.'}
+                  />
+                </div>
+              ) : null}
+              {overviewLogState === 'unavailable' ? (
+                <div className="mt-4">
+                  <EmptyStatePanel
+                    title="Kayıt kaynağı aktif değil"
+                    description={overviewLogUnavailableMessage || DEFAULT_LOGS_UNAVAILABLE_MESSAGE}
+                  />
+                </div>
+              ) : null}
+              {overviewLogState === 'empty' ? (
                 <div className="mt-4">
                   <EmptyStatePanel title="Kayıt bulunmuyor" description="Bu sunucuda henüz kayıt bulunmuyor." />
                 </div>
-              ) : (
+              ) : null}
+              {overviewLogState === 'ready' ? (
                 <div className="mt-4 space-y-4">
-                  {recentLogs.map((item, index) => (
+                  {overviewRecentLogs.map((item, index) => (
                     <div key={`overview-log-${String(item?.id || index)}`} className="rounded-lg px-1 py-1 text-sm text-[#d0daf8]">
                       <div className="flex items-start gap-2">
                         <span className="mt-1 h-2 w-2 rounded-full bg-[#699cff] shadow-[0_0_8px_rgba(105,156,255,0.6)]" />
@@ -710,18 +804,18 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
           <div className="geass-overview-cta border border-[#40485d]/20 p-8">
-            <div className="text-5xl font-bold tracking-tight font-['Space_Grotesk'] text-[#dee5ff]">Unleash the Nebula Engine</div>
+            <div className="text-5xl font-bold tracking-tight font-['Space_Grotesk'] text-[#dee5ff]">GEASS Kontrol Paneli</div>
             <div className="mt-3 max-w-2xl text-sm leading-relaxed text-[#a3aac4]">
-              Unlock custom commands, advanced analytics, and priority sharding with Nebula Pro.
+              Panel yalnızca canlı verilerle çalışır. Yeni yönetim modülleri ve gelişmiş kontroller aşamalı olarak açılacaktır.
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
-              <PremiumButton disabled className="disabled:opacity-80">Get Started</PremiumButton>
-              <PremiumButton variant="secondary" disabled className="disabled:opacity-80">Learn More</PremiumButton>
+              <PremiumButton disabled className="disabled:opacity-80">Modüller Yakında</PremiumButton>
+              <PremiumButton variant="secondary" disabled className="disabled:opacity-80">Plan Detayları</PremiumButton>
             </div>
           </div>
         </div>
@@ -734,7 +828,7 @@ export default function Dashboard() {
             <NebulaCard
               title="Log Sistemi"
               subtitle="Salt-okunur log ve denetim kayıtları"
-              kicker="Audit Akışı"
+              kicker="Denetim Akışı"
               actions={<PremiumButton variant="secondary" onClick={refreshProtectedData}>Yenile</PremiumButton>}
             >
               <div className="space-y-4">
@@ -818,8 +912,8 @@ export default function Dashboard() {
           <div className="space-y-5">
             <NebulaCard title="Log Durumu" subtitle="Kategori görünümü" kicker="İzleme">
               <div className="space-y-2">
-                <StatusPill label="Aktif Kategori" value={activeLogTab} tone="primary" />
-                <StatusPill label="Durum" value={activeLogState} tone="secondary" />
+                <StatusPill label="Aktif Kategori" value={activeLogCategoryLabel} tone="primary" />
+                <StatusPill label="Durum" value={activeLogStateLabel} tone="secondary" />
                 <StatusPill label="Kayıt Sayısı" value={String(activeLogItems.length)} tone="neutral" />
               </div>
               <div className="mt-4 space-y-2 text-xs text-[#bcc8e9]">
@@ -845,7 +939,7 @@ export default function Dashboard() {
       if (setupReadinessState === 'loading') {
         return (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <NebulaCard title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Readiness">
+            <NebulaCard title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Kurulum">
               <EmptyState
                 title="Kurulum denetimi yükleniyor"
                 description="Sunucu kurulum kontrolleri güvenli modda getiriliyor."
@@ -862,7 +956,7 @@ export default function Dashboard() {
       if (setupReadinessState === 'error') {
         return (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <NebulaCard title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Readiness">
+            <NebulaCard title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Kurulum">
               <EmptyState
                 title="Kurulum denetimi okunamadı"
                 description={setupReadinessLoadError?.message || 'Kurulum verisi geçici olarak okunamadı.'}
@@ -882,7 +976,7 @@ export default function Dashboard() {
 
       return (
         <div className="space-y-5">
-          <NebulaCard title="Kurulum Durumu" subtitle="Salt-okunur kurulum özeti" kicker="Diagnostic Core">
+          <NebulaCard title="Kurulum Durumu" subtitle="Salt-okunur kurulum özeti" kicker="Tanı Merkezi">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-2xl font-black tracking-tight text-[#eef3ff]">{setupReadinessStatusLabel}</div>
               <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${setupReadinessBadgeMeta.className}`}>
@@ -891,7 +985,7 @@ export default function Dashboard() {
             </div>
             <div className="geass-subpanel mt-4 rounded-2xl border p-4">
               <div className="flex items-center justify-between text-xs text-[#bec8e7]">
-                <span>Readiness Skoru</span>
+                <span>Kurulum Skoru</span>
                 <span className="font-semibold text-[#edf2ff]">{Math.round(setupReadinessScore)}%</span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-white/10">
@@ -973,28 +1067,54 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <NebulaCard title="Komut Ayarları" subtitle="Gerçek komut kontrol merkezi" kicker="Command Module">
+            <NebulaCard title="Komut Ayarları" subtitle="Gerçek komut kontrol merkezi" kicker="Komut Modülü">
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div className="geass-overview-chart rounded-2xl border border-white/[0.05] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Neural Load</div>
-                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">{statusEnabled ? '32.4%' : '0%'}</div>
-                    <div className="mt-2 h-1 rounded-full bg-white/10"><div className="h-1 rounded-full bg-[#cc97ff]" style={{ width: statusEnabled ? '32.4%' : '0%' }} /></div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Komut Durumu</div>
+                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">
+                      {statusEnabled ? 'Açık' : 'Kapalı'}
+                    </div>
+                    <div className="mt-2 h-1 rounded-full bg-white/10">
+                      <div
+                        className="h-1 rounded-full bg-[#cc97ff]"
+                        style={{ width: statusEnabled ? '100%' : '0%' }}
+                      />
+                    </div>
                   </div>
                   <div className="geass-overview-chart rounded-2xl border border-white/[0.05] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">IO Latency</div>
-                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">14ms</div>
-                    <div className="mt-2 h-1 rounded-full bg-white/10"><div className="h-1 w-[14%] rounded-full bg-[#699cff]" /></div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Detay Modu</div>
+                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">{statusModeLabel}</div>
+                    <div className="mt-2 h-1 rounded-full bg-white/10">
+                      <div
+                        className="h-1 rounded-full bg-[#699cff]"
+                        style={{ width: statusModeLabel === 'Kompakt' ? '100%' : '55%' }}
+                      />
+                    </div>
                   </div>
                   <div className="geass-overview-chart rounded-2xl border border-white/[0.05] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Active Shards</div>
-                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">{statusEnabled ? '12/12' : '0/12'}</div>
-                    <div className="mt-2 h-1 rounded-full bg-white/10"><div className={`h-1 rounded-full ${statusEnabled ? 'w-full bg-[#c890ff]' : 'w-0 bg-[#c890ff]'}`} /></div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Son Güncelleme</div>
+                    <div className="mt-2 text-lg font-bold font-['Space_Grotesk'] text-[#dee5ff]">
+                      {statusCommandSettings?.updatedAt ? formatLogDate(statusCommandSettings.updatedAt) : 'Henüz yok'}
+                    </div>
+                    <div className="mt-2 h-1 rounded-full bg-white/10">
+                      <div
+                        className="h-1 rounded-full bg-[#c890ff]"
+                        style={{ width: statusCommandSettings?.updatedAt ? '100%' : '0%' }}
+                      />
+                    </div>
                   </div>
                   <div className="geass-overview-chart rounded-2xl border border-white/[0.05] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Threat Level</div>
-                    <div className="mt-2 text-3xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">{statusEnabled ? 'Minimal' : 'Off'}</div>
-                    <div className="mt-2 h-1 rounded-full bg-white/10"><div className={`h-1 rounded-full ${statusEnabled ? 'w-[8%] bg-rose-400' : 'w-0 bg-rose-400'}`} /></div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#a3aac4]">Hedef Sunucu</div>
+                    <div className="mt-2 truncate text-xl font-bold font-['Space_Grotesk'] text-[#dee5ff]">
+                      {selectedGuild?.name || activeGuildName || 'Belirsiz'}
+                    </div>
+                    <div className="mt-2 h-1 rounded-full bg-white/10">
+                      <div
+                        className="h-1 rounded-full bg-rose-400"
+                        style={{ width: selectedGuild ? '100%' : '0%' }}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="geass-subpanel rounded-2xl border px-4 py-4">
@@ -1063,7 +1183,7 @@ export default function Dashboard() {
             <NebulaCard title="Kaydetme Durumu" subtitle="Komut ayar yanıtı" kicker="Durum">
               <SaveFeedback saveState={statusCommandSaveState} message={statusCommandSaveMessage} idleText="Durum komutu ayarları buradan kaydedilir." />
             </NebulaCard>
-            <NebulaCard title="Etkin Durum" subtitle="Anlık özet" kicker="Runtime">
+            <NebulaCard title="Etkin Durum" subtitle="Anlık özet" kicker="Canlı Durum">
               <div className="space-y-2 text-xs text-[#c1cae8]">
                 <div>Komut: .durum</div>
                 <div>Etkin mod: {statusModeLabel}</div>
@@ -1109,18 +1229,18 @@ export default function Dashboard() {
           </NebulaCard>
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <NebulaCard title="Kilitli Özellikler" subtitle="Pro gerektiren alanlar" kicker="Capabilities">
+            <NebulaCard title="Kilitli Özellikler" subtitle="Pro gerektiren alanlar" kicker="Yetenekler">
               <div className="space-y-3">
                 <PlaceholderItem title="Gelişmiş panel tercihleri" desc="Alternatif yerleşim ve premium görünüm modları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
                 <PlaceholderItem title="Akıllı oto moderasyon" desc="Pro seviyesinde güvenlik kuralları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
               </div>
             </NebulaCard>
-            <NebulaCard title="Yükseltme Merkezi" subtitle="CTA placeholder" kicker="Upgrade">
+            <NebulaCard title="Yükseltme Merkezi" subtitle="Bilgilendirme" kicker="Yükseltme">
               <div className="geass-subpanel rounded-2xl border p-4 text-sm leading-relaxed text-[#b8c4e6]">
                 Daha yüksek otomasyon kapasitesi, premium HUD düzenleri ve gelişmiş log zekası için yükseltme merkezi hazırlanıyor.
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
-                <PremiumButton disabled className="disabled:opacity-70">Upgrade Yakında</PremiumButton>
+                <PremiumButton disabled className="disabled:opacity-70">Yükseltme Yakında</PremiumButton>
                 <PremiumButton variant="secondary" disabled className="disabled:opacity-70">Paketleri Karşılaştır</PremiumButton>
               </div>
             </NebulaCard>
@@ -1132,7 +1252,7 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <NebulaCard title="Sunucu Ayarları" subtitle="Panel Tercihleri (aktif)" kicker="Preferences" actions={<StatusBadge status={advancedPreferencesCapability.available ? 'active' : 'pro'} label={advancedPreferencesCapability.available ? 'Premium Açık' : 'Pro Gerekli'} />}>
+            <NebulaCard title="Sunucu Ayarları" subtitle="Panel Tercihleri (aktif)" kicker="Tercihler" actions={<StatusBadge status={advancedPreferencesCapability.available ? 'active' : 'pro'} label={advancedPreferencesCapability.available ? 'Premium Açık' : 'Pro Gerekli'} />}>
               <div className="space-y-4">
                 <label className="block text-xs font-semibold tracking-wide text-[#c2ccea]">
                   Varsayılan Sekme
@@ -1239,7 +1359,13 @@ export default function Dashboard() {
             ) : null}
             {viewState === DASHBOARD_VIEW_STATES.READY ? (
               <section className="space-y-5">
-                <CommandTopbar sectionMeta={activeSectionMeta} activeGuildName={activeGuildName} planLabel={planLabel} />
+                <CommandTopbar
+                  sectionMeta={activeSectionMeta}
+                  activeGuildName={activeGuildName}
+                  planLabel={planLabel}
+                  setupReadinessScore={setupReadinessScore}
+                  runtimeHealthy={runtimeHealthy}
+                />
 
                 <div className="geass-mobile-tabs geass-glass-panel rounded-2xl border p-3 lg:hidden">
                   <div className="flex flex-wrap gap-2">

@@ -30,14 +30,14 @@ export default function DashboardHeader({
           <div className="flex items-center gap-2">
             <div className="geass-brand-badge">G</div>
             <div className="text-2xl font-bold tracking-tight text-transparent bg-gradient-to-r from-[#cc97ff] to-[#9c48ea] bg-clip-text font-['Space_Grotesk']">
-              Obsidian Nebula
+              GEASS
             </div>
           </div>
 
           <nav className="hidden items-center gap-6 md:flex">
-            <span className="geass-top-nav-item is-active">Servers</span>
-            <span className="geass-top-nav-item">Network</span>
-            <span className="geass-top-nav-item">Resources</span>
+            <span className="geass-top-nav-item is-active">Sunucular</span>
+            <span className="geass-top-nav-item">Ağ</span>
+            <span className="geass-top-nav-item">Kaynaklar</span>
           </nav>
         </div>
 
@@ -48,7 +48,7 @@ export default function DashboardHeader({
               type="text"
               readOnly
               value=""
-              placeholder="Search commands or modules..."
+              placeholder="Komut veya modül ara..."
               className="w-48 bg-transparent text-[#dee5ff] placeholder:text-[#a3aac4]/55 outline-none"
             />
           </label>
@@ -74,7 +74,9 @@ export default function DashboardHeader({
             <span className="geass-chip geass-chip-muted hidden xl:inline-flex">{activeGuildName || 'Sunucu'}</span>
           )}
 
-          <span className="geass-top-plan hidden sm:inline-flex">{singleGuildMode ? 'Tek Sunucu Modu' : 'Çoklu Sunucu'}</span>
+          <span className="geass-top-plan hidden sm:inline-flex">
+            {singleGuildMode ? 'Tek Sunucu Modu' : 'Çoklu Sunucu'}
+          </span>
           <span className="geass-top-plan">{planLabel}</span>
 
           <button className="geass-icon-btn" type="button">
@@ -88,7 +90,7 @@ export default function DashboardHeader({
             {userAvatarUrl ? (
               <img
                 src={userAvatarUrl}
-                alt={`${userDisplayName || 'Kullanıcı'} avatar`}
+                alt={`${userDisplayName || 'Kullanıcı'} avatarı`}
                 className="h-full w-full object-cover"
               />
             ) : (
