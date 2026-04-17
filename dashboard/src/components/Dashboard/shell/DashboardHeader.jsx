@@ -1,4 +1,4 @@
-export default function DashboardHeader({
+﻿export default function DashboardHeader({
   guilds,
   guildId,
   activeGuildName,
@@ -24,15 +24,15 @@ export default function DashboardHeader({
 
   return (
     <header
-      className={`geass-top-header fixed top-0 right-0 z-40 ${withSidebar ? 'left-0 lg:left-[280px]' : 'left-0'}`}
+      className={`geass-top-header fixed top-0 right-0 z-40 ${withSidebar ? 'left-0 lg:left-[272px]' : 'left-0'}`}
     >
       <div className="geass-top-header-inner">
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-[32rem]">
           <div className="flex items-center gap-3">
             <div className="geass-brand-badge">G</div>
             <div>
-              <div className="geass-header-kicker">Discord Bot Control</div>
-              <div className="geass-header-title">GEASS</div>
+              <div className="geass-header-kicker">Obsidian Kontrol Merkezi</div>
+              <div className="geass-header-title">GEASS Command Suite</div>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#a9b4d8]">
@@ -45,6 +45,17 @@ export default function DashboardHeader({
         </div>
 
         <div className="flex flex-wrap items-end gap-3 sm:items-center sm:justify-end">
+          <label className="hidden xl:flex xl:w-[240px] xl:items-center xl:gap-2">
+            <span className="sr-only">Komut veya modül ara</span>
+            <input
+              type="text"
+              readOnly
+              value=""
+              placeholder="Komut veya modül ara..."
+              className="geass-input w-full text-sm placeholder:text-[#7f8eb8]"
+            />
+          </label>
+
           {canSelectGuild ? (
             <label className="block">
               <div className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-[#9ca9ce]">

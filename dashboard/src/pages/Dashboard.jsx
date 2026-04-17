@@ -36,6 +36,18 @@ const DASHBOARD_SECTIONS = Object.freeze([
   { id: 'premium', label: 'Premium', subtitle: 'Paket ve kilitli özellikler' },
   { id: 'server-settings', label: 'Sunucu Ayarları', subtitle: 'Panel tercihleri' },
 ]);
+const DASHBOARD_SECTION_CODES = Object.freeze({
+  overview: 'OV',
+  'setup-readiness': 'KR',
+  'log-system': 'LG',
+  'command-settings': 'CM',
+  moderation: 'MD',
+  'auto-moderation': 'AM',
+  'private-rooms': 'PR',
+  'role-reactions': 'RR',
+  premium: 'PM',
+  'server-settings': 'SR',
+});
 const LOG_SYSTEM_TABS = Object.freeze([
   { id: 'moderation', label: 'Moderasyon Logları' },
   { id: 'commands', label: 'Komut Logları' },
@@ -195,25 +207,91 @@ function toLogSubtext(item = {}) {
   if (status) {
     return `Durum: ${status}`;
   }
-  return 'Detay kaydi bulunmuyor.';
+  return 'Detay kaydı bulunmuyor.';
 }
 
-function StatusBadge({ status = 'soon' }) {
+function StatusBadge({ status = 'soon', label = '' }) {
   const meta = STATUS_META[status] || STATUS_META.soon;
   return (
     <span
       className={`geass-status-badge rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${meta.className}`}
     >
-      {meta.label}
+      {label || meta.label}
     </span>
   );
 }
-function StateCard({ title, description, actionLabel, onAction, secondaryActionLabel, onSecondaryAction, detail = null }) {
+
+function PremiumButton({
+  variant = 'primary',
+  className = '',
+  type = 'button',
+  children,
+  ...props
+}) {
+  const variantClass =
+    variant === 'secondary' ? 'geass-btn geass-btn-secondary' : 'geass-btn geass-btn-primary';
+  return (
+    <button type={type} className={`${variantClass} ${className}`.trim()} {...props}>
+      {children}
+    </button>
+  );
+}
+
+function SectionHeader({ kicker = 'Kontrol Modülü', title, description = '', actions = null }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#95a8d8]">
+          {kicker}
+        </div>
+        <div className="mt-2 text-[1.6rem] font-black tracking-tight text-[#edf2ff]">{title}</div>
+        {description ? (
+          <div className="mt-1 text-sm leading-relaxed text-[#b8c4e5]">{description}</div>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+function TopCommandBar({ sectionMeta, activeGuildName, planLabel }) {
+  return (
+    <div className="geass-command-bar geass-glass-panel geass-glow-border rounded-[1.8rem] border px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-3xl">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#95a8d8]">
+            Command Protocol 7.2
+          </div>
+          <div className="mt-2 text-3xl font-black tracking-tight text-[#edf2ff] sm:text-[2.05rem]">
+            {sectionMeta.label}
+          </div>
+          <div className="mt-2 text-sm leading-relaxed text-[#b6c3e6]">
+            {sectionMeta.subtitle}. Sunucunu tek panelden yönet: moderasyon, komutlar, premium
+            özellikler ve gelecekteki kontroller tek noktada.
+          </div>
+        </div>
+
+        <div className="grid min-w-[240px] grid-cols-1 gap-2 sm:grid-cols-2">
+          <StatusPill label="Sunucu" value={activeGuildName || 'Seçilmedi'} tone="secondary" />
+          <StatusPill label="Paket" value={planLabel} tone="primary" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StateCard({
+  title,
+  description,
+  actionLabel,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+  detail = null,
+}) {
   return (
     <div className="geass-glass-panel geass-glow-border rounded-[2rem] border p-7 shadow-2xl sm:p-8">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8fa4da]">Durum</div>
-      <div className="mt-2 text-2xl font-black tracking-tight text-[#eef3ff]">{title}</div>
-      <div className="mt-3 text-sm leading-relaxed text-[#bcc7e8]">{description}</div>
+      <SectionHeader kicker="Durum" title={title} description={description} />
       {detail ? (
         <div className="geass-subpanel mt-4 rounded-2xl border px-4 py-3 text-xs text-[#c1cae9]">
           {detail}
@@ -221,25 +299,22 @@ function StateCard({ title, description, actionLabel, onAction, secondaryActionL
       ) : null}
       <div className="mt-6 flex flex-wrap gap-3">
         {actionLabel && onAction ? (
-          <button onClick={onAction} className="geass-btn geass-btn-primary">
-            {actionLabel}
-          </button>
+          <PremiumButton onClick={onAction}>{actionLabel}</PremiumButton>
         ) : null}
         {secondaryActionLabel && onSecondaryAction ? (
-          <button onClick={onSecondaryAction} className="geass-btn geass-btn-secondary">
+          <PremiumButton variant="secondary" onClick={onSecondaryAction}>
             {secondaryActionLabel}
-          </button>
+          </PremiumButton>
         ) : null}
       </div>
     </div>
   );
 }
-function Card({ title, subtitle = '', children }) {
+function Card({ title, subtitle = '', kicker = 'Kontrol Modülü', actions = null, className = '', children }) {
   return (
-    <section className="geass-glass-panel rounded-[1.6rem] border p-6 shadow-2xl">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#9eabd0]">{title}</div>
-      {subtitle ? <div className="mt-1.5 text-xs text-[#aeb9dc]">{subtitle}</div> : null}
-      <div className="mt-4">{children}</div>
+    <section className={`geass-glass-card geass-glass-panel rounded-[1.75rem] border p-5 shadow-2xl sm:p-6 ${className}`}>
+      <SectionHeader kicker={kicker} title={title} description={subtitle} actions={actions} />
+      <div className="mt-5">{children}</div>
     </section>
   );
 }
@@ -258,21 +333,58 @@ function SaveFeedback({ saveState = 'idle', message = '', idleText = '' }) {
 }
 function EmptyState({ title, description }) {
   return (
-    <div className="geass-subpanel rounded-2xl border px-4 py-5">
-      <div className="text-sm font-semibold text-[#eef3ff]">{title}</div>
-      <div className="mt-1 text-xs text-[#a8b5d8]">{description}</div>
+    <div className="geass-empty-state geass-subpanel rounded-2xl border px-4 py-5">
+      <div className="flex items-center gap-2 text-sm font-semibold text-[#eef3ff]">
+        <span className="h-2 w-2 rounded-full bg-[#8baeff] shadow-[0_0_10px_rgba(105,156,255,0.7)]" />
+        {title}
+      </div>
+      <div className="mt-2 text-xs leading-relaxed text-[#a8b5d8]">{description}</div>
     </div>
   );
 }
+
+function StatusPill({ label, value, tone = 'neutral' }) {
+  const toneByName = {
+    neutral: 'border-white/15 bg-white/6 text-[#d4defd]',
+    primary: 'border-[#cc97ff]/45 bg-[#9c48ea]/20 text-[#f0e3ff]',
+    secondary: 'border-[#699cff]/40 bg-[#699cff]/15 text-[#d6e5ff]',
+    success: 'border-emerald-400/35 bg-emerald-500/14 text-emerald-100',
+    warning: 'border-amber-400/35 bg-amber-500/14 text-amber-100',
+    danger: 'border-rose-400/35 bg-rose-500/14 text-rose-100',
+  };
+
+  return (
+    <div
+      className={`geass-status-pill rounded-xl border px-3 py-2 ${toneByName[tone] || toneByName.neutral}`}
+    >
+      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-current">{value}</div>
+    </div>
+  );
+}
+
+function FeatureTile({ title, value, description, status = 'active' }) {
+  return (
+    <div className="geass-feature-tile geass-subpanel rounded-2xl border px-4 py-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9fb0d9]">{title}</div>
+        <StatusBadge status={status} />
+      </div>
+      <div className="mt-3 text-2xl font-black tracking-tight text-[#eef3ff]">{value}</div>
+      <div className="mt-1 text-xs leading-relaxed text-[#a9b6d8]">{description}</div>
+    </div>
+  );
+}
+
 function PlaceholderItem({ title, desc, status = 'soon', placeholder = 'Bu ayar yakında aktif olacak.' }) {
   return (
-    <div className="geass-subpanel rounded-xl border px-4 py-3">
+    <div className="geass-locked-card geass-subpanel rounded-2xl border px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-semibold text-[#eef3ff]">{title}</div>
         <StatusBadge status={status} />
       </div>
-      <div className="mt-1 text-xs text-[#abb8db]">{desc}</div>
-      <div className="geass-subpanel mt-3 rounded-lg border px-3 py-2 text-xs text-[#97a6cd]">
+      <div className="mt-1 text-xs leading-relaxed text-[#aebbe0]">{desc}</div>
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-xs text-[#98a7ce]">
         {placeholder}
       </div>
     </div>
@@ -280,11 +392,11 @@ function PlaceholderItem({ title, desc, status = 'soon', placeholder = 'Bu ayar 
 }
 function Sidebar({ activeSection, setActiveSection, planLabel }) {
   return (
-    <aside className="geass-sidebar fixed left-0 top-0 z-30 hidden h-screen w-[280px] flex-col border-r lg:flex">
+    <aside className="geass-sidebar fixed left-0 top-0 z-30 hidden h-screen w-[272px] flex-col border-r lg:flex">
       <div className="geass-sidebar-brand">
         <div className="geass-sidebar-logo">G</div>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#90a3d5]">Control Hub</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#90a3d5]">Obsidian Nebula</div>
           <div className="text-xl font-black tracking-tight text-[#eef3ff]">GEASS</div>
         </div>
       </div>
@@ -304,16 +416,37 @@ function Sidebar({ activeSection, setActiveSection, planLabel }) {
               aria-current={active ? 'page' : undefined}
               className={`geass-sidebar-item w-full rounded-xl border px-3 py-3 text-left transition-all ${active ? 'is-active' : ''}`}
             >
-              <div className={`text-sm font-semibold ${active ? 'text-[#ddc5ff]' : 'text-[#e8edff]'}`}>
-                {s.label}
-              </div>
-              <div className={`mt-1 text-[11px] ${active ? 'text-[#c6a6f8]' : 'text-[#8c9ac2]'}`}>
-                {s.subtitle}
+              <div className="flex items-start gap-3">
+                <span className={`geass-sidebar-glyph ${active ? 'is-active' : ''}`}>
+                  {DASHBOARD_SECTION_CODES[s.id] || '::'}
+                </span>
+                <div className="min-w-0">
+                  <div className={`text-sm font-semibold ${active ? 'text-[#e7d5ff]' : 'text-[#e8edff]'}`}>
+                    {s.label}
+                  </div>
+                  <div className={`mt-1 text-[11px] ${active ? 'text-[#c7b0f5]' : 'text-[#8c9ac2]'}`}>
+                    {s.subtitle}
+                  </div>
+                </div>
               </div>
             </button>
           );
         })}
       </nav>
+
+      <div className="px-4 pb-5">
+        <div className="geass-subpanel rounded-xl border p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c5a8f3]">
+            Premium Katman
+          </div>
+          <div className="mt-2 text-xs leading-relaxed text-[#adb9db]">
+            Sunucunu ileri düzey otomasyon ve görünüm modlarıyla güçlendirmek için premium katman hazır.
+          </div>
+          <PremiumButton className="mt-3 w-full" disabled>
+            Upgrade to Pro
+          </PremiumButton>
+        </div>
+      </div>
     </aside>
   );
 }
@@ -403,20 +536,41 @@ export default function Dashboard() {
   const isReadyView = viewState === DASHBOARD_VIEW_STATES.READY;
   const activeSectionMeta =
     DASHBOARD_SECTIONS.find((section) => section.id === activeSection) || DASHBOARD_SECTIONS[0];
+  const runtimeOverview =
+    overview?.runtime && typeof overview.runtime === 'object' ? overview.runtime : {};
+  const runtimeHealthy = Boolean(
+    runtimeOverview?.discordGatewayReady &&
+      runtimeOverview?.controlPlaneAuthEnabled &&
+      runtimeOverview?.controlPlaneAuthConfigured
+  );
+  const capabilityKeys = Object.keys(capabilities || {});
+  const visibleCapabilityKeys = capabilityKeys.slice(0, 6);
+  const moderationLogCount = Array.isArray(logCategories.moderation?.payload?.items)
+    ? logCategories.moderation.payload.items.length
+    : 0;
+  const commandLogCount = Array.isArray(logCategories.commands?.payload?.items)
+    ? logCategories.commands.payload.items.length
+    : 0;
+  const systemLogCount = Array.isArray(logCategories.system?.payload?.items)
+    ? logCategories.system.payload.items.length
+    : 0;
 
   const renderPlaceholderSection = (sectionId) => {
     const section = PLACEHOLDER_SECTIONS[sectionId];
     return (
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Card title={section.title} subtitle={section.subtitle}>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <Card title={section.title} subtitle={section.subtitle} kicker="Yakında" className="xl:col-span-2">
           <div className="space-y-3">
             {section.items.map((item) => (
               <PlaceholderItem key={item.title} {...item} />
             ))}
           </div>
         </Card>
-        <Card title="Durum">
-          <EmptyState title="Bu ayarlar henüz panelden düzenlenemiyor" description="Bu ayar yakında aktif olacak." />
+        <Card title="Durum" subtitle="Yayın takvimi" kicker="Yol Haritası">
+          <EmptyState title="Bu ayarlar henüz panelden düzenlenemiyor" description="Bu ayar yakında aktif olacak. Tasarım olarak premium görünüme hazırlandı, canlı davranışlar sonraki aşamada açılacak." />
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-[#a8b5d7]">
+            Kontrol modülü arayüzü hazırlanırken mevcut çalışan akışlar korunur ve API davranışı değiştirilmez.
+          </div>
         </Card>
       </div>
     );
@@ -426,45 +580,104 @@ export default function Dashboard() {
     if (PLACEHOLDER_SECTIONS[activeSection]) return renderPlaceholderSection(activeSection);
     if (activeSection === 'overview') {
       return (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card title="Kullanıcı" subtitle="Kimlik ve oturum bilgisi">
-            <div className="text-xl font-black text-white">{authenticatedUserSummary?.displayName || 'Bilinmiyor'}</div>
-            <div className="mt-1 text-sm text-gray-400">@{authenticatedUserSummary?.username || 'bilinmiyor'}</div>
-            <div className="mt-4 space-y-1 text-xs text-gray-300">
-              <div>ID: {authenticatedUserSummary?.id || '-'}</div>
-              <div>Sunucu sayısı: {authenticatedUserSummary?.guildCount || 0}</div>
-              <div>Operatör sunucu: {authenticatedUserSummary?.operatorGuildCount || 0}</div>
-              <div>Oturum: {session?.id ? 'Açık' : 'Bilinmiyor'}</div>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+          <Card
+            title="Genel Bakış Komuta Merkezi"
+            subtitle="Sunucunun operasyon, erişim ve paket durumunu tek bakışta izle."
+            kicker="Sistem Özeti"
+            className="xl:col-span-8"
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FeatureTile
+                title="Kullanıcı"
+                value={authenticatedUserSummary?.displayName || 'Bilinmiyor'}
+                description={`@${authenticatedUserSummary?.username || 'bilinmiyor'} • ID: ${authenticatedUserSummary?.id || '-'}`}
+                status="active"
+              />
+              <FeatureTile
+                title="Sunucu"
+                value={selectedGuild?.name || activeGuildName || 'Sunucu bulunamadı'}
+                description={`ID: ${selectedGuild?.id || guildId || '-'} • ${canSelectGuild ? 'Çoklu sunucu' : 'Tek sunucu'}`}
+                status={selectedGuild?.isOperator ? 'active' : 'soon'}
+              />
+              <FeatureTile
+                title="Paket"
+                value={planLabel}
+                description={`Durum: ${formatPlanStatus(effectivePlan?.status)} • Kaynak: ${formatPlanSource(effectivePlan?.source)}`}
+                status={isProPlan ? 'pro' : 'active'}
+              />
+              <FeatureTile
+                title="Sistem Sağlığı"
+                value={runtimeHealthy ? 'Stabil' : 'Kontrol Gerekli'}
+                description={`Gateway: ${runtimeOverview?.discordGatewayReady ? 'Aktif' : 'Kapalı'} • Yetkilendirme: ${runtimeOverview?.controlPlaneAuthConfigured ? 'Hazır' : 'Eksik'}`}
+                status={runtimeHealthy ? 'active' : 'soon'}
+              />
+              <FeatureTile
+                title="Özellikler"
+                value={`${capabilitySummary.allowedCapabilities} / ${capabilitySummary.totalCapabilities}`}
+                description={`Kısıtlı: ${capabilitySummary.deniedCapabilities} • Aktif: ${capabilitySummary.activeCapabilities}`}
+                status={capabilitySummary.deniedCapabilities > 0 ? 'soon' : 'active'}
+              />
             </div>
           </Card>
-          <Card title="Sunucu" subtitle="Seçili sunucu özeti">
-            <div className="text-xl font-black text-white">{selectedGuild?.name || activeGuildName || 'Sunucu bulunamadı'}</div>
-            <div className="mt-4 space-y-1 text-xs text-gray-300">
-              <div>ID: {selectedGuild?.id || guildId || '-'}</div>
-              <div>Operatör yetkisi: {selectedGuild?.isOperator ? 'Evet' : 'Hayır'}</div>
-              <div>Seçim modu: {canSelectGuild ? 'Çoklu sunucu' : 'Tek sunucu'}</div>
-            </div>
-          </Card>
-          <Card title="Paket" subtitle="Mevcut plan ve erişim seviyesi">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${planTone}`}>{planLabel}</span>
-              <StatusBadge status={isProPlan ? 'pro' : 'active'} />
-            </div>
-            <div className="mt-4 space-y-1 text-xs text-gray-300">
-              <div>Durum: {formatPlanStatus(effectivePlan?.status)}</div>
-              <div>Kaynak: {formatPlanSource(effectivePlan?.source)}</div>
-              <div>Teknik kod: {effectivePlan?.reasonCode || '-'}</div>
-            </div>
-          </Card>
-          <Card title="Özellikler" subtitle="Yetki ve kapasite özeti">
-            <div className="space-y-1 text-xs text-gray-300">
-              <div>Kullanılabilir: {capabilitySummary.allowedCapabilities} / {capabilitySummary.totalCapabilities}</div>
-              <div>Kısıtlı: {capabilitySummary.deniedCapabilities}</div>
-              <div>Aktif: {capabilitySummary.activeCapabilities}</div>
-            </div>
-            <div className={`mt-4 rounded-xl border px-3 py-2 text-xs ${advancedPreferencesCapability.available ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}>{advancedText}</div>
-            <div className="mt-3 text-[10px] uppercase tracking-[0.16em] text-gray-500">Geliştirici: {Object.keys(capabilities || {}).join(', ') || 'kayıt yok'}</div>
-          </Card>
+
+          <div className="space-y-5 xl:col-span-4">
+            <Card title="Operasyon Durumu" subtitle="Canlı telemetri" kicker="İzleme">
+              <div className="grid grid-cols-1 gap-2">
+                <StatusPill
+                  label="Oturum"
+                  value={session?.id ? 'Açık' : 'Belirsiz'}
+                  tone={session?.id ? 'success' : 'warning'}
+                />
+                <StatusPill
+                  label="Operatör Yetkisi"
+                  value={selectedGuild?.isOperator ? 'Doğrulandı' : 'Kontrol Edilmeli'}
+                  tone={selectedGuild?.isOperator ? 'success' : 'warning'}
+                />
+                <StatusPill
+                  label="Plan Kaynağı"
+                  value={formatPlanSource(effectivePlan?.source)}
+                  tone="secondary"
+                />
+              </div>
+
+              <div
+                className={`mt-4 rounded-xl border px-3 py-2 text-xs ${advancedPreferencesCapability.available ? 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100' : 'border-amber-400/25 bg-amber-500/10 text-amber-100'}`}
+              >
+                {advancedText}
+              </div>
+            </Card>
+
+            <Card title="Yetenek Matrisi" subtitle="Erişim özetleri" kicker="Özellik Bayrakları">
+              {visibleCapabilityKeys.length === 0 ? (
+                <EmptyState
+                  title="Yetenek kaydı bulunamadı"
+                  description="Bu sunucu için görünür capability kaydı henüz gelmedi."
+                />
+              ) : (
+                <div className="space-y-2">
+                  {visibleCapabilityKeys.map((key) => {
+                    const isEnabled = Boolean(capabilities?.[key]);
+                    return (
+                      <div
+                        key={key}
+                        className="geass-subpanel rounded-xl border px-3 py-2 text-xs text-[#b6c3e7]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{key}</span>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${isEnabled ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100' : 'border-amber-400/35 bg-amber-500/15 text-amber-100'}`}
+                          >
+                            {isEnabled ? 'Açık' : 'Kısıtlı'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
       );
     }
@@ -472,7 +685,12 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <Card title="Log Sistemi" subtitle="Salt-okunur log ve denetim kayıtları">
+            <Card
+              title="Log Sistemi"
+              subtitle="Salt-okunur log ve denetim kayıtları"
+              kicker="Audit Akışı"
+              actions={<PremiumButton variant="secondary" onClick={refreshProtectedData}>Yenile</PremiumButton>}
+            >
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {LOG_SYSTEM_TABS.map((tab) => {
@@ -482,7 +700,7 @@ export default function Dashboard() {
                         key={tab.id}
                         onClick={() => setActiveLogTab(tab.id)}
                         className={`geass-log-tab rounded-xl border px-3 py-2 text-xs font-semibold tracking-wide transition-all ${
-                          isActive ? 'is-active border-cyan-400/40 bg-cyan-500/20 text-cyan-100' : ''
+                          isActive ? 'is-active border-[#cc97ff]/55 bg-[#9c48ea]/20 text-[#f2e8ff]' : ''
                         }`}
                       >
                         {tab.label}
@@ -532,7 +750,8 @@ export default function Dashboard() {
                         className="geass-subpanel rounded-xl border px-4 py-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-sm font-semibold text-[#eef3ff]">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-[#eef3ff]">
+                            <span className="h-2 w-2 rounded-full bg-[#8caeff] shadow-[0_0_10px_rgba(105,156,255,0.7)]" />
                             {toLogHeadline(item)}
                           </div>
                           <div className="text-[11px] text-[#a5b2d5]">
@@ -550,20 +769,17 @@ export default function Dashboard() {
               </div>
             </Card>
           </div>
-          <div className="space-y-4">
-            <Card title="Log Durumu">
-              <div className="space-y-2 text-xs text-[#c1cae8]">
-                <div>Aktif kategori: {activeLogTab}</div>
-                <div>Durum: {activeLogState}</div>
-                <div>Kayıt sayısı: {activeLogItems.length}</div>
+          <div className="space-y-5">
+            <Card title="Log Durumu" subtitle="Kategori görünümü" kicker="İzleme">
+              <div className="space-y-2">
+                <StatusPill label="Aktif Kategori" value={activeLogTab} tone="primary" />
+                <StatusPill label="Durum" value={activeLogState} tone="secondary" />
+                <StatusPill label="Kayıt Sayısı" value={String(activeLogItems.length)} tone="neutral" />
               </div>
-              <div className="mt-4">
-                <button
-                  onClick={refreshProtectedData}
-                  className="geass-btn geass-btn-secondary"
-                >
-                  Yenile
-                </button>
+              <div className="mt-4 space-y-2 text-xs text-[#bcc8e9]">
+                <div>Moderasyon kayıtları: {moderationLogCount}</div>
+                <div>Komut kayıtları: {commandLogCount}</div>
+                <div>Sistem olayları: {systemLogCount}</div>
               </div>
             </Card>
             <DeveloperNote>
@@ -583,13 +799,13 @@ export default function Dashboard() {
       if (setupReadinessState === 'loading') {
         return (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <Card title="Kurulum Durumu">
+            <Card title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Readiness">
               <EmptyState
                 title="Kurulum denetimi yükleniyor"
                 description="Sunucu kurulum kontrolleri güvenli modda getiriliyor."
               />
             </Card>
-            <Card title="Bilgi">
+            <Card title="Bilgi" subtitle="Mevcut kapsam" kicker="Not">
               <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
                 Bu ekran şimdilik sadece kurulum durumunu gösterir. Ayarları değiştirme özelliği sonraki aşamada eklenecek.
               </div>
@@ -600,18 +816,18 @@ export default function Dashboard() {
       if (setupReadinessState === 'error') {
         return (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <Card title="Kurulum Durumu">
+            <Card title="Kurulum Durumu" subtitle="Sunucu kurulum kontrolleri" kicker="Readiness">
               <EmptyState
                 title="Kurulum denetimi okunamadı"
                 description={setupReadinessLoadError?.message || 'Kurulum verisi geçici olarak okunamadı.'}
               />
             </Card>
-            <Card title="Bilgi">
+            <Card title="Bilgi" subtitle="Mevcut kapsam" kicker="Not">
               <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
                 Bu ekran şimdilik sadece kurulum durumunu gösterir. Ayarları değiştirme özelliği sonraki aşamada eklenecek.
               </div>
               <div className="mt-3">
-                <button onClick={refreshProtectedData} className="geass-btn geass-btn-secondary">Yenile</button>
+                <PremiumButton variant="secondary" onClick={refreshProtectedData}>Yenile</PremiumButton>
               </div>
             </Card>
           </div>
@@ -620,7 +836,7 @@ export default function Dashboard() {
 
       return (
         <div className="space-y-5">
-          <Card title="Kurulum Durumu" subtitle="Salt-okunur kurulum özeti">
+          <Card title="Kurulum Durumu" subtitle="Salt-okunur kurulum özeti" kicker="Diagnostic Core">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-2xl font-black tracking-tight text-[#eef3ff]">{setupReadinessStatusLabel}</div>
               <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${setupReadinessBadgeMeta.className}`}>
@@ -629,12 +845,12 @@ export default function Dashboard() {
             </div>
             <div className="geass-subpanel mt-4 rounded-2xl border p-4">
               <div className="flex items-center justify-between text-xs text-[#bec8e7]">
-                <span>Skor</span>
+                <span>Readiness Skoru</span>
                 <span className="font-semibold text-[#edf2ff]">{Math.round(setupReadinessScore)}%</span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-white/10">
                 <div
-                  className="h-2 rounded-full bg-cyan-400/80 transition-all"
+                  className="h-2 rounded-full bg-gradient-to-r from-[#699cff] to-[#cc97ff] transition-all"
                   style={{ width: `${setupReadinessScore}%` }}
                 />
               </div>
@@ -650,7 +866,7 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card title="Kurulum Kartları" subtitle="Alan bazlı denetim sonucu">
+          <Card title="Kurulum Kartları" subtitle="Alan bazlı denetim sonucu" kicker="Modül Kontrolleri">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {setupReadinessSections.map((section) => {
                 const sectionBadge = toSetupReadinessBadge(section?.status);
@@ -681,7 +897,7 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card title="Sorun Listesi" subtitle="Tespit edilen eksik veya uyarı kalemleri">
+          <Card title="Sorun Listesi" subtitle="Tespit edilen eksik veya uyarı kalemleri" kicker="Uyarılar">
             {setupReadinessIssues.length === 0 ? (
               <EmptyState
                 title="Sorun bulunamadı"
@@ -711,7 +927,7 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <Card title="Komut Ayarları" subtitle="Gerçek komut kontrol merkezi">
+            <Card title="Komut Ayarları" subtitle="Gerçek komut kontrol merkezi" kicker="Command Module">
               <div className="space-y-5">
                 <div className="geass-subpanel rounded-2xl border px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -751,25 +967,40 @@ export default function Dashboard() {
                       </select>
                     </label>
                   </div>
-                  <div className="mt-4 space-y-1 text-xs text-[#c2ccea]">
-                    <div>Etkin mod: {statusModeLabel}</div>
-                    <div>Komut durumu: {statusEnabled ? 'Açık' : 'Kapalı'}</div>
-                    <div>Güncellenme zamanı: {statusCommandSettings?.updatedAt || '-'}</div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
+                    <StatusPill label="Etkin Mod" value={statusModeLabel} tone="secondary" />
+                    <StatusPill
+                      label="Komut Durumu"
+                      value={statusEnabled ? 'Açık' : 'Kapalı'}
+                      tone={statusEnabled ? 'success' : 'danger'}
+                    />
+                    <StatusPill
+                      label="Güncellendi"
+                      value={statusCommandSettings?.updatedAt || '-'}
+                      tone="neutral"
+                    />
                   </div>
                 </div>
                 <div className="geass-subpanel rounded-xl border px-3 py-2 text-xs text-[#97a6cc]">
                   Yakında: diğer komutlar için ayarlar bu alana eklenecek.
                 </div>
                 <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <button onClick={saveStatusCommandSettings} disabled={!canSaveSettings || statusCommandSaveState === 'saving'} className="geass-btn geass-btn-primary disabled:opacity-60">{statusCommandSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</button>
-                  <button onClick={refreshProtectedData} className="geass-btn geass-btn-secondary">Yenile</button>
+                  <PremiumButton onClick={saveStatusCommandSettings} disabled={!canSaveSettings || statusCommandSaveState === 'saving'} className="disabled:opacity-60">{statusCommandSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</PremiumButton>
+                  <PremiumButton variant="secondary" onClick={refreshProtectedData}>Yenile</PremiumButton>
                 </div>
               </div>
             </Card>
           </div>
-          <div className="space-y-4">
-            <Card title="Kaydetme Durumu">
+          <div className="space-y-5">
+            <Card title="Kaydetme Durumu" subtitle="Komut ayar yanıtı" kicker="Durum">
               <SaveFeedback saveState={statusCommandSaveState} message={statusCommandSaveMessage} idleText="Durum komutu ayarları buradan kaydedilir." />
+            </Card>
+            <Card title="Etkin Durum" subtitle="Anlık özet" kicker="Runtime">
+              <div className="space-y-2 text-xs text-[#c1cae8]">
+                <div>Komut: .durum</div>
+                <div>Etkin mod: {statusModeLabel}</div>
+                <div>Komut durumu: {statusEnabled ? 'Açık' : 'Kapalı'}</div>
+              </div>
             </Card>
             <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/bot-settings/commands</DeveloperNote>
           </div>
@@ -778,28 +1009,54 @@ export default function Dashboard() {
     }
     if (activeSection === 'premium') {
       return (
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <Card title="Paketler" subtitle="Mevcut plan görünümü">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-5">
+          <Card title="Paketler" subtitle="Mevcut plan görünümü" kicker="Premium Katman">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className={`rounded-xl border p-4 ${isProPlan ? 'geass-subpanel border-white/10 bg-white/5' : 'border-amber-400/25 bg-amber-500/10'}`}>
                 <div className="text-sm font-semibold text-[#eef3ff]">Ücretsiz Paket</div>
                 <div className="mt-2 text-xs text-[#bfcae8]">Temel panel özellikleri ve standart yönetim akışı.</div>
-                <div className="mt-3"><StatusBadge status={isProPlan ? 'off' : 'active'} /></div>
+                <div className="mt-4 flex items-center justify-between">
+                  <StatusBadge status={isProPlan ? 'off' : 'active'} />
+                  <div className="text-xs text-[#9fb0d9]">$0 / ay</div>
+                </div>
               </div>
-              <div className={`rounded-xl border p-4 ${isProPlan ? 'border-cyan-400/25 bg-cyan-500/10' : 'geass-subpanel border-white/10 bg-white/5'}`}>
+              <div className={`rounded-xl border p-4 ${isProPlan ? 'border-cyan-400/35 bg-cyan-500/12 shadow-[0_0_30px_rgba(105,156,255,0.2)]' : 'border-[#cc97ff]/40 bg-[#9c48ea]/18 shadow-[0_0_30px_rgba(156,72,234,0.25)]'}`}>
                 <div className="text-sm font-semibold text-[#eef3ff]">Pro Paket</div>
-                <div className="mt-2 text-xs text-[#bfcae8]">Gelişmiş otomasyon, premium görünüm ve kilitli özellikler.</div>
-                <div className="mt-3"><StatusBadge status={isProPlan ? 'active' : 'pro'} /></div>
+                <div className="mt-2 text-xs text-[#d3ddff]">Gelişmiş otomasyon, premium görünüm ve kilitli özellikler.</div>
+                <div className="mt-4 flex items-center justify-between">
+                  <StatusBadge status={isProPlan ? 'active' : 'pro'} />
+                  <div className="text-xs text-[#cfbbff]">$9.99 / ay</div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="text-sm font-semibold text-[#eef3ff]">Kurumsal Paket</div>
+                <div className="mt-2 text-xs text-[#bfcae8]">Ölçeklenebilir altyapı ve özel destek seçenekleri.</div>
+                <div className="mt-4 flex items-center justify-between">
+                  <StatusBadge status="soon" />
+                  <div className="text-xs text-[#9fb0d9]">İletişime geç</div>
+                </div>
               </div>
             </div>
-            <div className="mt-4 text-xs text-[#c2cceb]">Aktif plan: <span className="font-semibold text-[#eef3ff]">{planLabel}</span></div>
+            <div className="mt-4 text-xs text-[#c2cceb]">Aktif plan: <span className={`rounded-full border px-2 py-0.5 font-semibold ${planTone}`}>{planLabel}</span></div>
           </Card>
-          <Card title="Kilitli Özellikler" subtitle="Pro gerektiren alanlar">
-            <div className="space-y-3">
-              <PlaceholderItem title="Gelişmiş panel tercihleri" desc="Alternatif yerleşim ve premium görünüm modları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
-              <PlaceholderItem title="Akıllı oto moderasyon" desc="Pro seviyesinde güvenlik kuralları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
-            </div>
-          </Card>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <Card title="Kilitli Özellikler" subtitle="Pro gerektiren alanlar" kicker="Capabilities">
+              <div className="space-y-3">
+                <PlaceholderItem title="Gelişmiş panel tercihleri" desc="Alternatif yerleşim ve premium görünüm modları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
+                <PlaceholderItem title="Akıllı oto moderasyon" desc="Pro seviyesinde güvenlik kuralları." status={isProPlan ? 'active' : 'pro'} placeholder={isProPlan ? 'Bu özellik paketinize açık.' : 'Bu özellik Pro pakette kullanılabilir.'} />
+              </div>
+            </Card>
+            <Card title="Yükseltme Merkezi" subtitle="CTA placeholder" kicker="Upgrade">
+              <div className="geass-subpanel rounded-2xl border p-4 text-sm leading-relaxed text-[#b8c4e6]">
+                Daha yüksek otomasyon kapasitesi, premium HUD düzenleri ve gelişmiş log zekası için yükseltme merkezi hazırlanıyor.
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <PremiumButton disabled className="disabled:opacity-70">Upgrade Yakında</PremiumButton>
+                <PremiumButton variant="secondary" disabled className="disabled:opacity-70">Paketleri Karşılaştır</PremiumButton>
+              </div>
+            </Card>
+          </div>
         </div>
       );
     }
@@ -807,7 +1064,7 @@ export default function Dashboard() {
       return (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <Card title="Sunucu Ayarları" subtitle="Panel Tercihleri (aktif)">
+            <Card title="Sunucu Ayarları" subtitle="Panel Tercihleri (aktif)" kicker="Preferences" actions={<StatusBadge status={advancedPreferencesCapability.available ? 'active' : 'pro'} label={advancedPreferencesCapability.available ? 'Premium Açık' : 'Pro Gerekli'} />}>
               <div className="space-y-4">
                 <label className="block text-xs font-semibold tracking-wide text-[#c2ccea]">
                   Varsayılan Sekme
@@ -833,14 +1090,14 @@ export default function Dashboard() {
                 </label>
                 {!advancedPreferencesCapability.available ? <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">Bu özellik Pro pakette kullanılabilir.</div> : null}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <button onClick={savePreferences} disabled={!canSaveSettings || preferencesSaveState === 'saving'} className="geass-btn geass-btn-primary disabled:opacity-60">{preferencesSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</button>
-                  <button onClick={refreshProtectedData} className="geass-btn geass-btn-secondary">Yenile</button>
+                  <PremiumButton onClick={savePreferences} disabled={!canSaveSettings || preferencesSaveState === 'saving'} className="disabled:opacity-60">{preferencesSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}</PremiumButton>
+                  <PremiumButton variant="secondary" onClick={refreshProtectedData}>Yenile</PremiumButton>
                 </div>
               </div>
             </Card>
           </div>
-          <div className="space-y-4">
-            <Card title="Kaydetme Durumu">
+          <div className="space-y-5">
+            <Card title="Kaydetme Durumu" subtitle="Tercih işlemleri" kicker="Durum">
               <SaveFeedback saveState={preferencesSaveState} message={preferencesSaveMessage} idleText="Sunucu tercihleriniz burada kaydedilir." />
             </Card>
             <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/preferences</DeveloperNote>
@@ -881,7 +1138,7 @@ export default function Dashboard() {
         withSidebar={isReadyView}
       />
 
-      <div className={`relative z-10 px-4 pb-16 pt-[142px] sm:px-6 lg:px-8 ${isReadyView ? 'lg:pl-[304px]' : ''}`}>
+      <div className={`relative z-10 px-4 pb-16 pt-[148px] sm:px-6 lg:px-8 ${isReadyView ? 'lg:pl-[296px]' : ''}`}>
         <div className="mx-auto max-w-[1380px]">
           <SystemHealthCard
             overview={overview}
@@ -914,17 +1171,7 @@ export default function Dashboard() {
             ) : null}
             {viewState === DASHBOARD_VIEW_STATES.READY ? (
               <section className="space-y-5">
-                <div className="geass-glass-panel geass-glow-border rounded-[1.7rem] border px-6 py-5">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#93a6d7]">
-                    Premium Dashboard Shell
-                  </div>
-                  <div className="mt-2 text-3xl font-black tracking-tight text-[#edf2ff]">
-                    {activeSectionMeta.label}
-                  </div>
-                  <div className="mt-2 max-w-3xl text-sm text-[#b5c2e4]">
-                    {activeSectionMeta.subtitle}. Sunucunu tek panelden yönet: moderasyon, komutlar, premium özellikler ve gelecekteki kontroller tek noktada.
-                  </div>
-                </div>
+                <TopCommandBar sectionMeta={activeSectionMeta} activeGuildName={activeGuildName} planLabel={planLabel} />
 
                 <div className="geass-mobile-tabs geass-glass-panel rounded-2xl border p-3 lg:hidden">
                   <div className="flex flex-wrap gap-2">

@@ -1,8 +1,8 @@
-function HealthBadge({ label, status = 'ok' }) {
+﻿function HealthBadge({ label, status = 'ok' }) {
   const styleByStatus = {
-    ok: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100',
-    warn: 'border-amber-400/35 bg-amber-500/15 text-amber-100',
-    err: 'border-rose-400/35 bg-rose-500/15 text-rose-100',
+    ok: 'border-emerald-400/40 bg-emerald-500/12 text-emerald-100',
+    warn: 'border-amber-400/40 bg-amber-500/12 text-amber-100',
+    err: 'border-rose-400/40 bg-rose-500/12 text-rose-100',
   };
   const dotByStatus = {
     ok: 'bg-emerald-300',
@@ -10,7 +10,7 @@ function HealthBadge({ label, status = 'ok' }) {
     err: 'bg-rose-300',
   };
   const textByStatus = {
-    ok: 'OK',
+    ok: 'Stabil',
     warn: 'Bekliyor',
     err: 'Hata',
   };
@@ -18,7 +18,7 @@ function HealthBadge({ label, status = 'ok' }) {
   const resolvedStatus = statusByName(status);
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${styleByStatus[resolvedStatus]}`}
+      className={`geass-status-pill inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${styleByStatus[resolvedStatus]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${dotByStatus[resolvedStatus]}`} />
       {label}: {textByStatus[resolvedStatus]}
@@ -65,7 +65,7 @@ export default function SystemHealthCard({
   });
 
   return (
-    <section className="geass-glass-panel geass-health-shell mt-6 rounded-[1.5rem] border px-4 py-4 shadow-2xl sm:px-5">
+    <section className="geass-glass-panel geass-health-shell mt-6 rounded-[1.6rem] border px-4 py-4 shadow-2xl sm:px-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9cadcf]">
           Sistem Sağlığı
