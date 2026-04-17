@@ -13,7 +13,7 @@ test('dashboard source includes read-only setup readiness section wiring', () =>
 
   assert.equal(dashboardPageSource.includes("id: 'setup-readiness'"), true);
   assert.equal(
-    dashboardPageSource.includes('Bu ekran simdilik sadece kurulum durumunu gosterir'),
+    dashboardPageSource.includes('Bu ekran şimdilik sadece kurulum durumunu gösterir'),
     true
   );
   assert.equal(

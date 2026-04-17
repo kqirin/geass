@@ -65,14 +65,12 @@ export default function SystemHealthCard({
   });
 
   return (
-    <section className="mt-6 rounded-[1.4rem] border border-white/10 bg-[#121221]/90 px-4 py-3 shadow-xl shadow-black/20">
+    <section className="geass-glass-panel geass-health-shell mt-6 rounded-[1.5rem] border px-4 py-4 shadow-2xl sm:px-5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/65">
+        <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9cadcf]">
           Sistem Sağlığı
         </span>
-        <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/80">
-          Başlangıç: {startupPhase}
-        </span>
+        <span className="geass-chip geass-chip-muted">Başlangıç: {startupPhase}</span>
         <HealthBadge label="Gateway" status={gatewayReady ? 'ok' : 'err'} />
         <HealthBadge
           label="Yetkilendirme"
@@ -83,7 +81,7 @@ export default function SystemHealthCard({
           status={mutableRoutesEnabled ? settingsSaveStatus : 'err'}
         />
         {runtime ? null : (
-          <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-300">
+          <span className="geass-chip geass-chip-muted">
             Durum: {viewState === 'loading' ? 'Yükleniyor' : 'Veri yok'}
           </span>
         )}

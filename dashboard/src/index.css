@@ -1,1 +1,361 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --geass-bg: #040a18;
+  --geass-bg-deep: #060e20;
+  --geass-surface: #091328;
+  --geass-surface-strong: #111a33;
+  --geass-card: rgba(17, 26, 51, 0.78);
+  --geass-border: rgba(188, 205, 255, 0.14);
+  --geass-border-strong: rgba(204, 151, 255, 0.35);
+  --geass-primary: #cc97ff;
+  --geass-primary-strong: #9c48ea;
+  --geass-blue: #699cff;
+  --geass-text: #eaf1ff;
+  --geass-text-muted: #aab6d9;
+  --geass-shadow: 0 20px 45px rgba(3, 7, 20, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  color: var(--geass-text);
+  background: var(--geass-bg);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.geass-dashboard-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(1200px 500px at 8% -10%, rgba(156, 72, 234, 0.18), transparent 55%),
+    radial-gradient(900px 480px at 95% 5%, rgba(105, 156, 255, 0.16), transparent 52%),
+    linear-gradient(180deg, #040a18 0%, #060e20 42%, #070f23 100%);
+}
+
+.geass-dashboard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(580px 340px at 16% 30%, rgba(156, 72, 234, 0.13), transparent 70%),
+    radial-gradient(640px 360px at 88% 72%, rgba(105, 156, 255, 0.11), transparent 70%);
+}
+
+.geass-top-header {
+  padding: 0.9rem 1rem 0;
+  pointer-events: none;
+}
+
+.geass-top-header-inner {
+  max-width: 1380px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(188, 205, 255, 0.12);
+  background: rgba(6, 14, 32, 0.68);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 14px 40px rgba(5, 10, 24, 0.5);
+  pointer-events: auto;
+}
+
+@media (min-width: 768px) {
+  .geass-top-header-inner {
+    border-radius: 1.35rem;
+    padding: 1rem 1.25rem;
+  }
+}
+
+.geass-brand-badge {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.85rem;
+  display: grid;
+  place-items: center;
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #280145;
+  background: linear-gradient(140deg, #cc97ff, #9c48ea);
+  box-shadow: 0 10px 24px rgba(156, 72, 234, 0.42);
+}
+
+.geass-header-kicker {
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: #91a5d8;
+  font-weight: 600;
+}
+
+.geass-header-title {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 1.22rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #f0f4ff;
+}
+
+.geass-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.34rem 0.7rem;
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.geass-chip-muted {
+  border-color: rgba(170, 187, 227, 0.25);
+  color: #b9c7eb;
+  background: rgba(143, 157, 195, 0.13);
+}
+
+.geass-chip-primary {
+  border-color: rgba(204, 151, 255, 0.42);
+  color: #e8d9ff;
+  background: linear-gradient(135deg, rgba(156, 72, 234, 0.36), rgba(105, 156, 255, 0.24));
+  box-shadow: 0 0 12px rgba(156, 72, 234, 0.24);
+}
+
+.geass-user-card {
+  min-width: 0;
+  max-width: min(290px, 90vw);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.68rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(181, 196, 235, 0.18);
+  background: rgba(17, 26, 51, 0.66);
+}
+
+.geass-user-avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: 0 0 auto;
+  border-radius: 0.8rem;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #f3e6ff;
+  border: 1px solid rgba(204, 151, 255, 0.35);
+  background: linear-gradient(150deg, rgba(156, 72, 234, 0.75), rgba(105, 156, 255, 0.6));
+}
+
+.geass-btn {
+  border-radius: 0.95rem;
+  border: 1px solid transparent;
+  padding: 0.72rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  transition: all 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.geass-btn:hover {
+  transform: translateY(-1px);
+}
+
+.geass-btn:active {
+  transform: translateY(0);
+}
+
+.geass-btn-primary {
+  border-color: rgba(204, 151, 255, 0.4);
+  color: #230139;
+  background: linear-gradient(135deg, #cc97ff, #9c48ea);
+  box-shadow: 0 10px 25px rgba(156, 72, 234, 0.3);
+}
+
+.geass-btn-primary:hover {
+  box-shadow: 0 12px 30px rgba(156, 72, 234, 0.4);
+  filter: brightness(1.03);
+}
+
+.geass-btn-secondary {
+  border-color: rgba(177, 193, 230, 0.25);
+  color: #d6e0ff;
+  background: rgba(93, 112, 156, 0.16);
+}
+
+.geass-btn-secondary:hover {
+  background: rgba(120, 139, 184, 0.22);
+}
+
+.geass-glass-panel {
+  border-color: var(--geass-border);
+  background: linear-gradient(
+    160deg,
+    rgba(17, 26, 51, 0.82) 0%,
+    rgba(10, 18, 36, 0.78) 100%
+  );
+  backdrop-filter: blur(18px);
+  box-shadow: var(--geass-shadow);
+}
+
+.geass-glow-border {
+  position: relative;
+}
+
+.geass-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(120deg, rgba(204, 151, 255, 0.26), rgba(105, 156, 255, 0.14), transparent) border-box;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.geass-subpanel {
+  border-color: rgba(172, 188, 226, 0.17);
+  background: rgba(9, 19, 40, 0.72);
+}
+
+.geass-health-shell {
+  background: linear-gradient(140deg, rgba(16, 26, 50, 0.82), rgba(8, 16, 33, 0.8));
+}
+
+.geass-status-badge {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.geass-sidebar {
+  padding: 1rem 0 0;
+  background:
+    linear-gradient(180deg, rgba(6, 14, 32, 0.95) 0%, rgba(7, 15, 35, 0.96) 100%),
+    radial-gradient(420px 260px at 20% 0%, rgba(156, 72, 234, 0.23), transparent 75%);
+  backdrop-filter: blur(16px);
+  box-shadow: inset -1px 0 0 rgba(188, 205, 255, 0.1);
+}
+
+.geass-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.2rem 1rem 0.85rem;
+}
+
+.geass-sidebar-logo {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.85rem;
+  display: grid;
+  place-items: center;
+  color: #2a0145;
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 700;
+  background: linear-gradient(150deg, #cc97ff, #9c48ea);
+  box-shadow: 0 9px 22px rgba(156, 72, 234, 0.35);
+}
+
+.geass-sidebar-item {
+  border-color: rgba(153, 170, 212, 0.17);
+  background: rgba(12, 21, 42, 0.58);
+}
+
+.geass-sidebar-item:hover {
+  border-color: rgba(177, 192, 227, 0.3);
+  background: rgba(19, 31, 59, 0.76);
+}
+
+.geass-sidebar-item.is-active {
+  border-color: rgba(204, 151, 255, 0.4);
+  background: linear-gradient(130deg, rgba(156, 72, 234, 0.32), rgba(69, 112, 184, 0.24));
+  box-shadow: 0 0 15px rgba(156, 72, 234, 0.25);
+}
+
+.geass-log-tab {
+  border-color: rgba(151, 167, 210, 0.2);
+  color: #c6d2f2;
+  background: rgba(14, 25, 49, 0.56);
+}
+
+.geass-log-tab:hover {
+  border-color: rgba(170, 187, 227, 0.35);
+  background: rgba(26, 40, 70, 0.72);
+}
+
+.geass-log-tab.is-active {
+  box-shadow: 0 0 14px rgba(105, 156, 255, 0.25);
+}
+
+.geass-input {
+  border: 1px solid rgba(169, 185, 227, 0.2);
+  border-radius: 1rem;
+  padding: 0.72rem 0.92rem;
+  font-size: 0.86rem;
+  color: #e6edff;
+  background: rgba(7, 15, 31, 0.83);
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
+}
+
+.geass-input:hover {
+  border-color: rgba(194, 209, 243, 0.35);
+}
+
+.geass-input:focus {
+  border-color: rgba(204, 151, 255, 0.6);
+  box-shadow: 0 0 0 4px rgba(156, 72, 234, 0.16);
+}
+
+.geass-select {
+  appearance: none;
+}
+
+.geass-select option {
+  color: #dfe8ff;
+  background: #0d1730;
+}
+
+.geass-mobile-tabs {
+  background: rgba(10, 20, 40, 0.76);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(153, 167, 206, 0.35);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(188, 205, 248, 0.45);
+}

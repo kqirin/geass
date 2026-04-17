@@ -12,15 +12,15 @@ test('dashboard source includes real read-only log-system section states', () =>
   const dashboardPageSource = fs.readFileSync(dashboardPagePath, 'utf8');
 
   assert.equal(dashboardPageSource.includes("id: 'log-system'"), true);
-  assert.equal(dashboardPageSource.includes('Moderasyon Loglari'), true);
-  assert.equal(dashboardPageSource.includes('Komut Loglari'), true);
-  assert.equal(dashboardPageSource.includes('Sistem Olaylari'), true);
+  assert.equal(dashboardPageSource.includes('Moderasyon Logları'), true);
+  assert.equal(dashboardPageSource.includes('Komut Logları'), true);
+  assert.equal(dashboardPageSource.includes('Sistem Olayları'), true);
 
-  assert.equal(dashboardPageSource.includes('Log kayitlari yukleniyor'), true);
-  assert.equal(dashboardPageSource.includes('Log kayitlari okunamadi'), true);
-  assert.equal(dashboardPageSource.includes('Kaynak aktif degil'), true);
+  assert.equal(dashboardPageSource.includes('Log kayıtları yükleniyor'), true);
+  assert.equal(dashboardPageSource.includes('Log kayıtları okunamadı'), true);
+  assert.equal(dashboardPageSource.includes('Kaynak aktif değil'), true);
   assert.equal(
-    dashboardPageSource.includes('Bu sunucuda hen\\u00fcz kay\\u0131t bulunmuyor.'),
+    dashboardPageSource.includes('Bu sunucuda henüz kayıt bulunmuyor.'),
     true
   );
 
