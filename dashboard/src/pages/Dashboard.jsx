@@ -15,6 +15,14 @@ import {
   getSetupReadinessStatusLabel,
   resolveSetupReadinessSectionState,
 } from '../lib/setupReadinessViewModel.js';
+import {
+  MESSAGE_AUTOMATION_MODULES,
+  MESSAGE_AUTOMATION_PREVIEW_CONTEXT,
+  createDefaultMessageAutomationSettings,
+  isHexColor,
+  normalizeMessageAutomationSettings,
+  resolveMessageAutomationVariables,
+} from '../lib/messageAutomationViewModel.js';
 
 const DEFAULT_VIEW_OPTIONS = ['overview', 'guild', 'features', 'resources', 'protected_overview'];
 const DEFAULT_VIEW_OPTION_LABELS = Object.freeze({
@@ -29,6 +37,7 @@ const DASHBOARD_SECTIONS = Object.freeze([
   { id: 'setup-readiness', label: 'Kurulum Durumu', subtitle: 'Salt-okunur kurulum denetimi' },
   { id: 'log-system', label: 'Log Sistemi', subtitle: 'Kayıt ve denetim akışları' },
   { id: 'command-settings', label: 'Komut Ayarları', subtitle: 'Komut görünüm ayarları' },
+  { id: 'message-automation', label: 'Mesaj Otomasyonu', subtitle: 'Hoş geldin, hoşça kal ve boost ayarları' },
   { id: 'moderation', label: 'Moderasyon', subtitle: 'Moderasyon kontrol merkezi' },
   { id: 'auto-moderation', label: 'Oto Moderasyon', subtitle: 'Otomatik güvenlik kuralları' },
   { id: 'private-rooms', label: 'Özel Oda Sistemi', subtitle: 'Özel oda yönetimi' },
@@ -41,6 +50,7 @@ const DASHBOARD_SECTION_CODES = Object.freeze({
   'setup-readiness': 'KR',
   'log-system': 'LG',
   'command-settings': 'CM',
+  'message-automation': 'MO',
   moderation: 'MD',
   'auto-moderation': 'AM',
   'private-rooms': 'PR',
@@ -53,6 +63,7 @@ const DASHBOARD_SECTION_ICONS = Object.freeze({
   'setup-readiness': 'diagnosis',
   'log-system': 'monitoring',
   'command-settings': 'terminal',
+  'message-automation': 'chat',
   moderation: 'security',
   'auto-moderation': 'gpp_good',
   'private-rooms': 'meeting_room',
@@ -239,6 +250,104 @@ function toLogSubtext(item = {}) {
   return 'Detay kaydı bulunmuyor.';
 }
 
+function normalizePreviewImageUrl(value = '') {
+  if (typeof value !== 'string') return null;
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) return null;
+
+  try {
+    const parsed = new URL(normalizedValue);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function MessageAutomationPreview({ moduleSettings = {}, moduleLabel = '' }) {
+  const source = moduleSettings && typeof moduleSettings === 'object' ? moduleSettings : {};
+  const embedSource = source.embed && typeof source.embed === 'object' ? source.embed : {};
+
+  const resolvedPlainMessage = resolveMessageAutomationVariables(
+    String(source.plainMessage || ''),
+    MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+  );
+  const resolvedEmbedTitle = resolveMessageAutomationVariables(
+    String(embedSource.title || ''),
+    MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+  );
+  const resolvedEmbedDescription = resolveMessageAutomationVariables(
+    String(embedSource.description || ''),
+    MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+  );
+  const resolvedEmbedFooter = resolveMessageAutomationVariables(
+    String(embedSource.footer || ''),
+    MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+  );
+  const embedColor = isHexColor(embedSource.color) ? embedSource.color : '#7c3aed';
+  const previewImageUrl = normalizePreviewImageUrl(embedSource.imageUrl || '');
+  const showThumbnail = embedSource.thumbnailMode === 'user_avatar';
+
+  return (
+    <div className="geass-discord-preview rounded-2xl border border-[#2b2d31] bg-[#313338] p-4">
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#cc97ff] to-[#699cff] text-sm font-black text-[#10121a]">
+          G
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-[#f2f3f5]">GEASS</span>
+            <span className="rounded border border-[#4f545c] bg-[#3f4147] px-1.5 py-0.5 text-[10px] font-semibold text-[#dbdee1]">
+              BOT
+            </span>
+            <span className="text-[#949ba4]">bugün {MESSAGE_AUTOMATION_PREVIEW_CONTEXT.date}</span>
+          </div>
+          <div className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[#dbdee1]">
+            {resolvedPlainMessage || `${moduleLabel} mesaj içeriği boş`}
+          </div>
+
+          {embedSource.enabled ? (
+            <div
+              className="mt-2 overflow-hidden rounded-md border border-[#1e1f22] bg-[#2b2d31]"
+              style={{ borderLeftWidth: '4px', borderLeftColor: embedColor }}
+            >
+              <div className="p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-semibold text-[#f2f3f5]">
+                      {resolvedEmbedTitle || 'Başlık'}
+                    </div>
+                    <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[#dbdee1]">
+                      {resolvedEmbedDescription || 'Açıklama'}
+                    </div>
+                  </div>
+                  {showThumbnail ? (
+                    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#4f545c] bg-[#1e1f22] text-sm font-bold text-[#d3d7de]">
+                      K
+                    </div>
+                  ) : null}
+                </div>
+                {previewImageUrl ? (
+                  <div className="mt-3 overflow-hidden rounded-md border border-[#1e1f22]">
+                    <img
+                      src={previewImageUrl}
+                      alt="Önizleme görseli"
+                      className="h-40 w-full object-cover"
+                    />
+                  </div>
+                ) : null}
+                <div className="mt-3 text-xs text-[#949ba4]">
+                  {resolvedEmbedFooter || MESSAGE_AUTOMATION_PREVIEW_CONTEXT.server_name}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status = 'soon', label = '' }) {
   const meta = STATUS_META[status] || STATUS_META.soon;
   return (
@@ -295,6 +404,7 @@ function TopCommandBar({
     'setup-readiness': 'Kurulum Durumu',
     'log-system': 'Log Sistemi',
     'command-settings': 'Komut Ayarları',
+    'message-automation': 'Mesaj Otomasyonu',
     premium: 'Premium Merkezi',
   };
   const heroTitle = heroTitleBySection[sectionMeta?.id] || sectionMeta?.label;
@@ -528,6 +638,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('overview');
   const [activeLogTab, setActiveLogTab] = useState('moderation');
+  const [activeMessageAutomationTab, setActiveMessageAutomationTab] = useState('welcome');
   const {
     viewState, isAuthLoading, isProtectedLoading, authStatus, authError, protectedError, toast,
     login, logout, refreshAuth, refreshProtectedData, guilds, guildId, setGuildId, canSelectGuild, singleGuildMode,
@@ -538,6 +649,9 @@ export default function Dashboard() {
     statusCommandSettings, statusCommandEnabledDraft, setStatusCommandEnabledDraft,
     statusCommandDetailModeDraft, setStatusCommandDetailModeDraft,
     statusCommandSaveState, statusCommandSaveMessage, saveStatusCommandSettings,
+    messageAutomationSettings, messageAutomationLoadError, messageAutomationDraft,
+    setMessageAutomationDraft, messageAutomationSaveState, messageAutomationSaveMessage,
+    saveMessageAutomationModule,
   } = useDashboardData({ navigate });
 
   const isAuthenticated = Boolean(authenticatedUserSummary?.id);
@@ -557,6 +671,42 @@ export default function Dashboard() {
         ? statusCommandSettings.effective.enabled
         : Boolean(statusCommandEnabledDraft);
   const selectedGuild = useMemo(() => guilds.find((g) => String(g?.id || '') === String(guildId || '')) || null, [guildId, guilds]);
+  const normalizedMessageAutomationDraft = useMemo(() => {
+    return normalizeMessageAutomationSettings(
+      messageAutomationDraft || createDefaultMessageAutomationSettings()
+    );
+  }, [messageAutomationDraft]);
+  const activeMessageAutomationModule = useMemo(() => {
+    if (!MESSAGE_AUTOMATION_MODULES.some((entry) => entry.id === activeMessageAutomationTab)) {
+      return normalizeMessageAutomationSettings(createDefaultMessageAutomationSettings()).welcome;
+    }
+    return (
+      normalizedMessageAutomationDraft[activeMessageAutomationTab]
+      || normalizeMessageAutomationSettings(createDefaultMessageAutomationSettings()).welcome
+    );
+  }, [activeMessageAutomationTab, normalizedMessageAutomationDraft]);
+  const messageAutomationEmbed =
+    activeMessageAutomationModule?.embed && typeof activeMessageAutomationModule.embed === 'object'
+      ? activeMessageAutomationModule.embed
+      : normalizeMessageAutomationSettings(createDefaultMessageAutomationSettings()).welcome.embed;
+  const messageAutomationUpdatedAt = messageAutomationSettings?.updatedAt || null;
+  const messageAutomationModuleMeta = MESSAGE_AUTOMATION_MODULES.find(
+    (moduleItem) => moduleItem.id === activeMessageAutomationTab
+  ) || MESSAGE_AUTOMATION_MODULES[0];
+  const messageAutomationResolvedPreview = {
+    plainMessage: resolveMessageAutomationVariables(
+      String(activeMessageAutomationModule?.plainMessage || ''),
+      MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+    ),
+    title: resolveMessageAutomationVariables(
+      String(messageAutomationEmbed?.title || ''),
+      MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+    ),
+    description: resolveMessageAutomationVariables(
+      String(messageAutomationEmbed?.description || ''),
+      MESSAGE_AUTOMATION_PREVIEW_CONTEXT
+    ),
+  };
   const planLabel = formatPlanTier(effectivePlan?.tier);
   const planTone = toPlanTone(effectivePlan?.tier);
   const canSaveSettings = Boolean(String(guildId || '').trim());
@@ -640,6 +790,54 @@ export default function Dashboard() {
     ? overviewLogCategory.payload.items.slice(0, 5)
     : [];
   const overviewLogUnavailableMessage = getUnavailableLogsMessage(overviewLogCategory?.payload || null);
+  const updateMessageAutomationModuleField = (fieldKey, fieldValue) => {
+    const normalizedFieldKey = String(fieldKey || '').trim();
+    if (!normalizedFieldKey) return;
+
+    setMessageAutomationDraft((previousDraft) => {
+      const baseline = normalizeMessageAutomationSettings(
+        previousDraft || createDefaultMessageAutomationSettings()
+      );
+      const targetModule = baseline[activeMessageAutomationTab]
+        || normalizeMessageAutomationSettings(createDefaultMessageAutomationSettings()).welcome;
+
+      return {
+        ...baseline,
+        [activeMessageAutomationTab]: {
+          ...targetModule,
+          [normalizedFieldKey]: fieldValue,
+          embed: {
+            ...(targetModule.embed || {}),
+          },
+        },
+      };
+    });
+  };
+  const updateMessageAutomationEmbedField = (fieldKey, fieldValue) => {
+    const normalizedFieldKey = String(fieldKey || '').trim();
+    if (!normalizedFieldKey) return;
+
+    setMessageAutomationDraft((previousDraft) => {
+      const baseline = normalizeMessageAutomationSettings(
+        previousDraft || createDefaultMessageAutomationSettings()
+      );
+      const targetModule = baseline[activeMessageAutomationTab]
+        || normalizeMessageAutomationSettings(createDefaultMessageAutomationSettings()).welcome;
+      const targetEmbed =
+        targetModule.embed && typeof targetModule.embed === 'object' ? targetModule.embed : {};
+
+      return {
+        ...baseline,
+        [activeMessageAutomationTab]: {
+          ...targetModule,
+          embed: {
+            ...targetEmbed,
+            [normalizedFieldKey]: fieldValue,
+          },
+        },
+      };
+    });
+  };
 
   const renderPlaceholderSection = (sectionId) => {
     const section = PLACEHOLDER_SECTIONS[sectionId];
@@ -1191,6 +1389,296 @@ export default function Dashboard() {
               </div>
             </NebulaCard>
             <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/bot-settings/commands</DeveloperNote>
+          </div>
+        </div>
+      );
+    }
+    if (activeSection === 'message-automation') {
+      return (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <div className="xl:col-span-2">
+            <NebulaCard
+              title="Mesaj Otomasyonu"
+              subtitle="Hoş geldin, hoşça kal ve boost mesajlarını buradan yönet"
+              kicker="Mesaj Modülü"
+            >
+              <div className="space-y-5">
+                <div className="flex flex-wrap gap-2">
+                  {MESSAGE_AUTOMATION_MODULES.map((moduleItem) => {
+                    const active = moduleItem.id === activeMessageAutomationTab;
+                    return (
+                      <button
+                        key={moduleItem.id}
+                        type="button"
+                        onClick={() => setActiveMessageAutomationTab(moduleItem.id)}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold tracking-[0.08em] transition ${
+                          active
+                            ? 'border-[#cc97ff]/45 bg-[#9c48ea]/20 text-[#f2e9ff]'
+                            : 'border-white/10 bg-white/5 text-[#a9b6db] hover:border-white/20 hover:text-[#d8e2ff]'
+                        }`}
+                      >
+                        {moduleItem.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {messageAutomationLoadError ? (
+                  <div className="rounded-xl border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                    Mesaj otomasyonu ayarları okunamadı: {messageAutomationLoadError.message}
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="geass-subpanel rounded-2xl border px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-[#eef3ff]">
+                            {messageAutomationModuleMeta.label}
+                          </div>
+                          <div className="mt-1 text-xs text-[#aab7db]">
+                            {messageAutomationModuleMeta.subtitle}
+                          </div>
+                        </div>
+                        <PremiumBadge
+                          status={activeMessageAutomationModule.enabled ? 'active' : 'off'}
+                        />
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        <label className="flex items-center gap-3 text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(activeMessageAutomationModule.enabled)}
+                            onChange={(event) =>
+                              updateMessageAutomationModuleField(
+                                'enabled',
+                                event.target.checked
+                              )
+                            }
+                          />
+                          Açık / Kapalı
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Kanal ID
+                          <input
+                            value={activeMessageAutomationModule.channelId || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationModuleField(
+                                'channelId',
+                                event.target.value || null
+                              )
+                            }
+                            className="geass-input mt-2 w-full"
+                            placeholder="123456789012345678"
+                          />
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Düz Mesaj
+                          <textarea
+                            value={activeMessageAutomationModule.plainMessage || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationModuleField(
+                                'plainMessage',
+                                event.target.value
+                              )
+                            }
+                            className="geass-input mt-2 min-h-[90px] w-full"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="geass-subpanel rounded-2xl border px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-[#eef3ff]">Embed Ayarları</div>
+                        <label className="flex items-center gap-2 text-xs text-[#c4ceeb]">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(messageAutomationEmbed.enabled)}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField(
+                                'enabled',
+                                event.target.checked
+                              )
+                            }
+                          />
+                          Embed aktif
+                        </label>
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Başlık
+                          <input
+                            value={messageAutomationEmbed.title || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField('title', event.target.value)
+                            }
+                            className="geass-input mt-2 w-full"
+                          />
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Açıklama
+                          <textarea
+                            value={messageAutomationEmbed.description || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField(
+                                'description',
+                                event.target.value
+                              )
+                            }
+                            className="geass-input mt-2 min-h-[100px] w-full"
+                          />
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Renk
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={
+                                isHexColor(messageAutomationEmbed.color)
+                                  ? messageAutomationEmbed.color
+                                  : '#7c3aed'
+                              }
+                              onChange={(event) =>
+                                updateMessageAutomationEmbedField('color', event.target.value)
+                              }
+                              className="h-10 w-14 cursor-pointer rounded-lg border border-white/20 bg-black/30 p-1"
+                            />
+                            <input
+                              value={messageAutomationEmbed.color || ''}
+                              onChange={(event) =>
+                                updateMessageAutomationEmbedField('color', event.target.value)
+                              }
+                              className="geass-input w-full"
+                              placeholder="#7c3aed"
+                            />
+                          </div>
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Görsel URL
+                          <input
+                            value={messageAutomationEmbed.imageUrl || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField('imageUrl', event.target.value || null)
+                            }
+                            className="geass-input mt-2 w-full"
+                            placeholder="https://ornek.com/gorsel.png"
+                          />
+                        </label>
+
+                        <label className="flex items-center gap-3 text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          <input
+                            type="checkbox"
+                            checked={messageAutomationEmbed.thumbnailMode === 'user_avatar'}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField(
+                                'thumbnailMode',
+                                event.target.checked ? 'user_avatar' : 'none'
+                              )
+                            }
+                          />
+                          Avatar göster
+                        </label>
+
+                        <label className="block text-xs font-semibold tracking-wide text-[#c4ceeb]">
+                          Alt Bilgi
+                          <input
+                            value={messageAutomationEmbed.footer || ''}
+                            onChange={(event) =>
+                              updateMessageAutomationEmbedField('footer', event.target.value)
+                            }
+                            className="geass-input mt-2 w-full"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9baad1]">
+                        Discord Önizleme
+                      </div>
+                      <div className="mt-3">
+                        <MessageAutomationPreview
+                          moduleSettings={activeMessageAutomationModule}
+                          moduleLabel={messageAutomationModuleMeta.label}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="geass-subpanel rounded-2xl border px-4 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9baad1]">
+                        Desteklenen Değişkenler
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                          '{user_mention}',
+                          '{user_name}',
+                          '{user_id}',
+                          '{server_name}',
+                          '{server_id}',
+                          '{member_count}',
+                          '{boost_count}',
+                          '{date}',
+                        ].map((token) => (
+                          <span
+                            key={token}
+                            className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-[#c8d4f2]"
+                          >
+                            {token}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-4 space-y-1 text-xs text-[#aab6d8]">
+                        <div>Örnek düz mesaj: {messageAutomationResolvedPreview.plainMessage || '-'}</div>
+                        <div>Örnek başlık: {messageAutomationResolvedPreview.title || '-'}</div>
+                        <div>Örnek açıklama: {messageAutomationResolvedPreview.description || '-'}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <PremiumButton
+                    onClick={() => saveMessageAutomationModule(activeMessageAutomationTab)}
+                    disabled={!canSaveSettings || messageAutomationSaveState === 'saving'}
+                    className="disabled:opacity-60"
+                  >
+                    {messageAutomationSaveState === 'saving' ? 'Kaydediliyor...' : 'Kaydet'}
+                  </PremiumButton>
+                  <PremiumButton variant="secondary" onClick={refreshProtectedData}>
+                    Yenile
+                  </PremiumButton>
+                </div>
+              </div>
+            </NebulaCard>
+          </div>
+          <div className="space-y-5">
+            <NebulaCard title="Kaydetme Durumu" subtitle="Mesaj otomasyonu yanıtı" kicker="Durum">
+              <SaveFeedback
+                saveState={messageAutomationSaveState}
+                message={messageAutomationSaveMessage}
+                idleText="Mesaj otomasyonu ayarları gerçek API üzerinden kaydedilir."
+              />
+            </NebulaCard>
+            <NebulaCard title="Modül Özeti" subtitle="Aktif sekme bilgisi" kicker="Canlı Durum">
+              <div className="space-y-2 text-xs text-[#c1cae8]">
+                <div>Modül: {messageAutomationModuleMeta.label}</div>
+                <div>Durum: {activeMessageAutomationModule.enabled ? 'Açık' : 'Kapalı'}</div>
+                <div>Kanal ID: {activeMessageAutomationModule.channelId || '-'}</div>
+                <div>Güncellendi: {messageAutomationUpdatedAt || 'Henüz yok'}</div>
+              </div>
+            </NebulaCard>
+            <DeveloperNote>Geliştirici: GET/PUT /api/dashboard/protected/message-automation</DeveloperNote>
           </div>
         </div>
       );

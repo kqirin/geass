@@ -8,7 +8,12 @@ import {
   loadProtectedDashboardSnapshot,
   parseDismissedNoticeIdsInput,
 } from '../src/hooks/useDashboardData.js';
-import { normalizeApiError, putCommandSettings, putDashboardPreferences } from '../src/lib/apiClient.js';
+import {
+  normalizeApiError,
+  putCommandSettings,
+  putDashboardPreferences,
+  putMessageAutomationSettings,
+} from '../src/lib/apiClient.js';
 
 function createHttpError(status, error, reasonCode = null) {
   return {
@@ -274,6 +279,58 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
           },
         },
       },
+      '/api/dashboard/protected/message-automation?guildId=g-pro': {
+        ok: true,
+        data: {
+          contractVersion: 1,
+          guildId: 'g-pro',
+          settings: {
+            welcome: {
+              enabled: false,
+              channelId: null,
+              plainMessage: 'Hoş geldin {user_mention}',
+              embed: {
+                enabled: true,
+                title: 'Yeni Üye',
+                description: 'Sunucumuza hoş geldin, {user_mention}!',
+                color: '#7c3aed',
+                imageUrl: null,
+                thumbnailMode: 'user_avatar',
+                footer: '{server_name}',
+              },
+            },
+            goodbye: {
+              enabled: false,
+              channelId: null,
+              plainMessage: 'Güle güle {user_name}',
+              embed: {
+                enabled: true,
+                title: 'Üye Ayrıldı',
+                description: '{user_name} sunucudan ayrıldı.',
+                color: '#ef4444',
+                imageUrl: null,
+                thumbnailMode: 'user_avatar',
+                footer: '{server_name}',
+              },
+            },
+            boost: {
+              enabled: false,
+              channelId: null,
+              plainMessage: '{user_mention} sunucuyu boostladı!',
+              embed: {
+                enabled: true,
+                title: 'Sunucu Boostlandı',
+                description: 'Teşekkürler, {user_mention}!',
+                color: '#cc97ff',
+                imageUrl: null,
+                thumbnailMode: 'user_avatar',
+                footer: '{server_name}',
+              },
+            },
+          },
+          updatedAt: '2026-04-17T10:30:00.000Z',
+        },
+      },
       '/api/dashboard/protected/setup-readiness?guildId=g-pro': {
         ok: true,
         data: {
@@ -377,6 +434,9 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
   assert.equal(snapshot.preferencesPayload.preferences.advancedLayoutMode, 'split');
   assert.equal(snapshot.commandSettingsPayload.effective.durum.detailMode, 'compact');
   assert.equal(snapshot.commandSettingsPayload.effective.durum.enabled, false);
+  assert.equal(snapshot.messageAutomationPayload.settings.welcome.enabled, false);
+  assert.equal(snapshot.messageAutomationPayload.settings.boost.embed.color, '#cc97ff');
+  assert.equal(snapshot.messageAutomationError, null);
   assert.equal(snapshot.setupReadinessPayload.summary.status, 'warning');
   assert.equal(snapshot.setupReadinessPayload.summary.score, 67);
   assert.equal(snapshot.setupReadinessError, null);
@@ -385,7 +445,7 @@ test('protected snapshot loads overview, plan, capabilities, preferences, and co
   assert.equal(snapshot.systemLogsPayload.reasonCode, 'system_logs_not_available');
   assert.equal(
     calls.filter((entry) => entry.method === 'GET').length,
-    9
+    10
   );
 });
 
@@ -450,6 +510,9 @@ test('protected snapshot keeps core dashboard data when setup-readiness request 
           },
         },
       },
+      '/api/dashboard/protected/message-automation?guildId=g-pro': {
+        __error: createHttpError(500, 'internal_error', 'message_automation_unavailable'),
+      },
       '/api/dashboard/protected/setup-readiness?guildId=g-pro': {
         __error: createHttpError(500, 'internal_error', 'setup_readiness_unavailable'),
       },
@@ -492,6 +555,9 @@ test('protected snapshot keeps core dashboard data when setup-readiness request 
   assert.equal(snapshot.guildId, 'g-pro');
   assert.equal(snapshot.overviewPayload.mode, 'protected_read_only_overview');
   assert.equal(snapshot.commandSettingsPayload.effective.durum.enabled, true);
+  assert.equal(snapshot.messageAutomationPayload, null);
+  assert.equal(typeof snapshot.messageAutomationError, 'object');
+  assert.equal(snapshot.messageAutomationError.code, 'internal_error');
   assert.equal(snapshot.setupReadinessPayload, null);
   assert.equal(typeof snapshot.setupReadinessError, 'object');
   assert.equal(snapshot.setupReadinessError.code, 'internal_error');
@@ -596,6 +662,143 @@ test('command settings write sends durum enabled/detail mode mutation', async ()
     calls[0].key,
     '/api/dashboard/protected/bot-settings/commands?guildId=g-pro'
   );
+});
+
+test('message automation write sends welcome module payload', async () => {
+  const { client, calls } = createMockClient({
+    putMap: {
+      '/api/dashboard/protected/message-automation?guildId=g-pro': ({ payload }) => {
+        assert.equal(payload.settings.welcome.enabled, true);
+        assert.equal(payload.settings.welcome.channelId, '123456789012345678');
+        assert.equal(payload.settings.welcome.embed.title, 'Yeni Üye');
+        return {
+          ok: true,
+          data: {
+            contractVersion: 1,
+            guildId: 'g-pro',
+            settings: payload.settings,
+            mutation: { applied: true },
+          },
+        };
+      },
+    },
+  });
+
+  const response = await putMessageAutomationSettings({
+    guildId: 'g-pro',
+    settings: {
+      welcome: {
+        enabled: true,
+        channelId: '123456789012345678',
+        plainMessage: 'Hoş geldin {user_mention}',
+        embed: {
+          enabled: true,
+          title: 'Yeni Üye',
+          description: 'Sunucumuza hoş geldin, {user_mention}!',
+          color: '#7c3aed',
+          imageUrl: null,
+          thumbnailMode: 'user_avatar',
+          footer: '{server_name}',
+        },
+      },
+    },
+    client,
+  });
+
+  assert.equal(response.guildId, 'g-pro');
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].key,
+    '/api/dashboard/protected/message-automation?guildId=g-pro'
+  );
+});
+
+test('message automation write sends goodbye module payload', async () => {
+  const { client, calls } = createMockClient({
+    putMap: {
+      '/api/dashboard/protected/message-automation?guildId=g-pro': ({ payload }) => {
+        assert.equal(payload.settings.goodbye.plainMessage, 'Güle güle {user_name}');
+        assert.equal(payload.settings.goodbye.embed.title, 'Üye Ayrıldı');
+        return {
+          ok: true,
+          data: {
+            contractVersion: 1,
+            guildId: 'g-pro',
+            settings: payload.settings,
+            mutation: { applied: true },
+          },
+        };
+      },
+    },
+  });
+
+  const response = await putMessageAutomationSettings({
+    guildId: 'g-pro',
+    settings: {
+      goodbye: {
+        enabled: false,
+        channelId: null,
+        plainMessage: 'Güle güle {user_name}',
+        embed: {
+          enabled: true,
+          title: 'Üye Ayrıldı',
+          description: '{user_name} sunucudan ayrıldı.',
+          color: '#ef4444',
+          imageUrl: null,
+          thumbnailMode: 'user_avatar',
+          footer: '{server_name}',
+        },
+      },
+    },
+    client,
+  });
+
+  assert.equal(response.guildId, 'g-pro');
+  assert.equal(calls.length, 1);
+});
+
+test('message automation write sends boost module payload', async () => {
+  const { client, calls } = createMockClient({
+    putMap: {
+      '/api/dashboard/protected/message-automation?guildId=g-pro': ({ payload }) => {
+        assert.equal(payload.settings.boost.plainMessage, '{user_mention} sunucuyu boostladı!');
+        assert.equal(payload.settings.boost.embed.imageUrl, 'https://example.com/boost.png');
+        return {
+          ok: true,
+          data: {
+            contractVersion: 1,
+            guildId: 'g-pro',
+            settings: payload.settings,
+            mutation: { applied: true },
+          },
+        };
+      },
+    },
+  });
+
+  const response = await putMessageAutomationSettings({
+    guildId: 'g-pro',
+    settings: {
+      boost: {
+        enabled: true,
+        channelId: '123456789012345678',
+        plainMessage: '{user_mention} sunucuyu boostladı!',
+        embed: {
+          enabled: true,
+          title: 'Sunucu Boostlandı',
+          description: 'Teşekkürler, {user_mention}!',
+          color: '#cc97ff',
+          imageUrl: 'https://example.com/boost.png',
+          thumbnailMode: 'user_avatar',
+          footer: '{server_name}',
+        },
+      },
+    },
+    client,
+  });
+
+  assert.equal(response.guildId, 'g-pro');
+  assert.equal(calls.length, 1);
 });
 
 test('dismissed notice input parsing normalizes comma-separated values', () => {

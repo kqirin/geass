@@ -19,6 +19,9 @@ const { createRequireGuildAccess, requireAuth, withBoundaryChecks } = require('.
 const { createProtectedDashboardOverviewProvider } = require('./protectedDashboardProvider');
 const { createDashboardPreferencesRouteDefinitions } = require('./preferencesRoutes');
 const { createDashboardBotStatusSettingsRouteDefinitions } = require('./botSettingsRoutes');
+const {
+  createDashboardMessageAutomationRouteDefinitions,
+} = require('./messageAutomationRoutes');
 const { resolveDashboardGuildScope } = require('./guildScope');
 
 function createDashboardRouteDefinitions({
@@ -148,6 +151,18 @@ function createDashboardRouteDefinitions({
   const botStatusSettingsRouteDefinitions = Array.isArray(botStatusSettingsRoutes?.routeDefinitions)
     ? botStatusSettingsRoutes.routeDefinitions
     : [];
+  const messageAutomationRoutes = createDashboardMessageAutomationRouteDefinitions({
+    config,
+    getConfiguredStaticGuildIds,
+    resolveGuildScope,
+    mutationAuditRecorder,
+    ...(mutationMaxBodyBytes !== undefined ? { maxBodyBytes: mutationMaxBodyBytes } : {}),
+  });
+  const messageAutomationRouteDefinitions = Array.isArray(
+    messageAutomationRoutes?.routeDefinitions
+  )
+    ? messageAutomationRoutes.routeDefinitions
+    : [];
 
   return [
     {
@@ -229,7 +244,8 @@ function createDashboardRouteDefinitions({
     },
   ]
     .concat(preferencesRouteDefinitions)
-    .concat(botStatusSettingsRouteDefinitions);
+    .concat(botStatusSettingsRouteDefinitions)
+    .concat(messageAutomationRouteDefinitions);
 }
 
 module.exports = {

@@ -23,6 +23,7 @@ export const CONTROL_PLANE_ROUTES = Object.freeze({
   dashboardPreferences: '/api/dashboard/protected/preferences',
   dashboardStatusCommand: '/api/dashboard/protected/bot-settings/status-command',
   dashboardCommands: '/api/dashboard/protected/bot-settings/commands',
+  dashboardMessageAutomation: '/api/dashboard/protected/message-automation',
 });
 
 export const apiClient = axios.create({
@@ -450,6 +451,30 @@ export async function putCommandSettings({
   const response = await client.put(
     CONTROL_PLANE_ROUTES.dashboardCommands,
     { commands },
+    toGuildQueryConfig(guildId)
+  );
+  return unwrapApiData(response);
+}
+
+export async function getMessageAutomationSettings({
+  guildId = null,
+  client = apiClient,
+} = {}) {
+  const response = await client.get(
+    CONTROL_PLANE_ROUTES.dashboardMessageAutomation,
+    toGuildQueryConfig(guildId)
+  );
+  return unwrapApiData(response);
+}
+
+export async function putMessageAutomationSettings({
+  guildId = null,
+  settings = {},
+  client = apiClient,
+} = {}) {
+  const response = await client.put(
+    CONTROL_PLANE_ROUTES.dashboardMessageAutomation,
+    { settings },
     toGuildQueryConfig(guildId)
   );
   return unwrapApiData(response);

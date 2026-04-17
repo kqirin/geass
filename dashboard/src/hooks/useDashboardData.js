@@ -9,6 +9,7 @@ import {
   getCommandLogs,
   getCommandSettings,
   getDashboardContextFeatures,
+  getMessageAutomationSettings,
   getDashboardPreferences,
   getModerationLogs,
   getProtectedOverview,
@@ -18,9 +19,15 @@ import {
   postAuthLogout,
   putCommandSettings,
   putDashboardPreferences,
+  putMessageAutomationSettings,
 } from '../lib/apiClient.js';
 import { createLatestRequestGate } from '../lib/latestRequestGate.js';
 import { normalizeReadonlyLogsPayload } from '../lib/logsViewModel.js';
+import {
+  createDefaultMessageAutomationSettings,
+  normalizeMessageAutomationPayload,
+  normalizeMessageAutomationSettings,
+} from '../lib/messageAutomationViewModel.js';
 import { normalizeSetupReadinessPayload } from '../lib/setupReadinessViewModel.js';
 
 export const DASHBOARD_VIEW_STATES = Object.freeze({
@@ -277,6 +284,18 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
       payload: null,
       error: normalizeApiError(error, 'Sistem olaylari yuklenemedi'),
     }));
+  const messageAutomationResultPromise = getMessageAutomationSettings({
+    guildId: resolvedGuildId,
+    client,
+  })
+    .then((payload) => ({
+      payload,
+      error: null,
+    }))
+    .catch((error) => ({
+      payload: null,
+      error: normalizeApiError(error, 'Mesaj otomasyonu ayarlari yuklenemedi'),
+    }));
 
   const [
     featuresPayload,
@@ -287,6 +306,7 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
     moderationLogsResult,
     commandLogsResult,
     systemLogsResult,
+    messageAutomationResult,
   ] =
     await Promise.all([
       getDashboardContextFeatures({ guildId: resolvedGuildId, client }),
@@ -297,6 +317,7 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
       moderationLogsResultPromise,
       commandLogsResultPromise,
       systemLogsResultPromise,
+      messageAutomationResultPromise,
     ]);
 
   return {
@@ -314,6 +335,8 @@ export async function loadProtectedDashboardSnapshot({ guildId = null, client } 
     commandLogsError: commandLogsResult?.error || null,
     systemLogsPayload: systemLogsResult?.payload || null,
     systemLogsError: systemLogsResult?.error || null,
+    messageAutomationPayload: messageAutomationResult?.payload || null,
+    messageAutomationError: messageAutomationResult?.error || null,
   };
 }
 
@@ -426,6 +449,8 @@ export function useDashboardData({ navigate }) {
   const [preferencesPlan, setPreferencesPlan] = useState(null);
   const [preferencesCapabilities, setPreferencesCapabilities] = useState(null);
   const [statusCommandSettings, setStatusCommandSettings] = useState(null);
+  const [messageAutomationSettings, setMessageAutomationSettings] = useState(null);
+  const [messageAutomationLoadError, setMessageAutomationLoadError] = useState(null);
   const [setupReadiness, setSetupReadiness] = useState(null);
   const [setupReadinessLoadError, setSetupReadinessLoadError] = useState(null);
   const [logSystem, setLogSystem] = useState(createDefaultLogSystemState);
@@ -438,6 +463,9 @@ export function useDashboardData({ navigate }) {
   const [statusCommandDetailModeDraft, setStatusCommandDetailModeDraft] = useState(
     DEFAULT_STATUS_COMMAND_DETAIL_MODE
   );
+  const [messageAutomationDraft, setMessageAutomationDraft] = useState(
+    createDefaultMessageAutomationSettings()
+  );
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isProtectedLoading, setIsProtectedLoading] = useState(false);
@@ -447,6 +475,8 @@ export function useDashboardData({ navigate }) {
   const [preferencesSaveMessage, setPreferencesSaveMessage] = useState('');
   const [statusCommandSaveState, setStatusCommandSaveState] = useState('idle');
   const [statusCommandSaveMessage, setStatusCommandSaveMessage] = useState('');
+  const [messageAutomationSaveState, setMessageAutomationSaveState] = useState('idle');
+  const [messageAutomationSaveMessage, setMessageAutomationSaveMessage] = useState('');
 
   const metaEnv = typeof import.meta !== 'undefined' && import.meta?.env ? import.meta.env : {};
   const preferredGuildId = metaEnv.VITE_SINGLE_GUILD_ID || metaEnv.VITE_GUILD_ID || '';
@@ -468,16 +498,21 @@ export function useDashboardData({ navigate }) {
     setPreferencesPlan(null);
     setPreferencesCapabilities(null);
     setStatusCommandSettings(null);
+    setMessageAutomationSettings(null);
+    setMessageAutomationLoadError(null);
     setSetupReadiness(null);
     setSetupReadinessLoadError(null);
     setLogSystem(createDefaultLogSystemState());
     setStatusCommandEnabledDraft(DEFAULT_DURUM_COMMAND_ENABLED);
     setStatusCommandDetailModeDraft(DEFAULT_STATUS_COMMAND_DETAIL_MODE);
+    setMessageAutomationDraft(createDefaultMessageAutomationSettings());
     setProtectedError(null);
     setPreferencesSaveState('idle');
     setPreferencesSaveMessage('');
     setStatusCommandSaveState('idle');
     setStatusCommandSaveMessage('');
+    setMessageAutomationSaveState('idle');
+    setMessageAutomationSaveMessage('');
   }, []);
 
   const applyProtectedSnapshot = useCallback((snapshot = {}) => {
@@ -502,13 +537,29 @@ export function useDashboardData({ navigate }) {
     setStatusCommandDetailModeDraft(
       toStatusCommandDetailMode(snapshot?.commandSettingsPayload || {})
     );
+    const normalizedGuildId = String(snapshot?.guildId || '').trim() || null;
+    const normalizedMessageAutomationPayload = snapshot?.messageAutomationPayload
+      ? normalizeMessageAutomationPayload(snapshot.messageAutomationPayload)
+      : {
+          contractVersion: 1,
+          guildId: normalizedGuildId,
+          settings: normalizeMessageAutomationSettings(
+            createDefaultMessageAutomationSettings()
+          ),
+          updatedAt: null,
+          mutation: null,
+        };
+    setMessageAutomationSettings(normalizedMessageAutomationPayload);
+    setMessageAutomationDraft(
+      normalizeMessageAutomationSettings(normalizedMessageAutomationPayload.settings)
+    );
+    setMessageAutomationLoadError(snapshot?.messageAutomationError || null);
     setSetupReadiness(
       snapshot?.setupReadinessPayload
         ? normalizeSetupReadinessPayload(snapshot.setupReadinessPayload)
         : null
     );
     setSetupReadinessLoadError(snapshot?.setupReadinessError || null);
-    const normalizedGuildId = String(snapshot?.guildId || '').trim() || null;
     setLogSystem({
       moderation: {
         payload: snapshot?.moderationLogsPayload
@@ -754,6 +805,56 @@ export function useDashboardData({ navigate }) {
     statusCommandEnabledDraft,
   ]);
 
+  const saveMessageAutomationModule = useCallback(
+    async (moduleId = 'welcome') => {
+      if (!authenticated || !guildId) return;
+
+      const normalizedModuleId = String(moduleId || '').trim().toLowerCase();
+      if (!['welcome', 'goodbye', 'boost'].includes(normalizedModuleId)) return;
+
+      const moduleSettings =
+        messageAutomationDraft &&
+        typeof messageAutomationDraft === 'object' &&
+        messageAutomationDraft[normalizedModuleId] &&
+        typeof messageAutomationDraft[normalizedModuleId] === 'object'
+          ? messageAutomationDraft[normalizedModuleId]
+          : createDefaultMessageAutomationSettings()[normalizedModuleId];
+
+      setMessageAutomationSaveState('saving');
+      setMessageAutomationSaveMessage('');
+
+      try {
+        const response = await putMessageAutomationSettings({
+          guildId,
+          settings: {
+            [normalizedModuleId]: moduleSettings,
+          },
+        });
+        const normalizedPayload = normalizeMessageAutomationPayload(response);
+        setMessageAutomationSettings(normalizedPayload);
+        setMessageAutomationDraft(normalizedPayload.settings);
+        setMessageAutomationLoadError(null);
+        setMessageAutomationSaveState('success');
+        setMessageAutomationSaveMessage('Mesaj otomasyonu ayarı kaydedildi');
+        showToast('Mesaj otomasyonu ayarı kaydedildi', 'ok');
+      } catch (error) {
+        const normalizedError = normalizeApiError(
+          error,
+          'Mesaj otomasyonu ayarı kaydedilemedi'
+        );
+        setMessageAutomationSaveState('error');
+        setMessageAutomationSaveMessage(normalizedError.message);
+        showToast(normalizedError.message, 'err', 3600);
+
+        const nextViewState = deriveViewStateFromError(normalizedError);
+        if (nextViewState !== DASHBOARD_VIEW_STATES.ERROR) {
+          setViewState(nextViewState);
+        }
+      }
+    },
+    [authenticated, guildId, messageAutomationDraft, showToast]
+  );
+
   const login = useCallback(() => {
     if (typeof window === 'undefined') return;
     window.location.href = getAuthLoginUrl();
@@ -875,6 +976,8 @@ export function useDashboardData({ navigate }) {
     savePreferences,
 
     statusCommandSettings,
+    messageAutomationSettings,
+    messageAutomationLoadError,
     setupReadiness,
     setupReadinessLoadError,
     logSystem,
@@ -885,5 +988,10 @@ export function useDashboardData({ navigate }) {
     statusCommandSaveState,
     statusCommandSaveMessage,
     saveStatusCommandSettings,
+    messageAutomationDraft,
+    setMessageAutomationDraft,
+    messageAutomationSaveState,
+    messageAutomationSaveMessage,
+    saveMessageAutomationModule,
   };
 }

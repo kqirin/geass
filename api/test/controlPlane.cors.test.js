@@ -347,6 +347,21 @@ test('allowed origin CORS headers apply across required auth and dashboard route
         },
       }),
     },
+    { method: 'GET', path: '/api/dashboard/protected/message-automation' },
+    {
+      method: 'PUT',
+      path: '/api/dashboard/protected/message-automation',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    },
   ];
 
   try {

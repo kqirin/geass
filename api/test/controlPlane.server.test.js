@@ -247,6 +247,25 @@ test('disabled mode preserves legacy health listener behavior', async () => {
         },
       }),
     });
+    const protectedMessageAutomationGet = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+    });
+    const protectedMessageAutomationPut = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
     const authPlan = await request({
       port: server.port,
       path: '/api/auth/plan',
@@ -265,6 +284,8 @@ test('disabled mode preserves legacy health listener behavior', async () => {
     assert.equal(protectedPreferencesPut.statusCode, 200);
     assert.equal(protectedBotStatusSettingsGet.statusCode, 200);
     assert.equal(protectedBotStatusSettingsPut.statusCode, 200);
+    assert.equal(protectedMessageAutomationGet.statusCode, 200);
+    assert.equal(protectedMessageAutomationPut.statusCode, 200);
     assert.equal(authPlan.statusCode, 200);
     assert.equal(dashboardContextFeatures.statusCode, 200);
     assert.equal(root.body, 'ok');
@@ -276,6 +297,8 @@ test('disabled mode preserves legacy health listener behavior', async () => {
     assert.equal(protectedPreferencesPut.body, 'ok');
     assert.equal(protectedBotStatusSettingsGet.body, 'ok');
     assert.equal(protectedBotStatusSettingsPut.body, 'ok');
+    assert.equal(protectedMessageAutomationGet.body, 'ok');
+    assert.equal(protectedMessageAutomationPut.body, 'ok');
     assert.equal(authPlan.body, 'ok');
     assert.equal(dashboardContextFeatures.body, 'ok');
     assert.match(String(root.headers['content-type'] || ''), /text\/plain/);
@@ -679,6 +702,18 @@ test('enabled mode serves meta and dashboard read-only endpoints with stable saf
     assert.equal(
       capabilitiesJson.data.endpoints.includes(
         'PUT /api/dashboard/protected/bot-settings/commands'
+      ),
+      true
+    );
+    assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'GET /api/dashboard/protected/message-automation'
+      ),
+      true
+    );
+    assert.equal(
+      capabilitiesJson.data.endpoints.includes(
+        'PUT /api/dashboard/protected/message-automation'
       ),
       true
     );
@@ -1201,6 +1236,39 @@ test('configured auth supports login callback session resolution me and logout',
     assert.equal(protectedBotStatusSettingsPutBeforeJson.ok, false);
     assert.equal(protectedBotStatusSettingsPutBeforeJson.error, 'unauthenticated');
 
+    const protectedMessageAutomationGetBefore = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+    });
+    assert.equal(protectedMessageAutomationGetBefore.statusCode, 401);
+    const protectedMessageAutomationGetBeforeJson = parseJsonBody(
+      protectedMessageAutomationGetBefore
+    );
+    assert.equal(protectedMessageAutomationGetBeforeJson.ok, false);
+    assert.equal(protectedMessageAutomationGetBeforeJson.error, 'unauthenticated');
+
+    const protectedMessageAutomationPutBefore = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutBefore.statusCode, 401);
+    const protectedMessageAutomationPutBeforeJson = parseJsonBody(
+      protectedMessageAutomationPutBefore
+    );
+    assert.equal(protectedMessageAutomationPutBeforeJson.ok, false);
+    assert.equal(protectedMessageAutomationPutBeforeJson.error, 'unauthenticated');
+
     const protectedBefore = await request({ port: server.port, path: '/api/control/private/status' });
     assert.equal(protectedBefore.statusCode, 401);
     const protectedBeforeJson = parseJsonBody(protectedBefore);
@@ -1411,6 +1479,51 @@ test('configured auth supports login callback session resolution me and logout',
     assert.equal(protectedBotStatusSettingsPutAfterJson.error, 'guild_access_denied');
     assert.equal(
       protectedBotStatusSettingsPutAfterJson.details.reasonCode,
+      'guild_scope_unresolved'
+    );
+
+    const protectedMessageAutomationGetAfter = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      headers: {
+        Cookie: sessionCookiePair,
+      },
+    });
+    assert.equal(protectedMessageAutomationGetAfter.statusCode, 403);
+    const protectedMessageAutomationGetAfterJson = parseJsonBody(
+      protectedMessageAutomationGetAfter
+    );
+    assert.equal(protectedMessageAutomationGetAfterJson.ok, false);
+    assert.equal(protectedMessageAutomationGetAfterJson.error, 'guild_access_denied');
+    assert.equal(
+      protectedMessageAutomationGetAfterJson.details.reasonCode,
+      'guild_scope_unresolved'
+    );
+
+    const protectedMessageAutomationPutAfter = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: sessionCookiePair,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutAfter.statusCode, 403);
+    const protectedMessageAutomationPutAfterJson = parseJsonBody(
+      protectedMessageAutomationPutAfter
+    );
+    assert.equal(protectedMessageAutomationPutAfterJson.ok, false);
+    assert.equal(protectedMessageAutomationPutAfterJson.error, 'guild_access_denied');
+    assert.equal(
+      protectedMessageAutomationPutAfterJson.details.reasonCode,
       'guild_scope_unresolved'
     );
 
@@ -1908,6 +2021,39 @@ test('guild access endpoints fail closed for no-access users and allow authentic
     assert.equal(protectedBotStatusSettingsPutUnauthJson.ok, false);
     assert.equal(protectedBotStatusSettingsPutUnauthJson.error, 'unauthenticated');
 
+    const protectedMessageAutomationGetUnauth = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+    });
+    assert.equal(protectedMessageAutomationGetUnauth.statusCode, 401);
+    const protectedMessageAutomationGetUnauthJson = parseJsonBody(
+      protectedMessageAutomationGetUnauth
+    );
+    assert.equal(protectedMessageAutomationGetUnauthJson.ok, false);
+    assert.equal(protectedMessageAutomationGetUnauthJson.error, 'unauthenticated');
+
+    const protectedMessageAutomationPutUnauth = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutUnauth.statusCode, 401);
+    const protectedMessageAutomationPutUnauthJson = parseJsonBody(
+      protectedMessageAutomationPutUnauth
+    );
+    assert.equal(protectedMessageAutomationPutUnauthJson.ok, false);
+    assert.equal(protectedMessageAutomationPutUnauthJson.error, 'unauthenticated');
+
     const authPlanUnauth = await request({ port: server.port, path: '/api/auth/plan' });
     assert.equal(authPlanUnauth.statusCode, 401);
     const authPlanUnauthJson = parseJsonBody(authPlanUnauth);
@@ -2073,6 +2219,51 @@ test('guild access endpoints fail closed for no-access users and allow authentic
     assert.equal(protectedBotStatusSettingsPutNoAccessJson.error, 'guild_access_denied');
     assert.equal(
       protectedBotStatusSettingsPutNoAccessJson.details.reasonCode,
+      'guild_membership_missing'
+    );
+
+    const protectedMessageAutomationGetNoAccess = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      headers: {
+        Cookie: noAccessCookie,
+      },
+    });
+    assert.equal(protectedMessageAutomationGetNoAccess.statusCode, 403);
+    const protectedMessageAutomationGetNoAccessJson = parseJsonBody(
+      protectedMessageAutomationGetNoAccess
+    );
+    assert.equal(protectedMessageAutomationGetNoAccessJson.ok, false);
+    assert.equal(protectedMessageAutomationGetNoAccessJson.error, 'guild_access_denied');
+    assert.equal(
+      protectedMessageAutomationGetNoAccessJson.details.reasonCode,
+      'guild_membership_missing'
+    );
+
+    const protectedMessageAutomationPutNoAccess = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: noAccessCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutNoAccess.statusCode, 403);
+    const protectedMessageAutomationPutNoAccessJson = parseJsonBody(
+      protectedMessageAutomationPutNoAccess
+    );
+    assert.equal(protectedMessageAutomationPutNoAccessJson.ok, false);
+    assert.equal(protectedMessageAutomationPutNoAccessJson.error, 'guild_access_denied');
+    assert.equal(
+      protectedMessageAutomationPutNoAccessJson.details.reasonCode,
       'guild_membership_missing'
     );
 
@@ -2498,6 +2689,385 @@ test('guild access endpoints fail closed for no-access users and allow authentic
       'legacy'
     );
     assert.equal(protectedBotStatusSettingsInitialJson.data.updatedAt, null);
+
+    const protectedMessageAutomationInitial = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      headers: {
+        Cookie: operatorCookie,
+      },
+    });
+    assert.equal(protectedMessageAutomationInitial.statusCode, 200);
+    const protectedMessageAutomationInitialJson = parseJsonBody(
+      protectedMessageAutomationInitial
+    );
+    assert.equal(protectedMessageAutomationInitialJson.ok, true);
+    assert.equal(protectedMessageAutomationInitialJson.data.contractVersion, 1);
+    assert.equal(
+      protectedMessageAutomationInitialJson.data.guildId,
+      '999999999999999001'
+    );
+    assert.equal(
+      protectedMessageAutomationInitialJson.data.settings.welcome.enabled,
+      false
+    );
+    assert.equal(
+      protectedMessageAutomationInitialJson.data.settings.goodbye.enabled,
+      false
+    );
+    assert.equal(
+      protectedMessageAutomationInitialJson.data.settings.boost.enabled,
+      false
+    );
+
+    const protectedMessageAutomationUnsupportedMedia = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationUnsupportedMedia.statusCode, 415);
+    const protectedMessageAutomationUnsupportedMediaJson = parseJsonBody(
+      protectedMessageAutomationUnsupportedMedia
+    );
+    assert.equal(protectedMessageAutomationUnsupportedMediaJson.ok, false);
+    assert.equal(
+      protectedMessageAutomationUnsupportedMediaJson.error,
+      'unsupported_media_type'
+    );
+
+    const protectedMessageAutomationInvalidModule = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          unknown: {
+            enabled: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationInvalidModule.statusCode, 400);
+    const protectedMessageAutomationInvalidModuleJson = parseJsonBody(
+      protectedMessageAutomationInvalidModule
+    );
+    assert.equal(protectedMessageAutomationInvalidModuleJson.ok, false);
+    assert.equal(protectedMessageAutomationInvalidModuleJson.error, 'invalid_request_body');
+    assert.equal(
+      protectedMessageAutomationInvalidModuleJson.details.reasonCode,
+      'unknown_field'
+    );
+    assert.equal(
+      protectedMessageAutomationInvalidModuleJson.details.field,
+      'settings.unknown'
+    );
+
+    const protectedMessageAutomationInvalidChannelId = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            channelId: 'abc',
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationInvalidChannelId.statusCode, 400);
+    const protectedMessageAutomationInvalidChannelIdJson = parseJsonBody(
+      protectedMessageAutomationInvalidChannelId
+    );
+    assert.equal(protectedMessageAutomationInvalidChannelIdJson.ok, false);
+    assert.equal(
+      protectedMessageAutomationInvalidChannelIdJson.details.reasonCode,
+      'invalid_field_value'
+    );
+    assert.equal(
+      protectedMessageAutomationInvalidChannelIdJson.details.field,
+      'settings.welcome.channelId'
+    );
+
+    const protectedMessageAutomationInvalidColor = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            embed: {
+              color: '#12GG12',
+            },
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationInvalidColor.statusCode, 400);
+    const protectedMessageAutomationInvalidColorJson = parseJsonBody(
+      protectedMessageAutomationInvalidColor
+    );
+    assert.equal(protectedMessageAutomationInvalidColorJson.ok, false);
+    assert.equal(
+      protectedMessageAutomationInvalidColorJson.details.reasonCode,
+      'invalid_field_value'
+    );
+    assert.equal(
+      protectedMessageAutomationInvalidColorJson.details.field,
+      'settings.welcome.embed.color'
+    );
+
+    const protectedMessageAutomationInvalidImageUrl = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          boost: {
+            embed: {
+              imageUrl: 'ftp://invalid.example/image.png',
+            },
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationInvalidImageUrl.statusCode, 400);
+    const protectedMessageAutomationInvalidImageUrlJson = parseJsonBody(
+      protectedMessageAutomationInvalidImageUrl
+    );
+    assert.equal(protectedMessageAutomationInvalidImageUrlJson.ok, false);
+    assert.equal(
+      protectedMessageAutomationInvalidImageUrlJson.details.reasonCode,
+      'invalid_field_value'
+    );
+    assert.equal(
+      protectedMessageAutomationInvalidImageUrlJson.details.field,
+      'settings.boost.embed.imageUrl'
+    );
+
+    const protectedMessageAutomationUnknownField = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          goodbye: {
+            unknownFlag: true,
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationUnknownField.statusCode, 400);
+    const protectedMessageAutomationUnknownFieldJson = parseJsonBody(
+      protectedMessageAutomationUnknownField
+    );
+    assert.equal(protectedMessageAutomationUnknownFieldJson.ok, false);
+    assert.equal(
+      protectedMessageAutomationUnknownFieldJson.details.reasonCode,
+      'unknown_field'
+    );
+    assert.equal(
+      protectedMessageAutomationUnknownFieldJson.details.field,
+      'settings.goodbye.unknownFlag'
+    );
+
+    const protectedMessageAutomationTooLarge = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            plainMessage: 'x'.repeat(2001),
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationTooLarge.statusCode, 413);
+    const protectedMessageAutomationTooLargeJson = parseJsonBody(
+      protectedMessageAutomationTooLarge
+    );
+    assert.equal(protectedMessageAutomationTooLargeJson.ok, false);
+    assert.equal(protectedMessageAutomationTooLargeJson.error, 'payload_too_large');
+
+    const protectedMessageAutomationPutWelcome = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          welcome: {
+            enabled: true,
+            channelId: '999999999999999071',
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutWelcome.statusCode, 200);
+    const protectedMessageAutomationPutWelcomeJson = parseJsonBody(
+      protectedMessageAutomationPutWelcome
+    );
+    assert.equal(protectedMessageAutomationPutWelcomeJson.ok, true);
+    assert.equal(
+      protectedMessageAutomationPutWelcomeJson.data.mutation.type,
+      'message_automation_settings_upsert'
+    );
+    assert.equal(
+      protectedMessageAutomationPutWelcomeJson.data.settings.welcome.enabled,
+      true
+    );
+    assert.equal(
+      protectedMessageAutomationPutWelcomeJson.data.settings.welcome.channelId,
+      '999999999999999071'
+    );
+    assert.match(
+      String(protectedMessageAutomationPutWelcomeJson.data.updatedAt || ''),
+      /^\d{4}-\d{2}-\d{2}T/
+    );
+
+    const protectedMessageAutomationPutGoodbye = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          goodbye: {
+            plainMessage: 'Güle güle {user_name}',
+            embed: {
+              title: 'Üye Sunucudan Çıktı',
+              description: '{user_name} artık aramızda değil.',
+              color: '#dc2626',
+            },
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutGoodbye.statusCode, 200);
+    const protectedMessageAutomationPutGoodbyeJson = parseJsonBody(
+      protectedMessageAutomationPutGoodbye
+    );
+    assert.equal(protectedMessageAutomationPutGoodbyeJson.ok, true);
+    assert.equal(
+      protectedMessageAutomationPutGoodbyeJson.data.settings.goodbye.embed.title,
+      'Üye Sunucudan Çıktı'
+    );
+    assert.equal(
+      protectedMessageAutomationPutGoodbyeJson.data.settings.goodbye.embed.description,
+      '{user_name} artık aramızda değil.'
+    );
+    assert.equal(
+      protectedMessageAutomationPutGoodbyeJson.data.settings.goodbye.embed.color,
+      '#dc2626'
+    );
+
+    const protectedMessageAutomationPutBoost = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      method: 'PUT',
+      headers: {
+        Cookie: operatorCookie,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          boost: {
+            plainMessage: '{user_mention} sunucuyu boostladı!',
+            embed: {
+              title: 'Boost Desteği',
+              description: 'Teşekkürler, {user_mention}!',
+              imageUrl: 'https://example.com/boost-banner.png',
+            },
+          },
+        },
+      }),
+    });
+    assert.equal(protectedMessageAutomationPutBoost.statusCode, 200);
+    const protectedMessageAutomationPutBoostJson = parseJsonBody(
+      protectedMessageAutomationPutBoost
+    );
+    assert.equal(protectedMessageAutomationPutBoostJson.ok, true);
+    assert.equal(
+      protectedMessageAutomationPutBoostJson.data.settings.boost.embed.title,
+      'Boost Desteği'
+    );
+    assert.equal(
+      protectedMessageAutomationPutBoostJson.data.settings.boost.embed.imageUrl,
+      'https://example.com/boost-banner.png'
+    );
+
+    const protectedMessageAutomationReadBack = await request({
+      port: server.port,
+      path: '/api/dashboard/protected/message-automation',
+      headers: {
+        Cookie: operatorCookie,
+      },
+    });
+    assert.equal(protectedMessageAutomationReadBack.statusCode, 200);
+    const protectedMessageAutomationReadBackJson = parseJsonBody(
+      protectedMessageAutomationReadBack
+    );
+    assert.equal(protectedMessageAutomationReadBackJson.ok, true);
+    assert.equal(
+      protectedMessageAutomationReadBackJson.data.settings.welcome.enabled,
+      true
+    );
+    assert.equal(
+      protectedMessageAutomationReadBackJson.data.settings.welcome.channelId,
+      '999999999999999071'
+    );
+    assert.equal(
+      protectedMessageAutomationReadBackJson.data.settings.goodbye.embed.title,
+      'Üye Sunucudan Çıktı'
+    );
+    assert.equal(
+      protectedMessageAutomationReadBackJson.data.settings.boost.embed.title,
+      'Boost Desteği'
+    );
+    assert.equal(
+      protectedMessageAutomationReadBackJson.data.settings.boost.embed.imageUrl,
+      'https://example.com/boost-banner.png'
+    );
 
     const protectedBotStatusSettingsInvalidPayload = await request({
       port: server.port,
@@ -2951,6 +3521,8 @@ test('guild access endpoints fail closed for no-access users and allow authentic
       protectedPreferencesPutUnauth.body,
       protectedBotStatusSettingsGetUnauth.body,
       protectedBotStatusSettingsPutUnauth.body,
+      protectedMessageAutomationGetUnauth.body,
+      protectedMessageAutomationPutUnauth.body,
       authPlanUnauth.body,
       guildsNoAccess.body,
       accessNoAccess.body,
@@ -2962,6 +3534,8 @@ test('guild access endpoints fail closed for no-access users and allow authentic
       protectedPreferencesPutNoAccess.body,
       protectedBotStatusSettingsGetNoAccess.body,
       protectedBotStatusSettingsPutNoAccess.body,
+      protectedMessageAutomationGetNoAccess.body,
+      protectedMessageAutomationPutNoAccess.body,
       authPlanNoAccess.body,
       accessOperator.body,
       accessOperatorInvalidGuild.body,
@@ -2984,6 +3558,18 @@ test('guild access endpoints fail closed for no-access users and allow authentic
       protectedBotStatusSettingsPutDuplicate.body,
       protectedBotStatusSettingsPutLegacy.body,
       protectedBotStatusSettingsReadBack.body,
+      protectedMessageAutomationInitial.body,
+      protectedMessageAutomationUnsupportedMedia.body,
+      protectedMessageAutomationInvalidModule.body,
+      protectedMessageAutomationInvalidChannelId.body,
+      protectedMessageAutomationInvalidColor.body,
+      protectedMessageAutomationInvalidImageUrl.body,
+      protectedMessageAutomationUnknownField.body,
+      protectedMessageAutomationTooLarge.body,
+      protectedMessageAutomationPutWelcome.body,
+      protectedMessageAutomationPutGoodbye.body,
+      protectedMessageAutomationPutBoost.body,
+      protectedMessageAutomationReadBack.body,
       protectedGuildOperator.body,
     ].join('\n');
     assert.equal(responseBodies.includes('oauth-client-secret'), false);
@@ -2996,6 +3582,7 @@ test('guild access endpoints fail closed for no-access users and allow authentic
     const mutationTypes = mutationAuditEntries.map((entry) => entry?.mutationType);
     assert.equal(mutationTypes.includes('dashboard_preferences_upsert'), true);
     assert.equal(mutationTypes.includes('bot_status_settings_upsert'), true);
+    assert.equal(mutationTypes.includes('message_automation_settings_upsert'), true);
     assert.equal(
       mutationAuditEntries.some(
         (entry) =>
